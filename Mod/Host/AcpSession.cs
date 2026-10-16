@@ -64,7 +64,7 @@ namespace airimayor.Host
             string arguments,
             string mcpExecutable,
             string workingDirectory,
-            string logDirectory,
+            SessionRecordOptions record,
             Action<string> warn)
         {
             m_Tools = tools;
@@ -72,7 +72,7 @@ namespace airimayor.Host
             m_Continue = continueWhenIdle ?? (() => false);
             m_Continuation = continuation ?? "";
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            m_Timeline = new AgentObservability(m_SessionId, logDirectory, warn);
+            m_Timeline = new AgentObservability(m_SessionId, record, warn);
             m_Previews = new ToolPreviewLatch(OnPreviewMatched);
             _ = Task.Run(() => RunAsync(tools, instructions, command, arguments, mcpExecutable, workingDirectory));
         }

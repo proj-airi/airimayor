@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Threading.Tasks;
+using AgentRuntime;
 using Newtonsoft.Json;
 
 namespace CS2MCP
@@ -15,6 +16,15 @@ namespace CS2MCP
         public string Path;
         public Dictionary<string, string> Query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public string Body;
+
+        /// <summary>Stopwatch timestamp when the request entered the queue.</summary>
+        public long EnqueuedTimestamp;
+
+        /// <summary>Clock where the simulation thread took the request; copied onto its response.</summary>
+        public SimulationStamp Applied;
+
+        /// <summary>Real time the request waited in the queue; copied onto its response.</summary>
+        public long? QueuedMs;
 
         private readonly TaskCompletionSource<BridgeResponse> m_Completion =
             new TaskCompletionSource<BridgeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -44,6 +54,8 @@ namespace CS2MCP
 
         public void Complete(BridgeResponse response)
         {
+            response.Applied = Applied;
+            response.QueuedMs = QueuedMs;
             m_Completion.TrySetResult(response);
         }
     }
@@ -70,6 +82,12 @@ namespace CS2MCP
         /// Best-effort: producers leave it null rather than failing the tool.
         /// </summary>
         public byte[] Preview;
+
+        /// <summary>Clock where the simulation thread took the request.</summary>
+        public SimulationStamp Applied;
+
+        /// <summary>Real time the request waited in the queue.</summary>
+        public long? QueuedMs;
 
         private static readonly JsonSerializerSettings s_JsonSettings = new JsonSerializerSettings
         {

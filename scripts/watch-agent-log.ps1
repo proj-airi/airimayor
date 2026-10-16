@@ -130,7 +130,9 @@ function Format-EventCompact([pscustomobject]$e, [string]$head) {
 function Show-Event([pscustomobject]$e) {
     $ts = if ($e.ts) { ([datetime]$e.ts).ToLocalTime().ToString('HH:mm:ss') } else { '--:--:--' }
     $d = $e.data
-    $head = '[' + $ts + '] #' + $e.seq + ' ' + $e.type
+    $clock = if ($e.clock) { ' ' + $e.clock.gameTime } else { '' }
+    $call = if ($e.call) { ' ' + $e.call } else { '' }
+    $head = '[' + $ts + $clock + '] #' + $e.seq + ' ' + $e.type + $call
 
     if ($Compact) {
         Write-Host (Format-EventCompact $e $head)
@@ -141,7 +143,9 @@ function Show-Event([pscustomobject]$e) {
         'function' {
             $ok = if ($d.success) { 'ok' } else { 'FAIL' }
             $color = if ($d.success) { [ConsoleColor]::Green } else { [ConsoleColor]::Red }
-            Write-Host ($head + ' ' + $d.tool + ' [' + $ok + ' ' + $d.elapsedMs + 'ms]') -ForegroundColor $color
+            $queued = if ($null -ne $d.queuedMs) { ' queued ' + $d.queuedMs + 'ms' } else { '' }
+            $applied = if ($d.timeline.applied) { ' frame ' + $d.timeline.applied.frame } else { '' }
+            Write-Host ($head + ' ' + $d.tool + ' [' + $ok + ' ' + $d.elapsedMs + 'ms' + $queued + $applied + ']') -ForegroundColor $color
             Write-ContextBlock -Title 'args' -Body (Format-Jsonish $d.arguments $ResultChars) -Color White
             if ($d.error) {
                 Write-ContextBlock -Title 'error' -Body (Expand-JsonBlob $d.error) -Color Yellow
@@ -177,10 +181,6 @@ function Show-Event([pscustomobject]$e) {
         }
         'turn.finish' {
             Write-Host ($head + ' gens=' + $d.generations + ' fns=' + $d.functions + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
-        }
-        'interleaved_input' {
-            Write-Host ($head + ' state=' + $d.state) -ForegroundColor Blue
-            Write-ContextBlock -Title 'text' -Body ([string]$d.text) -Color White
         }
         'error' {
             Write-Host $head -ForegroundColor Red

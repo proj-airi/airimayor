@@ -31,6 +31,21 @@ namespace AgentRuntime
         public byte[] ImagePng;
         public string ImageCaption;
         public byte[] PreviewJpeg;
+
+        /// <summary>Clock where the simulation thread ran the request. Null when the tool never reached it.</summary>
+        public SimulationStamp Applied;
+
+        /// <summary>Real time the request waited for the simulation thread. Null when it never queued.</summary>
+        public long? QueuedMs;
+    }
+
+    /// <summary>Timeline anchors of one tool call.</summary>
+    public struct ToolAnchors
+    {
+        public SimulationStamp Submitted;
+        public SimulationStamp Applied;
+        public SimulationStamp Completed;
+        public long? QueuedMs;
     }
 
     public enum ModelWire

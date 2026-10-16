@@ -29,15 +29,24 @@ namespace airimayor.Host
                     choice.Arguments,
                     mcp,
                     string.IsNullOrEmpty(root) ? Directory.GetCurrentDirectory() : root,
-                    ModPaths.LogsDirectory,
+                    Record(),
                     message => Mod.log.Warn(message));
             }
             return new AgentRuntime.AgentRuntime(
                 tools,
                 AgentSystemPrompt.Text,
                 ReadModel,
-                ModPaths.LogsDirectory,
+                Record(),
                 message => Mod.log.Warn(message));
+        }
+
+        private static SessionRecordOptions Record()
+        {
+            return new SessionRecordOptions
+            {
+                Directory = ModPaths.LogsDirectory,
+                Clock = () => CS2MCP.BridgeSystem.Instance?.Clock,
+            };
         }
 
         private static ModelSettings ReadModel()

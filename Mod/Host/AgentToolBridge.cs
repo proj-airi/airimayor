@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using AgentRuntime;
 
 namespace airimayor.Host
 {
@@ -14,6 +15,8 @@ namespace airimayor.Host
         public string Text;       // JSON or deterministic plain-text tool result
         public byte[] ImagePng;    // PNG bytes for the model, map or screenshot alike
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
+        public SimulationStamp Applied; // clock where the simulation thread took the request
+        public long? QueuedMs;          // real time the request waited for the simulation thread
     }
 
     /// <summary>
@@ -69,17 +72,17 @@ namespace airimayor.Host
             if (!response.Success)
             {
                 string body = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-                return BridgeError(body);
+                return Stamped(BridgeError(body), response);
             }
             if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
             {
-                return new ToolInvocationResult
+                return Stamped(new ToolInvocationResult
                 {
                     Success = true,
                     ImagePng = response.Body,
                     PreviewBytes = response.Preview,
                     Text = "{}",
-                };
+                }, response);
             }
 
             string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
@@ -88,11 +91,18 @@ namespace airimayor.Host
                 text = await CS2MCP.SimWaitService.WaitAsync(
                     bridge, text, cancellationToken);
             }
-            return new ToolInvocationResult
+            return Stamped(new ToolInvocationResult
             {
                 Success = true,
                 Text = text,
-            };
+            }, response);
+        }
+
+        private static ToolInvocationResult Stamped(ToolInvocationResult result, CS2MCP.BridgeResponse response)
+        {
+            result.Applied = response.Applied;
+            result.QueuedMs = response.QueuedMs;
+            return result;
         }
 
         private static ToolInvocationResult Error(string message)

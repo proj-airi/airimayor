@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Tasks;
+using AgentRuntime;
 using airimayor.Host;
 using Colossal.Serialization.Entities;
 using Game;
+using Game.SceneFlow;
 using Game.Simulation;
 using UnityEngine.Scripting;
 
@@ -23,6 +27,8 @@ namespace CS2MCP
 
         private IRequestHandlerAdapter m_Handlers;
         private SimulationSystem m_SimulationSystem;
+        private TimeSystem m_TimeSystem;
+        private volatile SimulationStamp m_Clock;
         private uint m_FrameIndexAtLoad;
         private float m_WaitRestoreSpeed = -1f;
         private float m_WaitRunSpeed = 8f;
@@ -41,6 +47,12 @@ namespace CS2MCP
         /// so lock states read from ECS can be stale.
         /// </summary>
         public bool SimulationHasTickedSinceLoad { get; private set; } = true;
+
+        /// <summary>
+        /// Latest simulation clock, published once per update on the
+        /// simulation thread. Null outside a loaded city. Safe from any thread.
+        /// </summary>
+        public SimulationStamp Clock => m_Clock;
 
         /// <summary>Frame at which a timed wait ends (0 = no wait active).</summary>
         public uint AutoPauseTargetFrame { get; private set; }
@@ -89,6 +101,7 @@ namespace CS2MCP
             Instance = this;
             m_Handlers = new HotReloadRequestHandlerSlot(this, new RequestHandlers(this));
             m_SimulationSystem = base.World.GetOrCreateSystemManaged<SimulationSystem>();
+            m_TimeSystem = base.World.GetOrCreateSystemManaged<TimeSystem>();
         }
 
         [Preserve]
@@ -102,6 +115,7 @@ namespace CS2MCP
         [Preserve]
         protected override void OnUpdate()
         {
+            PublishClock();
             if (!SimulationHasTickedSinceLoad && m_SimulationSystem.frameIndex != m_FrameIndexAtLoad)
             {
                 SimulationHasTickedSinceLoad = true;
@@ -157,6 +171,8 @@ namespace CS2MCP
             }
             while (m_Pending.TryDequeue(out BridgeRequest request))
             {
+                request.Applied = m_Clock;
+                request.QueuedMs = (Stopwatch.GetTimestamp() - request.EnqueuedTimestamp) * 1000 / Stopwatch.Frequency;
                 BridgeResponse response;
                 try
                 {
@@ -198,6 +214,7 @@ namespace CS2MCP
             {
                 Path = path,
                 Body = body ?? string.Empty,
+                EnqueuedTimestamp = Stopwatch.GetTimestamp(),
             };
             if (query != null)
             {
@@ -208,6 +225,37 @@ namespace CS2MCP
             }
             m_Pending.Enqueue(request);
             return request.CompletionTask;
+        }
+
+        private void PublishClock()
+        {
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                m_Clock = null;
+                return;
+            }
+            uint frame = m_SimulationSystem.frameIndex;
+            float speed = m_SimulationSystem.selectedSpeed;
+            SimulationStamp last = m_Clock;
+            if (last != null && last.Frame == frame && last.Speed == speed)
+            {
+                return;
+            }
+            m_Clock = new SimulationStamp(frame, GameTime(), speed);
+        }
+
+        private string GameTime()
+        {
+            try
+            {
+                return m_TimeSystem.GetCurrentDateTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                // Same guard as the state read: the date is unavailable early in a load.
+                return null;
+            }
         }
 
         [Preserve]

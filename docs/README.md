@@ -51,6 +51,8 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0043-pointed-places.md](./adr/0043-pointed-places.md) | A pointed place is a card on the player message, not a mark drawn in the city |
 | [0044-roadside-objects-share-place-building.md](./adr/0044-roadside-objects-share-place-building.md) | Roadside objects share `place_building`; the snap stays inside the write |
 | [0045-message-clips.md](./adr/0045-message-clips.md) | Agent places are inline `<clip>` tags; click moves the camera, no persistent highlight |
+| [0046-session-record.md](./adr/0046-session-record.md) | One self-contained directory per session; one envelope with the simulation clock; model calls and known gaps recorded |
+| [0047-write-evidence.md](./adr/0047-write-evidence.md) | Before/after city ledger on writes stays in the record; an offline check judges confirmed, diverged, or undetermined |
 
 ## Guide
 

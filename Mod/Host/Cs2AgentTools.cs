@@ -91,6 +91,8 @@ namespace airimayor.Host
                 ImagePng = image,
                 ImageCaption = ImageCaption(name),
                 PreviewJpeg = invoked.PreviewBytes,
+                Applied = invoked.Applied,
+                QueuedMs = invoked.QueuedMs,
             };
         }
 

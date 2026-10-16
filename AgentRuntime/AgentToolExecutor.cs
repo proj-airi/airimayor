@@ -48,6 +48,8 @@ namespace AgentRuntime
                 FunctionCallContent call = toolCalls[index];
                 string argumentsJson = SerializeArguments(call.Arguments);
                 Stopwatch timer = Stopwatch.StartNew();
+                SimulationStamp submitted = m_Observability.Clock();
+                m_Observability.FunctionStart(call.CallId, call.Name);
                 m_Emit(new SessionUpdate { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
                 AgentToolResult result;
                 try
@@ -57,13 +59,21 @@ namespace AgentRuntime
                 catch (OperationCanceledException)
                 {
                     timer.Stop();
-                    RecordInterrupted(call, argumentsJson, timer.ElapsedMilliseconds);
+                    RecordInterrupted(call, argumentsJson, timer.ElapsedMilliseconds, submitted);
                     PoisonRemaining(toolCalls, index + 1);
                     throw;
                 }
                 timer.Stop();
                 FunctionCount++;
-                m_Observability.Function(call.Name, argumentsJson, result.Text, result.Success, timer.ElapsedMilliseconds, 0,
+                m_Observability.Function(call.CallId, call.Name, argumentsJson, result.Text, result.Success,
+                    timer.ElapsedMilliseconds,
+                    new ToolAnchors
+                    {
+                        Submitted = submitted,
+                        Applied = result.Applied,
+                        Completed = m_Observability.Clock(),
+                        QueuedMs = result.QueuedMs,
+                    },
                     result.Success ? null : result.Text);
                 // Completion pairs with the start event above by arrival order.
                 // Status carries only the outcome color for the tool row.
@@ -97,25 +107,29 @@ namespace AgentRuntime
             }
         }
 
-        private void RecordInterrupted(FunctionCallContent call, string argumentsJson, long elapsedMilliseconds)
+        private void RecordInterrupted(
+            FunctionCallContent call, string argumentsJson, long elapsedMilliseconds, SimulationStamp submitted)
         {
             FunctionCount++;
-            m_Observability.Function(call.Name, argumentsJson, "tool call interrupted", false, elapsedMilliseconds, 0, "interrupted");
+            m_Observability.Function(call.CallId, call.Name, argumentsJson, "tool call interrupted", false,
+                elapsedMilliseconds,
+                new ToolAnchors { Submitted = submitted, Completed = m_Observability.Clock() },
+                "interrupted");
             m_AppendHistory(new ChatMessage(ChatRole.Tool,
                 new List<AIContent> { new FunctionResultContent(call.CallId, "tool call interrupted") }));
         }
 
         /// <summary>
         /// Every remaining call in this batch still gets a result, or the
-        /// orphaned tool_calls break Chat Completions pairing. No UI events:
-        /// their start rows were never emitted.
+        /// orphaned tool_calls break Chat Completions pairing. No UI events
+        /// and no start events: these calls never ran.
         /// </summary>
         private void PoisonRemaining(IReadOnlyList<FunctionCallContent> toolCalls, int start)
         {
             for (int rest = start; rest < toolCalls.Count; rest++)
             {
                 FunctionCallContent skipped = toolCalls[rest];
-                RecordInterrupted(skipped, SerializeArguments(skipped.Arguments), 0);
+                RecordInterrupted(skipped, SerializeArguments(skipped.Arguments), 0, null);
             }
         }
 

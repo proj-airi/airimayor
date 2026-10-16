@@ -13,10 +13,13 @@ namespace AgentRuntime
     /// JSONL agent timeline: task/turn/generation/function/compact/error
     /// events for improving tools and prompts. Usage stays on turn.finish
     /// and generation events. One event per line, append-only,
-    /// size-rotated. API keys never appear.
+    /// size-rotated. API keys never appear. Every line carries the same
+    /// envelope: schema, seq, ts, session, turn, an optional call, and the
+    /// simulation clock while a city runs. Events between turns carry no turn.
     /// </summary>
     public sealed class AgentObservability : IDisposable
     {
+        public const int Schema = 1;
         public const long MaxFileBytes = 50L * 1024 * 1024;
         public const int KeepFiles = 5;
 
@@ -34,15 +37,19 @@ namespace AgentRuntime
         private readonly string m_FilePath;
         private readonly string m_SessionId;
         private readonly Action<string> m_Warn;
+        private readonly Func<SimulationStamp> m_Clock;
         private StreamWriter m_Writer;
+        private string m_Turn;
         private long m_Sequence;
         private long m_Size;
         private bool m_Disposed;
 
-        public AgentObservability(string sessionId, string logDirectory, Action<string> warn)
+        public AgentObservability(string sessionId, SessionRecordOptions options, Action<string> warn)
         {
             m_SessionId = sessionId;
             m_Warn = warn;
+            m_Clock = options?.Clock;
+            string logDirectory = options?.Directory;
             m_FilePath = string.IsNullOrWhiteSpace(logDirectory)
                 ? null
                 : Path.Combine(logDirectory, "agent-timeline-" + sessionId + ".jsonl");
@@ -69,9 +76,13 @@ namespace AgentRuntime
 
         public string SessionId => m_SessionId;
 
-        public string TurnId { get; set; }
+        /// <summary>Latest simulation clock reading, or null while no city runs.</summary>
+        public SimulationStamp Clock()
+        {
+            return m_Clock?.Invoke();
+        }
 
-        public void Record(string type, JsonObject data)
+        public void Record(string type, JsonObject data, string call = null)
         {
             lock (m_Lock)
             {
@@ -81,13 +92,23 @@ namespace AgentRuntime
                 }
                 var line = new JsonObject
                 {
+                    ["schema"] = Schema,
                     ["seq"] = ++m_Sequence,
                     ["ts"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
                     ["session"] = m_SessionId,
-                    ["turn"] = TurnId,
-                    ["type"] = type,
-                    ["data"] = data ?? new JsonObject(),
+                    ["turn"] = m_Turn,
                 };
+                if (call != null)
+                {
+                    line["call"] = call;
+                }
+                SimulationStamp clock = Clock();
+                if (clock != null)
+                {
+                    line["clock"] = clock.ToJson();
+                }
+                line["type"] = type;
+                line["data"] = data ?? new JsonObject();
                 string json = RedactSecrets(line.ToJsonString());
                 try
                 {
@@ -119,7 +140,10 @@ namespace AgentRuntime
 
         public void TurnStart(string turnId, string userText)
         {
-            TurnId = turnId;
+            lock (m_Lock)
+            {
+                m_Turn = turnId;
+            }
             Record("turn.start", new JsonObject { ["user"] = userText });
         }
 
@@ -133,6 +157,10 @@ namespace AgentRuntime
                 ["usage"] = usage ?? new JsonObject(),
                 ["coverage"] = coverage ?? new JsonObject(),
             });
+            lock (m_Lock)
+            {
+                m_Turn = null;
+            }
         }
 
         public void Generation(string model, string messageSummary, string reasoning, JsonArray toolCalls, JsonObject usage, long elapsedMs)
@@ -148,25 +176,54 @@ namespace AgentRuntime
             });
         }
 
+        /// <summary>Written before a tool runs, so a call that never ends still leaves a trace.</summary>
+        public void FunctionStart(string callId, string toolName)
+        {
+            Record("function.start", new JsonObject { ["tool"] = toolName }, callId);
+        }
+
+        /// <summary>
+        /// One finished tool call. Submitted and completed come from the
+        /// clock; applied is the frame where the simulation thread ran the
+        /// request, absent for tools that never reach it.
+        /// </summary>
         public void Function(
+            string callId,
             string toolName,
             string arguments,
             string result,
             bool success,
             long elapsedMs,
-            long queuedMs,
+            ToolAnchors anchors,
             string error = null)
         {
-            Record("function", new JsonObject
+            var data = new JsonObject
             {
                 ["tool"] = toolName,
                 ["arguments"] = Truncate(arguments, 32768),
                 ["result"] = Truncate(result, 32768),
                 ["success"] = success,
                 ["elapsedMs"] = elapsedMs,
-                ["queuedMs"] = queuedMs,
                 ["error"] = error,
-            });
+            };
+            if (anchors.QueuedMs.HasValue)
+            {
+                data["queuedMs"] = anchors.QueuedMs.Value;
+            }
+            var timeline = new JsonObject();
+            AddAnchor(timeline, "submitted", anchors.Submitted);
+            AddAnchor(timeline, "applied", anchors.Applied);
+            AddAnchor(timeline, "completed", anchors.Completed);
+            data["timeline"] = timeline;
+            Record("function", data, callId);
+        }
+
+        private static void AddAnchor(JsonObject timeline, string name, SimulationStamp stamp)
+        {
+            if (stamp != null)
+            {
+                timeline[name] = stamp.ToJson();
+            }
         }
 
         public void Compact(double threshold, int removedMessages, int keptMessages, string summary, long newEstimate)

@@ -148,7 +148,7 @@ or timeline notes. Keep each list item short and concrete.";
         private readonly Func<ModelSettings> m_ReadModel;
         private readonly IAgentTools m_Tools;
         private readonly string m_SystemPrompt;
-        private readonly string m_LogDirectory;
+        private readonly SessionRecordOptions m_Record;
         private readonly IChatClient m_ChatClient;
         private readonly Action<string> m_Warn;
         private readonly ConversationBook m_Conversations;
@@ -170,9 +170,9 @@ or timeline notes. Keep each list item short and concrete.";
             IAgentTools tools,
             string systemPrompt,
             Func<ModelSettings> readModel,
-            string logDirectory,
+            SessionRecordOptions record,
             Action<string> warn = null)
-            : this(tools, systemPrompt, readModel, logDirectory, null, warn)
+            : this(tools, systemPrompt, readModel, record, null, warn)
         {
         }
 
@@ -180,7 +180,7 @@ or timeline notes. Keep each list item short and concrete.";
             IAgentTools tools,
             string systemPrompt,
             Func<ModelSettings> readModel,
-            string logDirectory,
+            SessionRecordOptions record,
             IChatClient chatClient,
             Action<string> warn = null,
             bool enableTasks = true)
@@ -188,14 +188,14 @@ or timeline notes. Keep each list item short and concrete.";
             m_ReadModel = readModel;
             m_Tools = tools;
             m_SystemPrompt = systemPrompt;
-            m_LogDirectory = logDirectory;
+            m_Record = record;
             m_ChatClient = chatClient;
             m_Warn = warn;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Conversations = enableTasks
                 ? new ConversationBook(RunChildTurnAsync, Emit, EnqueueReport)
                 : null;
-            m_Observability = new AgentObservability(m_SessionId, logDirectory, warn);
+            m_Observability = new AgentObservability(m_SessionId, record, warn);
             m_ClientFactory = new AgentClientFactory(
                 m_Observability, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
             m_ToolSurface = new AgentToolSurface(tools, m_Conversations, m_Plan, EmitPlan);
@@ -930,6 +930,7 @@ or timeline notes. Keep each list item short and concrete.";
             {
                 calls.Add(new JsonObject
                 {
+                    ["id"] = call.CallId,
                     ["name"] = call.Name,
                     ["arguments"] = AgentToolExecutor.SerializeArguments(call.Arguments),
                 });
@@ -1058,7 +1059,7 @@ or timeline notes. Keep each list item short and concrete.";
         private async Task<string> RunChildTurnAsync(string sessionId, string message, CancellationToken cancellationToken)
         {
             var child = new AgentRuntime(
-                m_Tools, m_SystemPrompt, ChildModel, m_LogDirectory, m_ChatClient, m_Warn, enableTasks: false);
+                m_Tools, m_SystemPrompt, ChildModel, m_Record, m_ChatClient, m_Warn, enableTasks: false);
             var relay = new ChildToolRelay();
             try
             {
