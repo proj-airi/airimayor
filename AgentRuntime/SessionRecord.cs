@@ -12,10 +12,13 @@ namespace AgentRuntime
     /// root, named for its UTC start and session id. <c>session.json</c>
     /// holds the facts that occur once and gets <c>ended</c> last; a record
     /// without it was cut short. <c>timeline.jsonl</c> holds the
-    /// task/turn/generation/function/compact/error events. Files a tool call
-    /// returned live under <c>calls/&lt;call&gt;/</c>, and each owned
+    /// task/turn/generation/function/compact/error events, and
+    /// <c>model-calls.jsonl</c> one line per model request. A text too long
+    /// to repeat on every request is kept once under <c>blobs/</c>, a tool
+    /// catalog under <c>catalogs/</c>, both named by SHA-256. Files a tool
+    /// call returned live under <c>calls/&lt;call&gt;/</c>, and each owned
     /// conversation has its own record under <c>conversations/</c>.
-    /// Every timeline line carries the same envelope: schema, seq, ts,
+    /// Every line of both logs carries the same envelope: schema, seq, ts,
     /// session, turn, an optional call, and the simulation clock while a city
     /// runs. Events between turns carry no turn. API keys never appear.
     /// </summary>
@@ -24,6 +27,10 @@ namespace AgentRuntime
         public const int Schema = 1;
         public const string SessionFile = "session.json";
         public const string TimelineFile = "timeline.jsonl";
+        public const string ModelCallsFile = "model-calls.jsonl";
+
+        /// <summary>A text at least this long is kept once as a blob and referenced.</summary>
+        public const int BlobChars = 2048;
 
         private readonly object m_Lock = new object();
         private readonly string m_SessionId;
@@ -31,6 +38,8 @@ namespace AgentRuntime
         private readonly Func<SimulationStamp> m_Clock;
         private readonly JsonObject m_Facts;
         private readonly JsonlFile m_Timeline;
+        private readonly JsonlFile m_ModelCalls;
+        private readonly HashSet<string> m_Kept = new HashSet<string>(StringComparer.Ordinal);
         private string m_Turn;
         private long m_Sequence;
         private bool m_Disposed;
@@ -70,6 +79,8 @@ namespace AgentRuntime
                 WriteSessionFile();
                 m_Timeline = new JsonlFile(
                     Path.Combine(directory, TimelineFile), warn, rotated => DeclareGap(rotated + " rotated out"));
+                m_ModelCalls = new JsonlFile(
+                    Path.Combine(directory, ModelCallsFile), warn, rotated => DeclareGap(rotated + " rotated out"));
             }
             catch (Exception e)
             {
@@ -188,9 +199,82 @@ namespace AgentRuntime
 
         public void Record(string type, JsonObject data, string call = null)
         {
+            Append(m_Timeline, type, data, call);
+        }
+
+        /// <summary>One model request: what was sent, what came back, and its anchors.</summary>
+        public void ModelCall(JsonObject data)
+        {
+            Append(m_ModelCalls, "model.call", data, null);
+        }
+
+        /// <summary>
+        /// Keeps a long text once under <c>blobs/</c> and returns its
+        /// record-relative path, or null when nothing is written.
+        /// </summary>
+        public string KeepBlob(string text)
+        {
+            return Keep("blobs", ".txt", Encoding.UTF8.GetBytes(text ?? ""));
+        }
+
+        /// <summary>
+        /// Keeps a tool catalog once under <c>catalogs/</c> and returns its
+        /// SHA-256, which a model call names.
+        /// </summary>
+        public string KeepCatalog(JsonArray catalog)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(catalog.ToJsonString());
+            Keep("catalogs", ".json", bytes);
+            return Sha256(bytes);
+        }
+
+        public static string Sha256(byte[] bytes)
+        {
+            using (var sha = global::System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(bytes);
+                var builder = new StringBuilder(hash.Length * 2);
+                foreach (byte value in hash)
+                {
+                    builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                }
+                return builder.ToString();
+            }
+        }
+
+        private string Keep(string folder, string extension, byte[] bytes)
+        {
+            if (Directory == null)
+            {
+                return null;
+            }
+            string relative = folder + "/" + Sha256(bytes) + extension;
             lock (m_Lock)
             {
-                if (m_Timeline == null || m_Disposed)
+                if (m_Kept.Contains(relative))
+                {
+                    return relative;
+                }
+                try
+                {
+                    global::System.IO.Directory.CreateDirectory(Path.Combine(Directory, folder));
+                    File.WriteAllBytes(Path.Combine(Directory, relative), bytes);
+                    m_Kept.Add(relative);
+                }
+                catch (Exception e)
+                {
+                    Warn("session record could not keep " + relative + ": " + e.Message);
+                    return null;
+                }
+            }
+            return relative;
+        }
+
+        private void Append(JsonlFile file, string type, JsonObject data, string call)
+        {
+            lock (m_Lock)
+            {
+                if (file == null || m_Disposed)
                 {
                     return;
                 }
@@ -213,7 +297,7 @@ namespace AgentRuntime
                 }
                 line["type"] = type;
                 line["data"] = data ?? new JsonObject();
-                m_Timeline.Append(line);
+                file.Append(line);
             }
         }
 
@@ -237,28 +321,23 @@ namespace AgentRuntime
             Record("turn.start", new JsonObject { ["user"] = userText });
         }
 
-        public void TurnFinish(int generationCount, int functionCount, long elapsedMs, JsonObject usage, JsonObject coverage)
+        /// <summary>Closes the open turn; events after it carry no turn.</summary>
+        public void TurnFinish(JsonObject data)
         {
-            Record("turn.finish", new JsonObject
-            {
-                ["generations"] = generationCount,
-                ["functions"] = functionCount,
-                ["elapsedMs"] = elapsedMs,
-                ["usage"] = usage ?? new JsonObject(),
-                ["coverage"] = coverage ?? new JsonObject(),
-            });
+            Record("turn.finish", data);
             lock (m_Lock)
             {
                 m_Turn = null;
             }
         }
 
-        public void Generation(string model, string messageSummary, string reasoning, JsonArray toolCalls, JsonObject usage, long elapsedMs)
+        /// <summary>Timeline summary of one model round; the request and reply are in the model call it names.</summary>
+        public void Generation(string modelCall, string model, string reasoning, JsonArray toolCalls, JsonObject usage, long elapsedMs)
         {
             Record("generation", new JsonObject
             {
+                ["modelCall"] = modelCall,
                 ["model"] = model,
-                ["input"] = Truncate(messageSummary, 32768),
                 ["reasoning"] = Truncate(reasoning, 32768),
                 ["toolCalls"] = toolCalls ?? new JsonArray(),
                 ["usage"] = usage ?? new JsonObject(),
@@ -277,6 +356,8 @@ namespace AgentRuntime
         /// clock; applied is the frame where the simulation thread ran the
         /// request, absent for tools that never reach it. Returned images and
         /// diagnostic files are kept under the call and listed in <c>files</c>.
+        /// <paramref name="caller"/> is <c>conversation</c> when an owned
+        /// conversation of the external mayor made the call.
         /// </summary>
         public void Function(
             string callId,
@@ -285,7 +366,8 @@ namespace AgentRuntime
             AgentToolResult result,
             long elapsedMs,
             ToolAnchors anchors,
-            string error = null)
+            string error = null,
+            string caller = null)
         {
             var data = new JsonObject
             {
@@ -296,6 +378,10 @@ namespace AgentRuntime
                 ["elapsedMs"] = elapsedMs,
                 ["error"] = error,
             };
+            if (caller != null)
+            {
+                data["caller"] = caller;
+            }
             if (anchors.QueuedMs.HasValue)
             {
                 data["queuedMs"] = anchors.QueuedMs.Value;
@@ -367,6 +453,7 @@ namespace AgentRuntime
                 }
                 m_Disposed = true;
                 m_Timeline?.Dispose();
+                m_ModelCalls?.Dispose();
                 m_Facts["ended"] = Moment(DateTime.UtcNow);
                 WriteSessionFile();
             }

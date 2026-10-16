@@ -120,6 +120,56 @@ namespace airimayor.Agent
         }
 
         [Fact]
+        public async Task Each_model_round_is_recorded_with_its_request_and_reply()
+        {
+            string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "airimayor-record-" + Guid.NewGuid().ToString("N"));
+            string prompt = new string('p', SessionRecord.BlobChars);
+            var client = new ScriptedChatClient(ToolCall("plan-1", "set_plan", PlanEntries()), Text("Done."));
+            try
+            {
+                string directory;
+                using (var runtime = new AgentRuntime.AgentRuntime(
+                    new QuietTools(),
+                    prompt,
+                    () => new ModelSettings { Model = "test", WindowTokens = 32_000, Wire = ModelWire.ChatCompletions },
+                    new SessionRecordOptions { Root = root },
+                    client))
+                {
+                    directory = runtime.Record.Directory;
+                    runtime.Prompt("start");
+                    await WaitUntilAsync(() => runtime.Status == AgentStatus.Idle && runtime.ChatStateJson().Contains("Done."));
+                }
+
+                string[] lines = System.IO.File.ReadAllLines(System.IO.Path.Combine(directory, SessionRecord.ModelCallsFile));
+                Assert.Equal(2, lines.Length);
+                using (JsonDocument first = JsonDocument.Parse(lines[0]))
+                using (JsonDocument second = JsonDocument.Parse(lines[1]))
+                using (JsonDocument session = JsonDocument.Parse(System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(directory, SessionRecord.SessionFile))))
+                {
+                    JsonElement call = first.RootElement.GetProperty("data");
+                    Assert.Equal("turn", call.GetProperty("purpose").GetString());
+                    JsonElement system = call.GetProperty("request").GetProperty("messages")[0];
+                    Assert.Equal("system", system.GetProperty("role").GetString());
+                    string blob = system.GetProperty("content")[0].GetProperty("blob").GetString();
+                    Assert.Equal(prompt, System.IO.File.ReadAllText(System.IO.Path.Combine(directory, blob)));
+                    Assert.Equal(blob, session.RootElement.GetProperty("prompt").GetProperty("blob").GetString());
+                    string catalog = call.GetProperty("request").GetProperty("catalog").GetString();
+                    Assert.True(System.IO.File.Exists(System.IO.Path.Combine(directory, "catalogs", catalog + ".json")));
+                    Assert.Equal("plan-1", call.GetProperty("outcome").GetProperty("toolCalls")[0].GetProperty("id").GetString());
+                    Assert.Equal("Done.", second.RootElement.GetProperty("data").GetProperty("outcome").GetProperty("text").GetString());
+                }
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(root))
+                {
+                    System.IO.Directory.Delete(root, true);
+                }
+            }
+        }
+
+        [Fact]
         public async Task A_conversation_does_not_continue_or_receive_task()
         {
             var client = new ChildOnceClient();

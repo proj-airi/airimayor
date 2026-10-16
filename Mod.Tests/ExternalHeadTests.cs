@@ -200,6 +200,50 @@ namespace airimayor.Agent
             }
         }
 
+        [Fact]
+        public async Task External_city_tool_calls_are_recorded_under_the_tool_server_call_id()
+        {
+            string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "airimayor-record-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string directory;
+                using (var record = new SessionRecord("acp", new SessionRecordOptions { Root = root }, null))
+                using (ToolBridge bridge = ToolBridge.Start(new EchoTools(), () => false, "Be the mayor.", null, null, record))
+                using (var http = new HttpClient())
+                {
+                    directory = record.Directory;
+                    http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bridge.Token);
+                    using (var request = new HttpRequestMessage(HttpMethod.Post, bridge.BaseUrl + "invoke"))
+                    {
+                        request.Headers.Add("X-Call-Id", "mcp-7");
+                        request.Content = new StringContent(
+                            "{\"name\":\"echo\",\"argumentsJson\":\"{}\"}", Encoding.UTF8, "application/json");
+                        using (HttpResponseMessage invoked = await http.SendAsync(request))
+                        {
+                            invoked.EnsureSuccessStatusCode();
+                        }
+                    }
+                }
+
+                string[] lines = System.IO.File.ReadAllLines(System.IO.Path.Combine(directory, SessionRecord.TimelineFile));
+                Assert.Equal(2, lines.Length);
+                using (JsonDocument start = JsonDocument.Parse(lines[0]))
+                using (JsonDocument finish = JsonDocument.Parse(lines[1]))
+                {
+                    Assert.Equal("function.start", start.RootElement.GetProperty("type").GetString());
+                    Assert.Equal("mcp-7", finish.RootElement.GetProperty("call").GetString());
+                    Assert.Equal("calls/mcp-7/image.png", finish.RootElement.GetProperty("data").GetProperty("files")[0].GetString());
+                }
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(root))
+                {
+                    System.IO.Directory.Delete(root, true);
+                }
+            }
+        }
+
         private sealed class EchoTools : IAgentTools
         {
             public IReadOnlyList<AgentToolDeclaration> List(bool visionAvailable)

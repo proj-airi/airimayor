@@ -158,18 +158,10 @@ function Show-Event([pscustomobject]$e) {
             }
         }
         'generation' {
-            Write-Host ($head + ' ' + $d.model + ' in=' + $d.usage.input + ' out=' + $d.usage.output + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor Cyan
+            Write-Host ($head + ' ' + $d.model + ' in=' + $d.usage.input + ' out=' + $d.usage.output + ' (' + $d.elapsedMs + 'ms) model call ' + $d.modelCall) -ForegroundColor Cyan
             if ($d.reasoning) {
                 Write-ContextBlock -Title 'reasoning' -Body (Limit-Text ([string]$d.reasoning) $InputChars) -Color DarkYellow
             }
-            $inputText = [string]$d.input
-            $assistantIdx = $inputText.LastIndexOf('assistant:')
-            if ($assistantIdx -ge 0) {
-                $snippet = Limit-Text $inputText.Substring($assistantIdx) $InputChars
-            } else {
-                $snippet = Limit-Text $inputText $InputChars
-            }
-            Write-ContextBlock -Title 'context (tail)' -Body $snippet -Color White
             $calls = @($d.toolCalls)
             if ($calls.Count -gt 0) {
                 $callText = ($calls | ForEach-Object {
@@ -183,7 +175,12 @@ function Show-Event([pscustomobject]$e) {
             Write-ContextBlock -Title 'user' -Body ([string]$d.user) -Color White
         }
         'turn.finish' {
-            Write-Host ($head + ' gens=' + $d.generations + ' fns=' + $d.functions + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
+            if ($d.stopReason) {
+                Write-Host ($head + ' stop=' + $d.stopReason + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
+                Write-ContextBlock -Title 'reply' -Body (Limit-Text ([string]$d.reply) $InputChars) -Color White
+            } else {
+                Write-Host ($head + ' gens=' + $d.generations + ' fns=' + $d.functions + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
+            }
         }
         'error' {
             Write-Host $head -ForegroundColor Red

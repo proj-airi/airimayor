@@ -22,6 +22,7 @@ namespace AgentRuntime
         private readonly string m_Instructions;
         private readonly ConversationBook m_Conversations;
         private readonly ToolPreviewLatch m_Previews;
+        private readonly SessionRecord m_Record;
         private readonly string m_Token;
         private readonly string m_ChildToken;
         private readonly HttpListener m_Listener;
@@ -36,6 +37,7 @@ namespace AgentRuntime
             string instructions,
             ConversationBook conversations,
             ToolPreviewLatch previews,
+            SessionRecord record,
             string token,
             string childToken,
             HttpListener listener)
@@ -45,6 +47,7 @@ namespace AgentRuntime
             m_Instructions = instructions ?? "";
             m_Conversations = conversations;
             m_Previews = previews;
+            m_Record = record;
             m_Token = token;
             m_ChildToken = childToken;
             m_Listener = listener;
@@ -64,7 +67,8 @@ namespace AgentRuntime
             Func<bool> visionAvailable,
             string instructions,
             ConversationBook conversations,
-            ToolPreviewLatch previews = null)
+            ToolPreviewLatch previews = null,
+            SessionRecord record = null)
         {
             if (tools == null)
             {
@@ -75,7 +79,7 @@ namespace AgentRuntime
             int port = BindLoopback(listener);
             string token = NewToken();
             string childToken = NewToken();
-            var bridge = new ToolBridge(tools, visionAvailable, instructions, conversations, previews, token, childToken, listener)
+            var bridge = new ToolBridge(tools, visionAvailable, instructions, conversations, previews, record, token, childToken, listener)
             {
                 Port = port,
             };
@@ -196,7 +200,7 @@ namespace AgentRuntime
                     CancellationTokenSource call = BeginCall(callId);
                     try
                     {
-                        string json = await InvokeJsonAsync(body, caller == Caller.Root, call.Token).ConfigureAwait(false);
+                        string json = await InvokeJsonAsync(body, callId, caller == Caller.Root, call.Token).ConfigureAwait(false);
                         await WriteJsonAsync(context, 200, json).ConfigureAwait(false);
                     }
                     finally
@@ -289,7 +293,7 @@ namespace AgentRuntime
             }.ToJsonString();
         }
 
-        private async Task<string> InvokeJsonAsync(string body, bool isRoot, CancellationToken cancellationToken)
+        private async Task<string> InvokeJsonAsync(string body, string callId, bool isRoot, CancellationToken cancellationToken)
         {
             string name = "";
             string arguments = "{}";
@@ -320,7 +324,8 @@ namespace AgentRuntime
                         ["imagePngBase64"] = null,
                     }.ToJsonString();
                 }
-                AgentToolResult session = await m_Conversations.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+                AgentToolResult session = await RecordedAsync(callId, name, arguments, isRoot,
+                    () => m_Conversations.InvokeAsync(name, arguments, cancellationToken)).ConfigureAwait(false);
                 return new JsonObject
                 {
                     ["success"] = session.Success,
@@ -328,7 +333,8 @@ namespace AgentRuntime
                     ["imagePngBase64"] = null,
                 }.ToJsonString();
             }
-            AgentToolResult result = await m_Tools.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+            AgentToolResult result = await RecordedAsync(callId, name, arguments, isRoot,
+                () => m_Tools.InvokeAsync(name, arguments, cancellationToken)).ConfigureAwait(false);
             m_Previews?.Offer(name, arguments, result.PreviewJpeg);
             string image = result.ImagePng == null || result.ImagePng.Length == 0
                 ? null
@@ -339,6 +345,48 @@ namespace AgentRuntime
                 ["text"] = result.Text ?? "",
                 ["imagePngBase64"] = image,
             }.ToJsonString();
+        }
+
+        /// <summary>
+        /// The external mayor's city tool calls go into the session record with
+        /// the same events and anchors as the built-in loop. The call id is the
+        /// tool server's, not the agent's tool row id.
+        /// </summary>
+        private async Task<AgentToolResult> RecordedAsync(
+            string callId, string name, string arguments, bool isRoot, Func<Task<AgentToolResult>> invoke)
+        {
+            if (m_Record == null)
+            {
+                return await invoke().ConfigureAwait(false);
+            }
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            SimulationStamp submitted = m_Record.Clock();
+            m_Record.FunctionStart(callId, name);
+            AgentToolResult result;
+            try
+            {
+                result = await invoke().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                m_Record.Function(callId, name, arguments,
+                    new AgentToolResult { Success = false, Text = "tool call interrupted" },
+                    timer.ElapsedMilliseconds,
+                    new ToolAnchors { Submitted = submitted, Completed = m_Record.Clock() },
+                    "interrupted");
+                throw;
+            }
+            m_Record.Function(callId, name, arguments, result, timer.ElapsedMilliseconds,
+                new ToolAnchors
+                {
+                    Submitted = submitted,
+                    Applied = result.Applied,
+                    Completed = m_Record.Clock(),
+                    QueuedMs = result.QueuedMs,
+                },
+                result.Success ? null : result.Text,
+                isRoot ? null : "conversation");
+            return result;
         }
 
         private static JsonObject ToolJson(AgentToolDeclaration tool)

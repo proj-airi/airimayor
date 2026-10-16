@@ -38,6 +38,7 @@ namespace airimayor.Host
         private readonly CancellationTokenSource m_Life = new CancellationTokenSource();
         private readonly string m_SessionId;
         private readonly StringBuilder m_Stderr = new StringBuilder();
+        private readonly StringBuilder m_TurnReply = new StringBuilder();
         private readonly Dictionary<string, string> m_ChildText =
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly HashSet<string> m_OwnedSessions = new HashSet<string>(StringComparer.Ordinal);
@@ -73,6 +74,14 @@ namespace airimayor.Host
             m_Continuation = continuation ?? "";
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Record = new SessionRecord(m_SessionId, record, warn);
+            m_Record.Describe("prompt", new JsonObject
+            {
+                ["blob"] = m_Record.KeepBlob(instructions),
+                ["chars"] = (instructions ?? "").Length,
+            });
+            m_Record.DeclareGap("the external mayor's model calls are not observable; model-calls.jsonl stays empty");
+            m_Record.DeclareGap("the external mayor's turns report a stop reason but no token usage");
+            m_Record.DeclareGap("an external tool row id differs from its city tool call id; pair them by tool name and arguments");
             m_Previews = new ToolPreviewLatch(OnPreviewMatched);
             _ = Task.Run(() => RunAsync(tools, instructions, command, arguments, mcpExecutable, workingDirectory));
         }
@@ -322,7 +331,7 @@ namespace airimayor.Host
                 m_McpExecutable = mcpExecutable;
                 m_WorkingDirectory = workingDirectory;
                 m_Conversations = new ConversationBook(RunChildSessionAsync, Emit, DeliverReport);
-                m_Bridge = ToolBridge.Start(tools, m_Vision, instructions, m_Conversations, m_Previews);
+                m_Bridge = ToolBridge.Start(tools, m_Vision, instructions, m_Conversations, m_Previews, m_Record);
                 m_Process = StartAgent(command, arguments);
                 m_Connection = Connection.RunClient(this, m_Process.StandardInput.BaseStream, m_Process.StandardOutput.BaseStream);
                 if (m_Connection == null)
@@ -417,6 +426,7 @@ namespace airimayor.Host
                     m_Turn = new CancellationTokenSource();
                     Status = AgentStatus.Thinking;
                     Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Thinking });
+                    Stopwatch turnTimer = BeginTurn(text);
                     PromptResponse response;
                     try
                     {
@@ -432,9 +442,11 @@ namespace airimayor.Host
                     }
                     catch (Exception e)
                     {
+                        FinishTurn("failed", turnTimer);
                         Fail(FailureText(e));
                         return;
                     }
+                    FinishTurn(m_Turn.IsCancellationRequested ? "cancelled" : StopReasonText(response.StopReason), turnTimer);
                     if (response.StopReason == StopReason.Cancelled || m_Turn.IsCancellationRequested)
                     {
                         break;
@@ -456,6 +468,44 @@ namespace airimayor.Host
                     text = m_Continuation;
                 }
             }
+        }
+
+        private Stopwatch BeginTurn(string text)
+        {
+            lock (m_TurnReply)
+            {
+                m_TurnReply.Clear();
+            }
+            m_Record.TurnStart(Guid.NewGuid().ToString("N").Substring(0, 8), text);
+            return Stopwatch.StartNew();
+        }
+
+        private void FinishTurn(string stopReason, Stopwatch timer)
+        {
+            string reply;
+            lock (m_TurnReply)
+            {
+                reply = m_TurnReply.ToString();
+            }
+            m_Record.TurnFinish(new JsonObject
+            {
+                ["stopReason"] = stopReason,
+                ["elapsedMs"] = timer.ElapsedMilliseconds,
+                ["reply"] = SessionRecord.Truncate(reply, 32768),
+            });
+        }
+
+        private static string StopReasonText(StopReason reason)
+        {
+            if (reason == StopReason.EndTurn)
+            {
+                return "end_turn";
+            }
+            if (reason == StopReason.Cancelled)
+            {
+                return "cancelled";
+            }
+            return reason.ToString();
         }
 
         private void DeliverReport(string text)
@@ -491,12 +541,16 @@ namespace airimayor.Host
             if (update is SessionUpdateAgentMessageChunk chunk && chunk.Content is TextContent text)
             {
                 AppendAssistant(text.Text);
+                lock (m_TurnReply)
+                {
+                    m_TurnReply.Append(text.Text);
+                }
                 Emit(AcpChatMap.AgentText(text.Text));
                 return;
             }
             if (update is ToolCall call)
             {
-                ApplyTool(call.ToolCallId, call.Title, call.Status, call.RawInput, call.Content, call.RawOutput);
+                ApplyTool(call.ToolCallId, call.Title, call.Status, call.RawInput, call.Content, call.RawOutput, null);
                 return;
             }
             if (update is SessionUpdateToolCallUpdate toolUpdate)
@@ -507,7 +561,8 @@ namespace airimayor.Host
                     toolUpdate.Status,
                     toolUpdate.RawInput,
                     toolUpdate.Content,
-                    toolUpdate.RawOutput);
+                    toolUpdate.RawOutput,
+                    null);
                 return;
             }
             if (update is Plan plan)
@@ -566,7 +621,8 @@ namespace airimayor.Host
             ToolCallStatus status,
             object rawInput,
             ToolCallContent[] content,
-            object rawOutput)
+            object rawOutput,
+            string conversation)
         {
             string key = id.ToString();
             bool finished = status == ToolCallStatus.Completed || status == ToolCallStatus.Failed;
@@ -586,10 +642,13 @@ namespace airimayor.Host
             };
             AcpToolState state;
             bool first;
+            bool justFinished;
             lock (m_Lock)
             {
                 first = !m_ToolRows.TryGetValue(key, out state);
+                bool wasFinished = state != null && state.Finished;
                 state = AcpToolState.Apply(state, key, patch);
+                justFinished = state.Finished && !wasFinished;
                 m_ToolRows[key] = state;
                 if (state.Finished)
                 {
@@ -601,10 +660,32 @@ namespace airimayor.Host
                 Status = AgentStatus.Working;
                 Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Working });
             }
+            if (justFinished)
+            {
+                RecordToolRow(state, conversation);
+            }
             string image = m_Previews.Claim(key, state.Title, state.RawInput);
             ChatUpdate row = AcpChatMap.ToolRow(state);
             row.Image = image;
             Emit(row);
+        }
+
+        /// <summary>The agent's own tool row, as it reported it. The tool bridge records city tool calls separately.</summary>
+        private void RecordToolRow(AcpToolState state, string conversation)
+        {
+            var data = new JsonObject
+            {
+                ["id"] = state.CallId,
+                ["title"] = state.Title,
+                ["status"] = state.Failed ? "failed" : "completed",
+                ["input"] = SessionRecord.Truncate(state.RawInput, 32768),
+                ["content"] = SessionRecord.Truncate(state.Content, 32768),
+            };
+            if (conversation != null)
+            {
+                data["conversation"] = conversation;
+            }
+            m_Record.Record("acp.tool", data);
         }
 
         private void OnPreviewMatched(string callId, string dataUri)
@@ -792,7 +873,7 @@ namespace airimayor.Host
             }
             if (update is ToolCall call)
             {
-                ApplyTool(call.ToolCallId, call.Title, call.Status, call.RawInput, call.Content, call.RawOutput);
+                ApplyTool(call.ToolCallId, call.Title, call.Status, call.RawInput, call.Content, call.RawOutput, sessionId);
                 return;
             }
             if (update is SessionUpdateToolCallUpdate toolUpdate)
@@ -803,7 +884,8 @@ namespace airimayor.Host
                     toolUpdate.Status,
                     toolUpdate.RawInput,
                     toolUpdate.Content,
-                    toolUpdate.RawOutput);
+                    toolUpdate.RawOutput,
+                    sessionId);
             }
         }
 

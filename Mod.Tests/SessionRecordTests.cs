@@ -39,7 +39,7 @@ namespace airimayor.Tests
                         Completed = clock,
                         QueuedMs = 16,
                     });
-                record.TurnFinish(1, 1, 50, null, null);
+                record.TurnFinish(new JsonObject { ["elapsedMs"] = 50 });
                 record.System("bridge", "between turns");
             }
 

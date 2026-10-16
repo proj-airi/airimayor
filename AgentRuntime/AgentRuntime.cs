@@ -194,6 +194,11 @@ or timeline notes. Keep each list item short and concrete.";
                 ? new ConversationBook(RunChildTurnAsync, Emit, EnqueueReport)
                 : null;
             m_Record = new SessionRecord(m_SessionId, record, warn);
+            m_Record.Describe("prompt", new JsonObject
+            {
+                ["blob"] = m_Record.KeepBlob(systemPrompt),
+                ["chars"] = (systemPrompt ?? "").Length,
+            });
             m_ClientFactory = new AgentClientFactory(
                 m_Record, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
             m_ToolSurface = new AgentToolSurface(tools, m_Conversations, m_Plan, EmitPlan);
@@ -553,12 +558,14 @@ or timeline notes. Keep each list item short and concrete.";
             }
 
             turnTimer.Stop();
-            m_Record.TurnFinish(
-                m_TurnGenerationCount,
-                m_ToolExecutor.FunctionCount,
-                turnTimer.ElapsedMilliseconds,
-                AgentUsageJson.Serialize(m_TurnUsage),
-                AgentUsageJson.SerializeCoverage(m_TurnUsageCoverage));
+            m_Record.TurnFinish(new JsonObject
+            {
+                ["generations"] = m_TurnGenerationCount,
+                ["functions"] = m_ToolExecutor.FunctionCount,
+                ["elapsedMs"] = turnTimer.ElapsedMilliseconds,
+                ["usage"] = AgentUsageJson.Serialize(m_TurnUsage),
+                ["coverage"] = AgentUsageJson.SerializeCoverage(m_TurnUsageCoverage),
+            });
             Status = AgentStatus.Idle;
             Emit(new SessionUpdate { Kind = "status", Status = AgentStatus.Idle });
             Emit(new SessionUpdate { Kind = "turn", Text = m_TurnId });
@@ -646,10 +653,16 @@ or timeline notes. Keep each list item short and concrete.";
             }
 
             AgentModelProfile profile = m_ClientFactory.GetProfile();
+            ModelSettings settings = ReadModel();
             ChatOptions options = ModelRequest.Options(
-                ReadModel().Model,
+                settings.Model,
                 profile,
                 m_ToolSurface.Build(profile));
+            ModelCall modelCall;
+            lock (m_Lock)
+            {
+                modelCall = ModelCall.Begin(m_Record, "turn", allowContextRetry ? 1 : 2, settings, m_History, options);
+            }
 
             var updates = new List<ChatResponseUpdate>();
             var pendingDelta = new StringBuilder();
@@ -706,7 +719,9 @@ or timeline notes. Keep each list item short and concrete.";
                 }
 
                 UpdateTokenEstimate();
-                EmitGeneration(response, toolCalls, CollectReasoning(updates), timer.ElapsedMilliseconds);
+                string reasoning = CollectReasoning(updates);
+                modelCall.Completed(response, reasoning, toolCalls);
+                EmitGeneration(modelCall.Id, response, toolCalls, reasoning, timer.ElapsedMilliseconds);
                 return new ModelRound
                 {
                     Text = response.Text ?? "",
@@ -718,11 +733,13 @@ or timeline notes. Keep each list item short and concrete.";
             {
                 if (generationCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                 {
+                    modelCall.Ended("cancelled");
                     return ModelRound.PlayerMessage();
                 }
                 if (!cancellationToken.IsCancellationRequested)
                 {
                     timer.Stop();
+                    modelCall.Ended("timeout");
                     m_TimeoutOccurred = true;
                     m_Record.Error(
                         "generation-timeout",
@@ -735,11 +752,13 @@ or timeline notes. Keep each list item short and concrete.";
                     });
                     return ModelRound.Error("model response timeout");
                 }
+                modelCall.Ended("cancelled");
                 throw;
             }
             catch (Exception e)
             {
                 timer.Stop();
+                modelCall.Ended("failed", e);
                 if (allowContextRetry && IsContextLengthError(e.ToString()))
                 {
                     int historyCount = m_History.Count;
@@ -814,28 +833,27 @@ or timeline notes. Keep each list item short and concrete.";
                 return;
             }
 
+            var summaryInput = AgentContextBudget.BuildSummaryInput(oldMessages, CompactionTaskPrompt);
+            ModelSettings settings = ReadModel();
+            ChatOptions options = ModelRequest.Options(settings.Model, profile, m_ToolSurface.Build(profile));
+            ModelCall modelCall = ModelCall.Begin(m_Record, "compact", 1, settings, summaryInput, options);
             try
             {
-                var summaryInput = AgentContextBudget.BuildSummaryInput(oldMessages, CompactionTaskPrompt);
                 // NOTE: unary GetResponseAsync returns zero messages through the
                 // Responses-backed client, so the summary must use the same
                 // streaming path as the main loop.
-                var summaryBuilder = new StringBuilder();
+                var updates = new List<ChatResponseUpdate>();
                 await foreach (ChatResponseUpdate update in client.GetStreamingResponseAsync(
                     summaryInput,
-                    ModelRequest.Options(
-                        ReadModel().Model,
-                        profile,
-                        m_ToolSurface.Build(profile)),
+                    options,
                     cancellationToken))
                 {
-                    if (!string.IsNullOrEmpty(update.Text))
-                    {
-                        summaryBuilder.Append(update.Text);
-                    }
+                    updates.Add(update);
                 }
+                ChatResponse response = updates.ToChatResponse();
+                modelCall.Completed(response, CollectReasoning(updates), new FunctionCallContent[0]);
 
-                string summary = summaryBuilder.ToString().Trim();
+                string summary = (response.Text ?? "").Trim();
                 if (!AgentContextBudget.IsUsableSummary(summary))
                 {
                     m_Record.Error(
@@ -879,10 +897,12 @@ or timeline notes. Keep each list item short and concrete.";
             }
             catch (OperationCanceledException)
             {
+                modelCall.Ended("cancelled");
                 throw;
             }
             catch (Exception e)
             {
+                modelCall.Ended("failed", e);
                 m_Record.Error("compact", e.ToString());
                 Emit(new SessionUpdate
                 {
@@ -921,55 +941,18 @@ or timeline notes. Keep each list item short and concrete.";
             return builder.ToString().Trim();
         }
 
-        private void EmitGeneration(ChatResponse response, List<FunctionCallContent> toolCalls, string reasoning, long elapsedMs)
+        private void EmitGeneration(
+            string modelCall, ChatResponse response, List<FunctionCallContent> toolCalls, string reasoning, long elapsedMs)
         {
-            var calls = new JsonArray();
-            foreach (FunctionCallContent call in toolCalls)
-            {
-                calls.Add(new JsonObject
-                {
-                    ["id"] = call.CallId,
-                    ["name"] = call.Name,
-                    ["arguments"] = AgentToolExecutor.SerializeArguments(call.Arguments),
-                });
-            }
             JsonObject usage = AgentUsageJson.Serialize(response.Usage);
             AgentUsageJson.Accumulate(m_TurnUsage, m_TurnUsageCoverage, response.Usage);
             m_Record.Generation(
+                modelCall,
                 response.ModelId ?? ReadModel().Model,
-                SummarizeHistory(m_History),
                 reasoning,
-                calls,
+                ModelCallJson.ToolCalls(toolCalls),
                 usage,
                 elapsedMs);
-        }
-
-        private static string SummarizeHistory(List<ChatMessage> messages)
-        {
-            var builder = new StringBuilder();
-            int count = Math.Max(0, messages.Count - 6);
-            if (count > 0)
-            {
-                builder.Append("[omitted first ").Append(count).Append("] ");
-            }
-            for (int i = Math.Max(0, messages.Count - 6); i < messages.Count; i++)
-            {
-                ChatMessage message = messages[i];
-                builder.Append(message.Role).Append(": ").Append((message.Text ?? "").Trim());
-                foreach (AIContent content in message.Contents)
-                {
-                    if (content is FunctionCallContent call)
-                    {
-                        builder.Append(" [call:").Append(call.Name).Append("]");
-                    }
-                    else if (content is FunctionResultContent result)
-                    {
-                        builder.Append(" [result]");
-                    }
-                }
-                builder.Append('\n');
-            }
-            return builder.ToString();
         }
 
         private static string ToolCallNames(ChatMessage message)
