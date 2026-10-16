@@ -82,7 +82,7 @@ namespace airimayor.Host
                 };
             }
             ToolInvocationResult invoked = await AgentToolBridge.InvokeAsync(
-                tool, argumentsJson, cancellationToken);
+                tool, argumentsJson, IsWrite(name), cancellationToken);
             byte[] image = invoked.ImagePng;
             return new AgentToolResult
             {
@@ -94,7 +94,17 @@ namespace airimayor.Host
                 Applied = invoked.Applied,
                 QueuedMs = invoked.QueuedMs,
                 Files = invoked.Files,
+                Evidence = invoked.Evidence,
             };
+        }
+
+        /// <summary>Tools that change the city; their record carries ledger evidence (ADR 0047).</summary>
+        private static bool IsWrite(string name)
+        {
+            return s_Construction.Contains(name) ||
+                s_Treasury.Contains(name) ||
+                name == "demolish" ||
+                name == "purchase_development_node";
         }
 
         private static string ImageCaption(string name)

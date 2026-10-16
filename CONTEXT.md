@@ -46,6 +46,10 @@ _Avoid_: a second chat, the player sending a message to that conversation, a con
 The directory one chat session leaves behind as evidence: its once-only facts, its timeline, its model calls, the files its tool calls returned, and the records of the conversations it owned. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
 _Avoid_: agent log, timeline file (the timeline is one part), telemetry, a set of files gathered by hand for acceptance
 
+**Write evidence**:
+The city ledger read before and after a write: treasury, development points, building, network edge, and transit line counts, frame, and pause. It lives in the session record. The model never reads it. A write is judged confirmed, diverged, or undetermined from it.
+_Avoid_: a snapshot on the write result, a retry trigger, proof while the simulation runs
+
 **Plan**:
 The one list of steps declared with `set_plan`. Each step has content, a priority (high, medium, or low), and a status (pending, in progress, or completed). Only another `set_plan` replaces the whole list; player messages and autonomous continuation leave it in place.
 _Avoid_: a statutory plan, `goal` and `success` as the plan, compact JSON as the live plan, gating the tool catalog, the plan prompting a time advance, a live note as the plan, several plans at once

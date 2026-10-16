@@ -147,6 +147,30 @@ namespace airimayor.Tests
             Assert.True(File.Exists(Path.Combine(directory, "calls", "call_5", "image.png")));
         }
 
+        [Fact]
+        public void Write_evidence_is_kept_on_the_function_event()
+        {
+            string directory;
+            using (var record = new SessionRecord("s5", new SessionRecordOptions { Root = m_Root }, null))
+            {
+                directory = record.Directory;
+                record.Function("call-6", "build_network", "{}", new AgentToolResult
+                {
+                    Success = true,
+                    Text = "{\"placed\":true}",
+                    Evidence = new JsonObject
+                    {
+                        ["before"] = new JsonObject { ["networkEdges"] = 20 },
+                        ["after"] = new JsonObject { ["networkEdges"] = 21 },
+                    },
+                }, 0, new ToolAnchors());
+            }
+
+            JsonObject line = Lines(Path.Combine(directory, SessionRecord.TimelineFile))[0];
+            Assert.Equal(21, (int)line["data"]["evidence"]["after"]["networkEdges"]);
+            Assert.DoesNotContain("networkEdges", (string)line["data"]["result"]);
+        }
+
         private static JsonObject[] Lines(string path)
         {
             return File.ReadAllLines(path).Select(line => (JsonObject)JsonNode.Parse(line)).ToArray();

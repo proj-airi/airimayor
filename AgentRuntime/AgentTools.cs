@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,6 +41,9 @@ namespace AgentRuntime
 
         /// <summary>Diagnostic files kept with the call in the session record. Never shown to the model.</summary>
         public IReadOnlyDictionary<string, byte[]> Files;
+
+        /// <summary>City ledger before and after a write. Session record only; never shown to the model.</summary>
+        public JsonObject Evidence;
     }
 
     /// <summary>Timeline anchors of one tool call.</summary>

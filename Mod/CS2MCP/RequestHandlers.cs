@@ -77,6 +77,8 @@ namespace CS2MCP
             {
                 case "/state":
                     return GetState();
+                case LedgerRoute:
+                    return ReadLedger();
                 case "/city/overview":
                     return GetCityOverview();
                 case "/city/progression":

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentRuntime;
@@ -18,6 +19,7 @@ namespace airimayor.Host
         public Dictionary<string, byte[]> Files; // diagnostic files kept in the session record
         public SimulationStamp Applied; // clock where the simulation thread took the request
         public long? QueuedMs;          // real time the request waited for the simulation thread
+        public JsonObject Evidence;     // city ledger before and after a write; session record only
     }
 
     /// <summary>
@@ -30,10 +32,13 @@ namespace airimayor.Host
     public static class AgentToolBridge
     {
         private const int BridgeTimeoutMs = 90_000;
+        private const int LedgerTimeoutMs = 5_000;
 
+        /// <param name="write">Read the city ledger before and after, as write evidence.</param>
         public static async Task<ToolInvocationResult> InvokeAsync(
             ToolDefinition tool,
             string argumentsJson,
+            bool write,
             CancellationToken cancellationToken)
         {
             CS2MCP.BridgeSystem bridge = CS2MCP.BridgeSystem.Instance;
@@ -55,6 +60,11 @@ namespace airimayor.Host
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
                 query.TryGetValue("action", out string action) &&
                 string.Equals(action, "advance", StringComparison.Ordinal);
+            // Queued back to back so the simulation thread usually reads the
+            // ledger in the same update that runs the write.
+            Task<CS2MCP.BridgeResponse> before = write
+                ? bridge.InvokeAsync(CS2MCP.RequestHandlers.LedgerRoute)
+                : null;
             Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query);
             Task completed = await Task.WhenAny(bridgeTask, Task.Delay(BridgeTimeoutMs, cancellationToken));
             CS2MCP.BridgeResponse response = completed == bridgeTask
@@ -70,41 +80,72 @@ namespace airimayor.Host
                 return Error($"tool '{tool.Name}' did not complete within {BridgeTimeoutMs / 1000}s; " +
                              "the game may be busy, retry once or switch approach");
             }
+            ToolInvocationResult result;
             if (!response.Success)
             {
-                string body = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-                return Stamped(BridgeError(body), response);
+                result = BridgeError(Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>()));
             }
-            if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
+            else if (string.Equals(tool.Response, "png", StringComparison.Ordinal))
             {
-                return Stamped(new ToolInvocationResult
+                result = new ToolInvocationResult
                 {
                     Success = true,
                     ImagePng = response.Body,
                     PreviewBytes = response.Preview,
                     Files = response.Files,
                     Text = "{}",
-                }, response);
+                };
             }
-
-            string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
-            if (advance)
+            else
             {
-                text = await CS2MCP.SimWaitService.WaitAsync(
-                    bridge, text, cancellationToken);
+                string text = Encoding.UTF8.GetString(response.Body ?? Array.Empty<byte>());
+                if (advance)
+                {
+                    text = await CS2MCP.SimWaitService.WaitAsync(
+                        bridge, text, cancellationToken);
+                }
+                result = new ToolInvocationResult
+                {
+                    Success = true,
+                    Text = text,
+                };
             }
-            return Stamped(new ToolInvocationResult
-            {
-                Success = true,
-                Text = text,
-            }, response);
-        }
-
-        private static ToolInvocationResult Stamped(ToolInvocationResult result, CS2MCP.BridgeResponse response)
-        {
             result.Applied = response.Applied;
             result.QueuedMs = response.QueuedMs;
+            if (write)
+            {
+                result.Evidence = await LedgerEvidenceAsync(bridge, before);
+            }
             return result;
+        }
+
+        /// <summary>
+        /// The ledger before and after a write, for the session record only
+        /// (ADR 0047). Null when either read fails or stalls; the record then
+        /// shows no evidence rather than a guess.
+        /// </summary>
+        private static async Task<JsonObject> LedgerEvidenceAsync(
+            CS2MCP.BridgeSystem bridge, Task<CS2MCP.BridgeResponse> before)
+        {
+            JsonObject start = await LedgerAsync(before);
+            JsonObject end = await LedgerAsync(bridge.InvokeAsync(CS2MCP.RequestHandlers.LedgerRoute));
+            if (start == null || end == null)
+            {
+                return null;
+            }
+            return new JsonObject { ["before"] = start, ["after"] = end };
+        }
+
+        private static async Task<JsonObject> LedgerAsync(Task<CS2MCP.BridgeResponse> read)
+        {
+            if (await Task.WhenAny(read, Task.Delay(LedgerTimeoutMs)) != read)
+            {
+                return null;
+            }
+            CS2MCP.BridgeResponse response = await read;
+            return response.Success
+                ? JsonNode.Parse(Encoding.UTF8.GetString(response.Body)) as JsonObject
+                : null;
         }
 
         private static ToolInvocationResult Error(string message)

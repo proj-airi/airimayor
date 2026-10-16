@@ -382,6 +382,10 @@ namespace AgentRuntime
             {
                 data["caller"] = caller;
             }
+            if (result.Evidence != null)
+            {
+                data["evidence"] = result.Evidence.DeepClone();
+            }
             if (anchors.QueuedMs.HasValue)
             {
                 data["queuedMs"] = anchors.QueuedMs.Value;
