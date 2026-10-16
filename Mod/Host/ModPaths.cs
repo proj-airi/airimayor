@@ -33,18 +33,11 @@ namespace airimayor.Host
             }
         }
 
-        public static string ModDataDirectory => Path.Combine(UserDataRoot, "Mods", ModId);
-
         public static string RuntimeDataDirectory =>
             Path.Combine(UserDataRoot, "ModsData", ModId);
 
-        public static string LogsDirectory => Path.Combine(RuntimeDataDirectory, "logs");
-
-        public static string ScreenshotsDirectory => Path.Combine(LogsDirectory, "screenshots");
-
-        public static string MapImageDirectory => Path.Combine(LogsDirectory, "map-image");
-
-        public static string StateDirectory => Path.Combine(RuntimeDataDirectory, "state");
+        /// <summary>One self-contained record directory per chat session (ADR 0046).</summary>
+        public static string SessionsDirectory => Path.Combine(RuntimeDataDirectory, "sessions");
 
         /// <summary>
         /// Development payloads live outside Mods so rebuilding them does not
@@ -57,16 +50,5 @@ namespace airimayor.Host
 
         public static string HotReloadToolCatalogFile =>
             Path.Combine(HotReloadDirectory, "ToolCatalog.json");
-
-        public static void EnsureDirectories()
-        {
-            Directory.CreateDirectory(ModDataDirectory);
-            Directory.CreateDirectory(RuntimeDataDirectory);
-            Directory.CreateDirectory(LogsDirectory);
-            Directory.CreateDirectory(ScreenshotsDirectory);
-            Directory.CreateDirectory(MapImageDirectory);
-            Directory.CreateDirectory(StateDirectory);
-            Directory.CreateDirectory(HotReloadDirectory);
-        }
     }
 }

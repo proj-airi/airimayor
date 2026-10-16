@@ -42,6 +42,10 @@ _Avoid_: deleting the session, starting a new chat
 A conversation the current chat opened for one task. The final text comes back on this chat. The player cannot address it.
 _Avoid_: a second chat, the player sending a message to that conversation, a conversation this client does not own, a follow-up, reading or cancelling it as its own tool
 
+**Session record**:
+The directory one chat session leaves behind as evidence: its once-only facts, its timeline, its model calls, the files its tool calls returned, and the records of the conversations it owned. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
+_Avoid_: agent log, timeline file (the timeline is one part), telemetry, a set of files gathered by hand for acceptance
+
 **Plan**:
 The one list of steps declared with `set_plan`. Each step has content, a priority (high, medium, or low), and a status (pending, in progress, or completed). Only another `set_plan` replaces the whole list; player messages and autonomous continuation leave it in place.
 _Avoid_: a statutory plan, `goal` and `success` as the plan, compact JSON as the live plan, gating the tool catalog, the plan prompting a time advance, a live note as the plan, several plans at once

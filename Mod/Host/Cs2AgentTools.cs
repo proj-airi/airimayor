@@ -93,6 +93,7 @@ namespace airimayor.Host
                 PreviewJpeg = invoked.PreviewBytes,
                 Applied = invoked.Applied,
                 QueuedMs = invoked.QueuedMs,
+                Files = invoked.Files,
             };
         }
 

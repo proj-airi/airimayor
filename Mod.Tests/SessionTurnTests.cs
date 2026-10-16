@@ -49,7 +49,7 @@ namespace airimayor.Tests
 
             public event Action<SessionUpdate> Updated;
 
-            public AgentObservability Timeline => null;
+            public SessionRecord Record => null;
 
             public void Prompt(string text)
             {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using airimayor.Host;
 using Game.Simulation;
 using Newtonsoft.Json;
@@ -77,8 +78,9 @@ namespace CS2MCP
                 {
                     return BridgeResponse.Error(BridgeErrorKind.Internal, "map PNG encode failed");
                 }
-                DumpMapImage(strokes, fills, frame, mapScale, layering, png);
-                return BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(texture));
+                BridgeResponse response = BridgeResponse.Png(png, ToolPreview.EncodeThumbnail(texture));
+                response.Files = MapImageDiagnostics(strokes, fills, frame, mapScale, layering);
+                return response;
             }
             catch (Exception e)
             {
@@ -181,28 +183,18 @@ namespace CS2MCP
 
         /// <summary>
         /// Diagnostic overlay for the next live run: game-meter GeoJSON of
-        /// what the painter saw, plus the PNG, next to Carto's Network export.
-        /// Write failures never fail the tool.
+        /// what the painter saw, to compare with Carto's Network export. The
+        /// session record keeps these beside the call's PNG.
         /// </summary>
-        private static void DumpMapImage(
+        private static Dictionary<string, byte[]> MapImageDiagnostics(
             List<MapStroke> strokes, List<MapPolygon> fills,
-            MapFrame frame, MapScale mapScale, MapLayering.Result layering, byte[] png)
+            MapFrame frame, MapScale mapScale, MapLayering.Result layering)
         {
-            try
+            return new Dictionary<string, byte[]>
             {
-                ModPaths.EnsureDirectories();
-                string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
-                string directory = Path.Combine(ModPaths.MapImageDirectory, stamp);
-                Directory.CreateDirectory(directory);
-                File.WriteAllBytes(Path.Combine(directory, "map.png"), png);
-                File.WriteAllText(Path.Combine(directory, "meta.json"), BuildMapMeta(frame, mapScale, strokes, fills, layering));
-                File.WriteAllText(Path.Combine(directory, "source.geojson"), BuildMapSourceGeoJson(strokes, fills));
-                AgentTimeline.Info("map-image", $"dump map-image/{stamp} ({strokes.Count} strokes, {fills.Count} footprints)");
-            }
-            catch (Exception e)
-            {
-                AgentTimeline.Warn("map-image", $"dump failed: {e.GetType().Name}: {e.Message}");
-            }
+                ["meta.json"] = Encoding.UTF8.GetBytes(BuildMapMeta(frame, mapScale, strokes, fills, layering)),
+                ["source.geojson"] = Encoding.UTF8.GetBytes(BuildMapSourceGeoJson(strokes, fills)),
+            };
         }
 
         private static string BuildMapMeta(

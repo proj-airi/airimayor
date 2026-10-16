@@ -1,8 +1,5 @@
 using System;
 using System.Collections;
-using System.Globalization;
-using System.IO;
-using airimayor.Host;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
@@ -89,7 +86,6 @@ namespace CS2MCP
                     }
                     else
                     {
-                        SaveScreenshot(png);
                         request.Complete(BridgeResponse.Png(png, ThumbnailJpeg(display, output.width, output.height)));
                     }
                 }
@@ -108,22 +104,6 @@ namespace CS2MCP
                 {
                     Destroy(captured);
                 }
-            }
-        }
-
-        private static void SaveScreenshot(byte[] png)
-        {
-            try
-            {
-                ModPaths.EnsureDirectories();
-                string path = Path.Combine(
-                    ModPaths.ScreenshotsDirectory,
-                    "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".png");
-                File.WriteAllBytes(path, png);
-            }
-            catch (Exception e)
-            {
-                AgentTimeline.Warn("screenshot", $"save failed: {e.GetType().Name}: {e.Message}");
             }
         }
 

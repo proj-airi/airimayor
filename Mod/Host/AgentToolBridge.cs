@@ -15,6 +15,7 @@ namespace airimayor.Host
         public string Text;       // JSON or deterministic plain-text tool result
         public byte[] ImagePng;    // PNG bytes for the model, map or screenshot alike
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
+        public Dictionary<string, byte[]> Files; // diagnostic files kept in the session record
         public SimulationStamp Applied; // clock where the simulation thread took the request
         public long? QueuedMs;          // real time the request waited for the simulation thread
     }
@@ -48,7 +49,7 @@ namespace airimayor.Host
             }
             catch (Exception e)
             {
-                return Error($"invalid arguments for {tool.Name}: {AgentRuntime.AgentObservability.RedactSecrets(e.Message)}");
+                return Error($"invalid arguments for {tool.Name}: {AgentRuntime.SessionRecord.RedactSecrets(e.Message)}");
             }
 
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
@@ -81,6 +82,7 @@ namespace airimayor.Host
                     Success = true,
                     ImagePng = response.Body,
                     PreviewBytes = response.Preview,
+                    Files = response.Files,
                     Text = "{}",
                 }, response);
             }

@@ -13,17 +13,17 @@ namespace AgentRuntime
     {
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentClientFactory m_ClientFactory;
-        private readonly AgentObservability m_Observability;
+        private readonly SessionRecord m_Record;
         private readonly Action<SessionUpdate> m_Emit;
         private readonly Action<ChatMessage> m_AppendHistory;
 
         public AgentToolExecutor(AgentToolSurface toolSurface, AgentClientFactory clientFactory,
-            AgentObservability observability, Action<SessionUpdate> emit,
+            SessionRecord record, Action<SessionUpdate> emit,
             Action<ChatMessage> appendHistory)
         {
             m_ToolSurface = toolSurface;
             m_ClientFactory = clientFactory;
-            m_Observability = observability;
+            m_Record = record;
             m_Emit = emit;
             m_AppendHistory = appendHistory;
         }
@@ -48,8 +48,8 @@ namespace AgentRuntime
                 FunctionCallContent call = toolCalls[index];
                 string argumentsJson = SerializeArguments(call.Arguments);
                 Stopwatch timer = Stopwatch.StartNew();
-                SimulationStamp submitted = m_Observability.Clock();
-                m_Observability.FunctionStart(call.CallId, call.Name);
+                SimulationStamp submitted = m_Record.Clock();
+                m_Record.FunctionStart(call.CallId, call.Name);
                 m_Emit(new SessionUpdate { Kind = "tool", Tool = call.Name ?? call.CallId, Text = argumentsJson });
                 AgentToolResult result;
                 try
@@ -65,13 +65,13 @@ namespace AgentRuntime
                 }
                 timer.Stop();
                 FunctionCount++;
-                m_Observability.Function(call.CallId, call.Name, argumentsJson, result.Text, result.Success,
+                m_Record.Function(call.CallId, call.Name, argumentsJson, result,
                     timer.ElapsedMilliseconds,
                     new ToolAnchors
                     {
                         Submitted = submitted,
                         Applied = result.Applied,
-                        Completed = m_Observability.Clock(),
+                        Completed = m_Record.Clock(),
                         QueuedMs = result.QueuedMs,
                     },
                     result.Success ? null : result.Text);
@@ -111,9 +111,10 @@ namespace AgentRuntime
             FunctionCallContent call, string argumentsJson, long elapsedMilliseconds, SimulationStamp submitted)
         {
             FunctionCount++;
-            m_Observability.Function(call.CallId, call.Name, argumentsJson, "tool call interrupted", false,
+            m_Record.Function(call.CallId, call.Name, argumentsJson,
+                new AgentToolResult { Success = false, Text = "tool call interrupted" },
                 elapsedMilliseconds,
-                new ToolAnchors { Submitted = submitted, Completed = m_Observability.Clock() },
+                new ToolAnchors { Submitted = submitted, Completed = m_Record.Clock() },
                 "interrupted");
             m_AppendHistory(new ChatMessage(ChatRole.Tool,
                 new List<AIContent> { new FunctionResultContent(call.CallId, "tool call interrupted") }));
@@ -164,8 +165,8 @@ namespace AgentRuntime
             }
             catch (Exception e)
             {
-                m_Observability.Error("tool", e.ToString());
-                return Error(AgentObservability.RedactSecrets(e.Message));
+                m_Record.Error("tool", e.ToString());
+                return Error(SessionRecord.RedactSecrets(e.Message));
             }
         }
 
@@ -178,7 +179,7 @@ namespace AgentRuntime
             }
             if (image.Length > 8 * 1024 * 1024)
             {
-                m_Observability.Error("vision-attach", "image exceeds attachment limit");
+                m_Record.Error("vision-attach", "image exceeds attachment limit");
                 return;
             }
             string caption = string.IsNullOrWhiteSpace(result.ImageCaption)

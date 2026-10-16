@@ -1,6 +1,6 @@
 # Agent runtime 参考：长行程压缩、可观测与插话
 
-**Status:** Survey evidence only. Current loop decision is [ADR-0001](../adr/0001-in-process-meai-loop.md); context budget is [ADR-0008](../adr/0008-context-budget-auto-custom.md); the clock is [ADR-0029](../adr/0029-player-owned-clock.md). "暂停优先" in the constraint lens is not current — the player owns the clock via wait simulation.
+**Status:** Survey evidence only. Current loop decision is [ADR-0001](../adr/0001-in-process-meai-loop.md); context budget is [ADR-0008](../adr/0008-context-budget-auto-custom.md); the clock is [ADR-0029](../adr/0029-player-owned-clock.md). "暂停优先" in the constraint lens is not current — the player owns the clock via wait simulation. The flat `agent-timeline-<session>.jsonl` layout is superseded by the session record ([ADR-0046](../adr/0046-session-record.md)).
 
 **Date:** 2026-08-06
 

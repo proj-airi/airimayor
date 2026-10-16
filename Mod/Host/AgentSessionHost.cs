@@ -21,19 +21,19 @@ namespace airimayor.Host
     {
         public static void Info(string source, string message)
         {
-            AgentObservability timeline = AgentSessionHost.Current?.Timeline;
-            if (timeline != null)
+            SessionRecord record = AgentSessionHost.Current?.Record;
+            if (record != null)
             {
-                timeline.System(source, message);
+                record.System(source, message);
                 return;
             }
-            Mod.log.Info(source + ": " + AgentObservability.RedactSecrets(message));
+            Mod.log.Info(source + ": " + SessionRecord.RedactSecrets(message));
         }
 
         public static void Warn(string source, string message)
         {
-            AgentSessionHost.Current?.Timeline?.Error(source, message);
-            Mod.log.Warn(source + ": " + AgentObservability.RedactSecrets(message));
+            AgentSessionHost.Current?.Record?.Error(source, message);
+            Mod.log.Warn(source + ": " + SessionRecord.RedactSecrets(message));
         }
     }
 }

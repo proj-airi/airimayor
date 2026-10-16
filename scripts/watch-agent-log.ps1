@@ -3,7 +3,7 @@
 #   .\scripts\watch-agent-log.ps1              # multi-line context (default)
 #   .\scripts\watch-agent-log.ps1 -Compact     # one-line summary
 #   .\scripts\watch-agent-log.ps1 -Raw         # full pretty JSON
-#   .\scripts\watch-agent-log.ps1 -Path '...\agent-timeline-xxx.jsonl'
+#   .\scripts\watch-agent-log.ps1 -Path '...\sessions\<started>--<session>\timeline.jsonl'
 
 param(
     [string]$Path,
@@ -24,9 +24,12 @@ function Find-LatestTimeline {
     if ([string]::IsNullOrWhiteSpace($userData)) {
         $userData = Join-Path $env:USERPROFILE 'AppData\LocalLow\Colossal Order\Cities Skylines II'
     }
-    $root = Join-Path $userData 'ModsData\airimayor\logs'
+    $root = Join-Path $userData 'ModsData\airimayor\sessions'
     if (Test-Path -LiteralPath $root) {
-        Get-ChildItem -LiteralPath $root -Filter 'agent-timeline-*.jsonl' -File -ErrorAction SilentlyContinue |
+        Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'timeline.jsonl' } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            ForEach-Object { Get-Item -LiteralPath $_ } |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
     }
 }
@@ -199,7 +202,7 @@ function Show-Event([pscustomobject]$e) {
 if (-not $Path) {
     $latest = Find-LatestTimeline
     if (-not $latest) {
-        Write-Error 'No agent-timeline-*.jsonl found under the mod logs directory (CSII_USERDATAPATH or LocalLow).'
+        Write-Error 'No session timeline found under ModsData\airimayor\sessions (CSII_USERDATAPATH or LocalLow).'
     }
     $Path = $latest.FullName
 }

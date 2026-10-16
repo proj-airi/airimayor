@@ -138,7 +138,7 @@ or timeline notes. Keep each list item short and concrete.";
         private readonly Dictionary<ChatMessage, PlaceNote> m_PlaceNotes =
             new Dictionary<ChatMessage, PlaceNote>();
         private readonly object m_Lock = new object();
-        private readonly AgentObservability m_Observability;
+        private readonly SessionRecord m_Record;
         private readonly AgentToolSurface m_ToolSurface;
         private readonly AgentPromptAssembler m_PromptAssembler;
         private readonly AgentToolExecutor m_ToolExecutor;
@@ -148,7 +148,6 @@ or timeline notes. Keep each list item short and concrete.";
         private readonly Func<ModelSettings> m_ReadModel;
         private readonly IAgentTools m_Tools;
         private readonly string m_SystemPrompt;
-        private readonly SessionRecordOptions m_Record;
         private readonly IChatClient m_ChatClient;
         private readonly Action<string> m_Warn;
         private readonly ConversationBook m_Conversations;
@@ -188,30 +187,29 @@ or timeline notes. Keep each list item short and concrete.";
             m_ReadModel = readModel;
             m_Tools = tools;
             m_SystemPrompt = systemPrompt;
-            m_Record = record;
             m_ChatClient = chatClient;
             m_Warn = warn;
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Conversations = enableTasks
                 ? new ConversationBook(RunChildTurnAsync, Emit, EnqueueReport)
                 : null;
-            m_Observability = new AgentObservability(m_SessionId, record, warn);
+            m_Record = new SessionRecord(m_SessionId, record, warn);
             m_ClientFactory = new AgentClientFactory(
-                m_Observability, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
+                m_Record, m_SessionId, readModel, CaptureReasoningSnapshots, chatClient);
             m_ToolSurface = new AgentToolSurface(tools, m_Conversations, m_Plan, EmitPlan);
             m_PromptAssembler = new AgentPromptAssembler(systemPrompt, SummaryPrefix);
             m_ToolExecutor = new AgentToolExecutor(
                 m_ToolSurface,
                 m_ClientFactory,
-                m_Observability,
+                m_Record,
                 Emit,
                 AppendHistoryMessage);
         }
 
         public event Action<SessionUpdate> Updated;
 
-        /// <summary>Converged dev log sink: city code records here when a session is live.</summary>
-        public AgentObservability Timeline => m_Observability;
+        /// <summary>This session's record. City code writes its notes here while the session is live.</summary>
+        public SessionRecord Record => m_Record;
 
         public AgentStatus Status { get; private set; } = AgentStatus.Idle;
 
@@ -424,7 +422,7 @@ or timeline notes. Keep each list item short and concrete.";
         {
             ModelSettings settings = ReadModel();
             AgentModelProfile profile = m_ClientFactory.GetProfile();
-            m_Observability.TaskStart(
+            m_Record.TaskStart(
                 settings.Model,
                 profile.ContextWindowTokens,
                 (double)profile.CompactAtTokens / profile.ContextWindowTokens,
@@ -480,7 +478,7 @@ or timeline notes. Keep each list item short and concrete.";
             {
                 if (autonomous)
                 {
-                    m_Observability.TurnStart(m_TurnId, "(autonomous continuation)");
+                    m_Record.TurnStart(m_TurnId, "(autonomous continuation)");
                 }
                 else if (!string.IsNullOrWhiteSpace(input.Text))
                 {
@@ -501,11 +499,11 @@ or timeline notes. Keep each list item short and concrete.";
                         }
                         m_History.Add(message);
                     }
-                    m_Observability.TurnStart(m_TurnId, input.Text);
+                    m_Record.TurnStart(m_TurnId, input.Text);
                 }
                 else
                 {
-                    m_Observability.TurnStart(m_TurnId, "");
+                    m_Record.TurnStart(m_TurnId, "");
                 }
 
                 while (!m_TurnCts.IsCancellationRequested)
@@ -546,16 +544,16 @@ or timeline notes. Keep each list item short and concrete.";
             }
             catch (Exception e)
             {
-                m_Observability.Error("loop", e.ToString());
+                m_Record.Error("loop", e.ToString());
                 Emit(new SessionUpdate
                 {
                     Kind = "error",
-                    Text = "Loop error: " + AgentObservability.RedactSecrets(e.Message),
+                    Text = "Loop error: " + SessionRecord.RedactSecrets(e.Message),
                 });
             }
 
             turnTimer.Stop();
-            m_Observability.TurnFinish(
+            m_Record.TurnFinish(
                 m_TurnGenerationCount,
                 m_ToolExecutor.FunctionCount,
                 turnTimer.ElapsedMilliseconds,
@@ -726,7 +724,7 @@ or timeline notes. Keep each list item short and concrete.";
                 {
                     timer.Stop();
                     m_TimeoutOccurred = true;
-                    m_Observability.Error(
+                    m_Record.Error(
                         "generation-timeout",
                         "model response exceeded " + AgentClientFactory.ModelRequestTimeoutSeconds + "s");
                     Emit(new SessionUpdate
@@ -746,15 +744,15 @@ or timeline notes. Keep each list item short and concrete.";
                 {
                     int historyCount = m_History.Count;
                     long estimateBefore = m_EstimatedTokens;
-                    m_Observability.Error("generation-context", e.ToString());
+                    m_Record.Error("generation-context", e.ToString());
                     await MaybeCompactAsync(cancellationToken, true);
                     if (m_History.Count < historyCount || m_EstimatedTokens < estimateBefore)
                     {
                         return await RunModelRoundAsync(cancellationToken, false);
                     }
                 }
-                m_Observability.Error("generation", e.ToString());
-                string safeMessage = AgentObservability.RedactSecrets(e.Message);
+                m_Record.Error("generation", e.ToString());
+                string safeMessage = SessionRecord.RedactSecrets(e.Message);
                 Emit(new SessionUpdate { Kind = "error", Text = "Model call failed: " + safeMessage });
                 return ModelRound.Error(safeMessage);
             }
@@ -840,7 +838,7 @@ or timeline notes. Keep each list item short and concrete.";
                 string summary = summaryBuilder.ToString().Trim();
                 if (!AgentContextBudget.IsUsableSummary(summary))
                 {
-                    m_Observability.Error(
+                    m_Record.Error(
                         "compact",
                         "rejected unusable summary: " + AgentContextBudget.Truncate(summary, 400));
                     Emit(new SessionUpdate
@@ -867,7 +865,7 @@ or timeline notes. Keep each list item short and concrete.";
                 }
                 m_EstimatedTokens = budget.Estimate(m_History);
 
-                m_Observability.Compact(
+                m_Record.Compact(
                     (double)profile.CompactAtTokens / profile.ContextWindowTokens,
                     oldMessages.Count,
                     keptMessages.Count,
@@ -885,11 +883,11 @@ or timeline notes. Keep each list item short and concrete.";
             }
             catch (Exception e)
             {
-                m_Observability.Error("compact", e.ToString());
+                m_Record.Error("compact", e.ToString());
                 Emit(new SessionUpdate
                 {
                     Kind = "error",
-                    Text = "Compaction failed: " + AgentObservability.RedactSecrets(e.Message),
+                    Text = "Compaction failed: " + SessionRecord.RedactSecrets(e.Message),
                 });
             }
         }
@@ -937,7 +935,7 @@ or timeline notes. Keep each list item short and concrete.";
             }
             JsonObject usage = AgentUsageJson.Serialize(response.Usage);
             AgentUsageJson.Accumulate(m_TurnUsage, m_TurnUsageCoverage, response.Usage);
-            m_Observability.Generation(
+            m_Record.Generation(
                 response.ModelId ?? ReadModel().Model,
                 SummarizeHistory(m_History),
                 reasoning,
@@ -1040,7 +1038,7 @@ or timeline notes. Keep each list item short and concrete.";
             m_TurnCts?.Cancel();
             m_Conversations?.CancelAll();
             CancelGeneration();
-            m_Observability.Dispose();
+            m_Record.Dispose();
             m_ClientFactory.Dispose();
         }
 
@@ -1059,7 +1057,7 @@ or timeline notes. Keep each list item short and concrete.";
         private async Task<string> RunChildTurnAsync(string sessionId, string message, CancellationToken cancellationToken)
         {
             var child = new AgentRuntime(
-                m_Tools, m_SystemPrompt, ChildModel, m_Record, m_ChatClient, m_Warn, enableTasks: false);
+                m_Tools, m_SystemPrompt, ChildModel, m_Record.Conversation(sessionId), m_ChatClient, m_Warn, enableTasks: false);
             var relay = new ChildToolRelay();
             try
             {

@@ -274,7 +274,7 @@ namespace airimayor
                 string message;
                 try
                 {
-                    using (IAgentSession session = AgentHead.Open())
+                    using (IAgentSession session = AgentHead.Open(null))
                     {
                         SessionTurnResult turn = await SessionTurn.RunAsync(
                             session,

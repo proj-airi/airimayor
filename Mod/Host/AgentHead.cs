@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.Json.Nodes;
 using AgentRuntime;
 
 namespace airimayor.Host
@@ -9,7 +10,8 @@ namespace airimayor.Host
     /// </summary>
     internal static class AgentHead
     {
-        internal static IAgentSession Open()
+        /// <param name="city">Loaded city name; null for the settings check.</param>
+        internal static IAgentSession Open(string city)
         {
             var tools = new Cs2AgentTools();
             AgentChoice choice = AgentChoices.Find(Setting.StaticHead);
@@ -29,23 +31,29 @@ namespace airimayor.Host
                     choice.Arguments,
                     mcp,
                     string.IsNullOrEmpty(root) ? Directory.GetCurrentDirectory() : root,
-                    Record(),
+                    Record(choice, city),
                     message => Mod.log.Warn(message));
             }
             return new AgentRuntime.AgentRuntime(
                 tools,
                 AgentSystemPrompt.Text,
                 ReadModel,
-                Record(),
+                Record(choice, city),
                 message => Mod.log.Warn(message));
         }
 
-        private static SessionRecordOptions Record()
+        private static SessionRecordOptions Record(AgentChoice choice, string city)
         {
             return new SessionRecordOptions
             {
-                Directory = ModPaths.LogsDirectory,
+                Root = ModPaths.SessionsDirectory,
                 Clock = () => CS2MCP.BridgeSystem.Instance?.Clock,
+                Facts = new JsonObject
+                {
+                    ["head"] = choice.IsBuiltIn ? AgentChoices.BuiltIn : choice.Id,
+                    ["modVersion"] = typeof(Mod).Assembly.GetName().Version.ToString(),
+                    ["city"] = city,
+                },
             };
         }
 

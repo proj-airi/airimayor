@@ -83,6 +83,12 @@ namespace CS2MCP
         /// </summary>
         public byte[] Preview;
 
+        /// <summary>
+        /// Optional diagnostic files the session record keeps beside the
+        /// call. Never reach the model or the chat.
+        /// </summary>
+        public Dictionary<string, byte[]> Files;
+
         /// <summary>Clock where the simulation thread took the request.</summary>
         public SimulationStamp Applied;
 

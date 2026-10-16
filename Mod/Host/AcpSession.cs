@@ -30,7 +30,7 @@ namespace airimayor.Host
         private readonly List<SnapshotMessage> m_Messages = new List<SnapshotMessage>();
         private readonly Dictionary<string, AcpToolState> m_ToolRows =
             new Dictionary<string, AcpToolState>(StringComparer.Ordinal);
-        private readonly AgentObservability m_Timeline;
+        private readonly SessionRecord m_Record;
         private readonly IAgentTools m_Tools;
         private readonly Func<bool> m_Vision;
         private readonly Func<bool> m_Continue;
@@ -72,14 +72,14 @@ namespace airimayor.Host
             m_Continue = continueWhenIdle ?? (() => false);
             m_Continuation = continuation ?? "";
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            m_Timeline = new AgentObservability(m_SessionId, record, warn);
+            m_Record = new SessionRecord(m_SessionId, record, warn);
             m_Previews = new ToolPreviewLatch(OnPreviewMatched);
             _ = Task.Run(() => RunAsync(tools, instructions, command, arguments, mcpExecutable, workingDirectory));
         }
 
         public event Action<ChatUpdate> Updated;
 
-        public AgentObservability Timeline => m_Timeline;
+        public SessionRecord Record => m_Record;
 
         public AgentStatus Status { get; private set; } = AgentStatus.Idle;
 
@@ -189,7 +189,7 @@ namespace airimayor.Host
             }
             m_Process?.Dispose();
             m_Bridge?.Dispose();
-            m_Timeline.Dispose();
+            m_Record.Dispose();
             m_Life.Dispose();
         }
 
@@ -200,7 +200,7 @@ namespace airimayor.Host
                 return;
             }
             Status = AgentStatus.Error;
-            m_Timeline.Error("acp", "The external agent disconnected.");
+            m_Record.Error("acp", "The external agent disconnected.");
             Emit(new ChatUpdate { Kind = "error", Text = "The external agent disconnected." });
         }
 
@@ -382,7 +382,7 @@ namespace airimayor.Host
                 {
                     return;
                 }
-                m_Timeline.System("acp", args.Data);
+                m_Record.System("acp", args.Data);
                 lock (m_Stderr)
                 {
                     if (m_Stderr.Length < 2000)
@@ -860,7 +860,7 @@ namespace airimayor.Host
         {
             string text = message ?? "";
             Status = AgentStatus.Error;
-            m_Timeline.Error("acp", text);
+            m_Record.Error("acp", text);
             Emit(new ChatUpdate { Kind = "error", Text = text });
             Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Error, Text = text });
         }

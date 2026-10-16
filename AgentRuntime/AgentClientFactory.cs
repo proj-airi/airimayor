@@ -21,7 +21,7 @@ namespace AgentRuntime
         internal static readonly TimeSpan ModelRequestTimeout =
             TimeSpan.FromSeconds(ModelRequestTimeoutSeconds);
 
-        private readonly AgentObservability m_Observability;
+        private readonly SessionRecord m_Record;
         private readonly string m_SessionId;
         private readonly Func<ModelSettings> m_ReadModel;
         private readonly IChatClient m_Override;
@@ -32,13 +32,13 @@ namespace AgentRuntime
         private string m_ConfigSignature;
 
         public AgentClientFactory(
-            AgentObservability observability,
+            SessionRecord record,
             string sessionId,
             Func<ModelSettings> readModel,
             Func<IReadOnlyList<ReasoningEchoSnapshot>> reasoningSnapshots = null,
             IChatClient chatClient = null)
         {
-            m_Observability = observability;
+            m_Record = record;
             m_SessionId = sessionId;
             m_ReadModel = readModel;
             m_ReasoningSnapshots = reasoningSnapshots;
@@ -97,7 +97,7 @@ namespace AgentRuntime
                 }
                 catch (Exception e)
                 {
-                    m_Observability.Error("client-create", e.ToString());
+                    m_Record.Error("client-create", e.ToString());
                     return null;
                 }
             }
@@ -125,7 +125,7 @@ namespace AgentRuntime
 
         private void OnReasoningEchoed(int injected)
         {
-            m_Observability?.Record("reasoning-echo", new JsonObject
+            m_Record?.Record("reasoning-echo", new JsonObject
             {
                 ["injected"] = injected,
             });

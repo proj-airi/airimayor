@@ -37,6 +37,9 @@ namespace AgentRuntime
 
         /// <summary>Real time the request waited for the simulation thread. Null when it never queued.</summary>
         public long? QueuedMs;
+
+        /// <summary>Diagnostic files kept with the call in the session record. Never shown to the model.</summary>
+        public IReadOnlyDictionary<string, byte[]> Files;
     }
 
     /// <summary>Timeline anchors of one tool call.</summary>

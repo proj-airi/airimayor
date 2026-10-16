@@ -10,7 +10,8 @@ namespace AgentRuntime
     {
         event Action<SessionUpdate> Updated;
 
-        AgentObservability Timeline { get; }
+        /// <summary>This session's record. City code writes its notes here while the session is live.</summary>
+        SessionRecord Record { get; }
 
         void Prompt(string text);
 

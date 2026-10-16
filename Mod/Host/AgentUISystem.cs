@@ -229,9 +229,14 @@ namespace airimayor.Host
 
         private void OpenSession()
         {
-            m_Session = AgentSessionHost.Current = AgentHead.Open();
+            m_Session = AgentSessionHost.Current = AgentHead.Open(CityName());
             m_Session.Updated += OnAgentEvent;
-            Mod.log.Info("agent session opened " + m_Session.Timeline.SessionId);
+            Mod.log.Info("agent session opened " + m_Session.Record.SessionId);
+        }
+
+        private string CityName()
+        {
+            return World.GetOrCreateSystemManaged<Game.City.CityConfigurationSystem>().cityName;
         }
 
         private void ResetSessionState()
@@ -249,7 +254,7 @@ namespace airimayor.Host
                 return;
             }
             m_Session.Updated -= OnAgentEvent;
-            Mod.log.Info("agent session closed " + m_Session.Timeline.SessionId);
+            Mod.log.Info("agent session closed " + m_Session.Record.SessionId);
             if (ReferenceEquals(AgentSessionHost.Current, m_Session))
             {
                 AgentSessionHost.Current = null;
