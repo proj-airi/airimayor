@@ -36,7 +36,7 @@ public sealed class HarnessSessionTests
     private static Dictionary<string, object> Empty() => new();
     private static ClientSession Open(Client client, Tools tools = null, int window = 128000, int output = 16384)
     {
-        return new ClientSession(() => client, tools ?? new Tools(), "City mayor instructions", window, output, true, new SessionRecordOptions { Root = Records });
+        return new ClientSession(_ => client, tools ?? new Tools(), "City mayor instructions", window, output, true, new SessionRecordOptions { Root = Records });
     }
 
     private static Task Prompt(ClientSession session, string text) => FinishTurn(session, () => session.Prompt(text));
@@ -98,7 +98,7 @@ public sealed class HarnessSessionTests
     [Fact]
     public async Task Connection_failure_reaches_chat_and_the_record_closes()
     {
-        using var session = new ClientSession(() => throw new InvalidOperationException("connection failed"), new Tools(), "City mayor instructions", 128000, 16384, true, new SessionRecordOptions { Root = Records });
+        using var session = new ClientSession(_ => throw new InvalidOperationException("connection failed"), new Tools(), "City mayor instructions", 128000, 16384, true, new SessionRecordOptions { Root = Records });
         var turn = await SessionTurn.RunAsync(session, "hello").WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(turn.Failed);
         Assert.Equal("connection failed", turn.Error);

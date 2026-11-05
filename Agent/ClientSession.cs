@@ -43,7 +43,7 @@ namespace airimayor.Agent
             remove { m_View.Updated -= value; }
         }
 
-        public ClientSession(Func<IChatClient> openClient, IAgentTools tools, string instructions,
+        public ClientSession(Func<string, IChatClient> openClient, IAgentTools tools, string instructions,
             int windowTokens, int outputTokens, bool vision, SessionRecordOptions recordOptions, Action<string> warn = null)
         {
             Record = new SessionRecord(Guid.NewGuid().ToString("N"), recordOptions, warn);
@@ -53,7 +53,7 @@ namespace airimayor.Agent
             m_Functions = new CityFunctions(tools, Record, m_View.Apply);
             m_Open = async () =>
             {
-                m_Client = openClient();
+                m_Client = openClient(Record.SessionId);
                 var logger = new HostDiagnostics(Record, warn);
                 var child = CreateAgent("inspector", vision, instructions, windowTokens, outputTokens, logger, null, out _);
                 m_Agent = CreateAgent("mayor", vision, instructions, windowTokens, outputTokens, logger, new[] { child }, out m_History);

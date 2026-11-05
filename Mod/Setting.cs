@@ -7,6 +7,7 @@ using airimayor.Agent;
 using airimayor.Host;
 using Colossal;
 using Colossal.IO.AssetDatabase;
+using Colossal.Json;
 using Game.Modding;
 using Game.Settings;
 using Game.UI.Widgets;
@@ -14,111 +15,212 @@ using Game.UI.Widgets;
 namespace airimayor
 {
     [FileLocation(nameof(airimayor))]
-    [SettingsUIGroupOrder(kConnectionGroup, kAgentGroup)]
-    [SettingsUIShowGroupName(kConnectionGroup, kAgentGroup)]
+    [SettingsUITabOrder(kConnectionSection, kPermissionsSection)]
+    [SettingsUIGroupOrder(kMayorGroup, kBuiltinGroup, kExternalGroup, kAgentGroup)]
+    [SettingsUIShowGroupName(kMayorGroup, kBuiltinGroup, kExternalGroup, kAgentGroup)]
     public class Setting : ModSetting
     {
-        public const string kSection = "Main";
-        public const string kConnectionGroup = "Connection";
+        public const string kConnectionSection = "Connection";
+        public const string kPermissionsSection = "Permissions";
+        public const string kMayorGroup = "Mayor";
+        public const string kBuiltinGroup = "Builtin";
+        public const string kExternalGroup = "External";
         public const string kAgentGroup = "Agent";
 
         public static Setting Instance { get; set; }
 
         public Setting(IMod mod) : base(mod) { }
 
-        // ---- Connection -----------------------------------
+        private ProviderConnections m_Connections = new ProviderConnections();
+        private string m_Provider = ModelProviders.OpenAi;
+        private MayorSelection m_Applied;
 
-        [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIDropdown(typeof(Setting), nameof(GetHeadItems))]
-        [SettingsUIValueVersion(typeof(Setting), nameof(AgentListVersion))]
-        public string Head { get; set; } = AgentHead.BuiltIn;
-
-        [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIButton]
-        public bool FetchAgents
+        [SettingsUIHidden]
+        public string ProviderConnectionsJson
         {
-            set { if (value) { StartFetchAgents(true); } }
+            get => m_Connections.ToJson();
+            set { m_Connections = ProviderConnections.FromJson(value); }
         }
 
-        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUISection(kConnectionSection, kMayorGroup)]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetMayorItems))]
+        public string MayorSource { get; set; } = AgentHead.BuiltIn;
+
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetProviderItems))]
+        public string Provider
+        {
+            get => m_Provider;
+            set
+            {
+                ModelProviders.Find(value);
+                m_Provider = value;
+                ModelPresetVersion++;
+            }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUITextInput]
-        public string Endpoint { get; set; } = "https://api.openai.com/v1";
+        public string ProviderApiKey
+        {
+            get => Connection.ApiKey;
+            set { Edit(Connection.With(apiKey: value.Trim())); }
+        }
 
-        [SettingsUISection(kSection, kConnectionGroup)]
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
-        [SettingsUITextInput]
-        public string ApiKey { get; set; } = "";
+        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
+        public string ProviderModel
+        {
+            get => Connection.Model;
+            set { Edit(Connection.With(model: value)); }
+        }
 
-        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUIButton]
         public bool FetchModels
         {
-            set { if (value) { StartFetchModels(); } }
+            set { if (value) StartFetchModels(); }
         }
 
-        [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
-        [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
-        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
-        public string Model { get; set; } = "";
-
-        [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
-        [SettingsUISlider(min = 128_000, max = 1_000_000, step = 1_000)]
-        public int WindowTokens { get; set; } = 128_000;
-
-        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUIButton]
         public bool TestConnection
         {
-            set { if (value) { StartHeadTest(); } }
+            set { if (value) StartHeadTest(); }
         }
 
-        [SettingsUISection(kSection, kConnectionGroup)]
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        public bool ConnectionDetails { get; set; }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUITextInput]
+        public string ModelId
+        {
+            get => Connection.Model;
+            set { Edit(Connection.With(model: value.Trim())); }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUITextInput]
+        public string ProviderEndpoint
+        {
+            get => Connection.Endpoint;
+            set { Edit(Connection.With(endpoint: value.Trim())); }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUITextInput]
+        public string ModelsEndpoint
+        {
+            get => Connection.ModelsEndpoint;
+            set { Edit(Connection.With(modelsEndpoint: value.Trim())); }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetProtocolItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
+        public string Protocol
+        {
+            get => Connection.Protocol.ToString();
+            set { Edit(Connection.With(protocol: (ModelProtocol)Enum.Parse(typeof(ModelProtocol), value))); }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUISlider(min = 32_000, max = 1_000_000, step = 1_000)]
+        public int ContextTokens
+        {
+            get => Connection.WindowTokens;
+            set { Edit(Connection.With(windowTokens: value)); }
+        }
+
+        [SettingsUISection(kConnectionSection, kExternalGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideAcpRequest))]
+        [SettingsUIDropdown(typeof(Setting), nameof(GetExternalAgentItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(AgentListVersion))]
+        public string ExternalAgent { get; set; } = "";
+
+        [SettingsUISection(kConnectionSection, kExternalGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideAcpRequest))]
+        [SettingsUIButton]
+        public bool FetchAgents
+        {
+            set { if (value) StartFetchAgents(true); }
+        }
+
+        [SettingsUISection(kConnectionSection, kExternalGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideAcpRequest))]
         [SettingsUIButton]
         public bool TestAcp
         {
-            set { if (value) { StartHeadTest(); } }
+            set { if (value) StartHeadTest(); }
         }
 
-        public bool HideBuiltinRequest() => Head != AgentHead.BuiltIn;
+        public bool HideBuiltinRequest() => MayorSource != AgentHead.BuiltIn;
+        public bool HideAcpRequest() => MayorSource != AgentHead.External;
+        public bool HideConnectionDetails() => HideBuiltinRequest() || !ConnectionDetails;
+        private ProviderConnection Connection => m_Connections.Read(Provider);
 
-        public bool HideAcpRequest() => Head == AgentHead.BuiltIn;
+        private void Edit(ProviderConnection connection)
+        {
+            m_Connections.Set(connection);
+            ModelPresetVersion++;
+        }
+
+        internal MayorSelection CaptureMayor() => new MayorSelection(MayorSource, ExternalAgent, Connection);
+        internal void CaptureAppliedMayor() => m_Applied = CaptureMayor();
+        internal static MayorSelection AppliedMayor => Instance?.m_Applied ??
+            new MayorSelection(AgentHead.BuiltIn, "", ModelProviders.Find(ModelProviders.OpenAi).DefaultConnection());
 
         // ---- Agent ---------------------------------------
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowConstruction { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowDemolition { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowTreasury { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowProgressionPurchases { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowClock { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool VisionTools { get; set; } = true;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowSave { get; set; } = false;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowDiagnostics { get; set; } = false;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         public bool AllowPanel { get; set; } = false;
 
-        [SettingsUISection(kSection, kAgentGroup)]
+        [SettingsUISection(kPermissionsSection, kAgentGroup)]
         [SettingsUIButton]
         public bool TestPanel
         {
@@ -126,9 +228,6 @@ namespace airimayor
         }
 
         // ---- Static facade ---------------------------------
-
-        public static string StaticEndpoint => Instance?.Endpoint ?? "https://api.openai.com/v1";
-        public static string StaticModel => Instance?.Model ?? "";
 
         public static bool StaticAllowConstruction => Instance?.AllowConstruction ?? true;
         public static bool StaticAllowProgressionPurchases =>
@@ -140,37 +239,58 @@ namespace airimayor
         public static bool StaticAllowDiagnostics => Instance?.AllowDiagnostics ?? false;
         public static bool StaticAllowPanel => Instance?.AllowPanel ?? false;
         public static bool StaticVisionTools => Instance?.VisionTools ?? true;
-        public static string StaticApiKey => Instance?.ApiKey ?? "";
-        public static int StaticWindowTokens => Instance?.WindowTokens ?? 128_000;
-        public static string StaticHead => Instance?.Head ?? AgentHead.BuiltIn;
 
         public static event Action HeadApplied;
 
         public override void Apply()
         {
+            CaptureAppliedMayor();
             base.Apply();
             HeadApplied?.Invoke();
         }
 
         // ---- Model list (dynamic dropdown source) --------
 
-        private static readonly object s_ModelPresetLock = new object();
-        private static List<string> s_ModelPresets = new List<string>();
-
+        [Exclude, SettingsUIHidden]
         public int ModelPresetVersion { get; set; }
+        [Exclude, SettingsUIHidden]
         public int AgentListVersion { get; set; }
         private int m_FetchingAgents;
 
-        public static DropdownItem<string>[] GetHeadItems()
+        private static bool Chinese => Game.SceneFlow.GameManager.instance?.localizationManager?.activeLocaleId
+            ?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true;
+
+        public static DropdownItem<string>[] GetMayorItems() => new[]
         {
-            string locale = Game.SceneFlow.GameManager.instance?.localizationManager?.activeLocaleId;
-            bool chinese = !string.IsNullOrEmpty(locale) && locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            new DropdownItem<string> { value = AgentHead.BuiltIn, displayName = Chinese ? "内建市长" : "Built-in mayor" },
+            new DropdownItem<string> { value = AgentHead.External, displayName = Chinese ? "外部代理" : "External agent" },
+        };
+
+        public static DropdownItem<string>[] GetProviderItems() => ModelProviders.All.Select(provider =>
+            new DropdownItem<string>
+            {
+                value = provider.Id,
+                displayName = provider.Id == ModelProviders.Compatible && Chinese ? "自定义 OpenAI 兼容服务" : provider.Name,
+            }).ToArray();
+
+        public static DropdownItem<string>[] GetProtocolItems()
+        {
+            IReadOnlyList<ModelProtocol> protocols = ModelProviders.Find(Instance?.Provider ?? ModelProviders.OpenAi).Protocols;
+            return protocols.Select(protocol => new DropdownItem<string>
+            {
+                value = protocol.ToString(),
+                displayName = protocol == ModelProtocol.ChatCompletions ? "Chat Completions" : protocol.ToString(),
+            }).ToArray();
+        }
+
+        public static DropdownItem<string>[] GetExternalAgentItems()
+        {
             var items = new List<DropdownItem<string>>
             {
                 new DropdownItem<string>
                 {
-                    value = AgentHead.BuiltIn,
-                    displayName = chinese ? "内置" : "Built-in",
+                    value = "",
+                    displayName = Chinese ? "选择代理" : "Select an agent",
                 },
             };
             items.AddRange(AgentHead.Registry.Agents.Select(agent => new DropdownItem<string>
@@ -178,13 +298,13 @@ namespace airimayor
                 value = agent.Id,
                 displayName = agent.Name,
             }));
-            string current = Instance?.Head;
+            string current = Instance?.ExternalAgent;
             if (!string.IsNullOrEmpty(current) && !items.Any(item => item.value == current))
             {
                 items.Add(new DropdownItem<string>
                 {
                     value = current,
-                    displayName = current + (chinese ? "（不可用）" : " (unavailable)"),
+                    displayName = current + (Chinese ? "（不可用）" : " (unavailable)"),
                 });
             }
             return items.ToArray();
@@ -234,60 +354,64 @@ namespace airimayor
 
         public static DropdownItem<string>[] GetModelPresetItems()
         {
-            lock (s_ModelPresetLock)
+            Setting instance = Instance;
+            var items = new List<DropdownItem<string>>
             {
-                IEnumerable<string> items = s_ModelPresets;
-                string current = Instance?.Model;
-                if (!items.Any() && !string.IsNullOrEmpty(current))
+                new DropdownItem<string> { value = "", displayName = Chinese ? "选择模型" : "Select a model" },
+            };
+            if (instance == null)
+                return items.ToArray();
+            items.AddRange(instance.m_Connections.Models(instance.Provider).Select(model => new DropdownItem<string>
+            {
+                value = model.Id,
+                displayName = model.Name == model.Id ? model.Id : model.Name + " (" + model.Id + ")",
+            }));
+            string current = instance.ProviderModel;
+            if (!string.IsNullOrEmpty(current) && !items.Any(item => item.value == current))
+            {
+                items.Add(new DropdownItem<string>
                 {
-                    items = new[] { current };
-                }
-                else if (!string.IsNullOrEmpty(current) && !items.Contains(current))
-                {
-                    items = new[] { current }.Concat(items);
-                }
-                return items
-                    .Select(id => new DropdownItem<string> { value = id, displayName = id })
-                    .ToArray();
+                    value = current,
+                    displayName = current,
+                });
             }
+            return items.ToArray();
         }
 
         private void StartFetchModels()
         {
-            string endpoint = Endpoint;
-            string apiKey = ApiKey;
-            Task.Run(async () =>
+            ProviderConnections profiles = m_Connections;
+            ProviderConnection connection = Connection;
+            SynchronizationContext context = SynchronizationContext.Current;
+            _ = Task.Run(async () =>
             {
-                ModelCatalog.FetchResult result = await ModelCatalog.FetchAsync(endpoint, apiKey);
-                if (result.Models.Count == 0)
+                string message;
+                try
                 {
-                    AgentTimeline.Warn("model", "fetch-models: " + result.Error);
-                    return;
+                    IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(connection);
+                    if (!ReferenceEquals(profiles, m_Connections) || !profiles.AcceptModels(connection, models))
+                        return;
+                    message = "Loaded " + models.Count + " models for " + ModelProviders.Find(connection.ProviderId).Name + ".";
                 }
-                lock (s_ModelPresetLock)
+                catch (Exception e)
                 {
-                    s_ModelPresets = result.Models;
+                    message = SafeError(e, connection.ApiKey);
                 }
-                Setting instance = Instance;
-                if (instance != null)
+                OnSettingsThread(context, () =>
                 {
-                    if (string.IsNullOrEmpty(instance.Model) || !result.Models.Contains(instance.Model))
-                    {
-                        instance.Model = result.Models[0];
-                    }
-                    instance.ModelPresetVersion++;
-                    instance.ApplyAndSave();
-                }
-                AgentTimeline.Info("model", $"fetch-models: loaded {result.Models.Count} models.");
+                    if (!ReferenceEquals(Instance, this)) return;
+                    ModelPresetVersion++;
+                    SettingsNotice.Show(message);
+                });
             });
         }
 
         public override void SetDefaults()
         {
-            Head = AgentHead.BuiltIn;
-            Endpoint = "https://api.openai.com/v1";
-            ApiKey = "";
-            Model = "";
+            MayorSource = AgentHead.BuiltIn;
+            ExternalAgent = "";
+            m_Connections = new ProviderConnections();
+            Provider = ModelProviders.OpenAi;
             AllowConstruction = true;
             AllowProgressionPurchases = true;
             AllowDemolition = true;
@@ -297,18 +421,18 @@ namespace airimayor
             AllowDiagnostics = false;
             AllowPanel = false;
             VisionTools = true;
-            WindowTokens = 128_000;
         }
 
         private void StartHeadTest()
         {
+            MayorSelection selection = CaptureMayor();
             SynchronizationContext context = SynchronizationContext.Current;
             _ = Task.Run(async () =>
             {
                 string message;
                 try
                 {
-                    using (IAgentSession session = AgentHead.Open(null))
+                    using (IAgentSession session = AgentHead.Open(null, selection))
                     {
                         SessionTurnResult turn = await SessionTurn.RunAsync(
                             session,
@@ -318,9 +442,9 @@ namespace airimayor
                 }
                 catch (Exception e)
                 {
-                    message = e.Message ?? "";
+                    message = SafeError(e, selection.Connection.ApiKey);
                 }
-                Report(context, message);
+                Report(context, string.IsNullOrEmpty(selection.Connection.ApiKey) ? message : message.Replace(selection.Connection.ApiKey, "[redacted]"));
             });
         }
 
@@ -346,12 +470,24 @@ namespace airimayor
 
         private static void Report(SynchronizationContext context, string message)
         {
+            OnSettingsThread(context, () => SettingsNotice.Show(message));
+        }
+
+        private static string SafeError(Exception error, string apiKey)
+        {
+            string message = error.Message ?? "";
+            if (!string.IsNullOrEmpty(apiKey)) message = message.Replace(apiKey, "[redacted]");
+            return SessionRecord.RedactSecrets(message);
+        }
+
+        private static void OnSettingsThread(SynchronizationContext context, Action action)
+        {
             if (context == null)
             {
-                SettingsNotice.Show(message);
+                action();
                 return;
             }
-            context.Post(_ => SettingsNotice.Show(message), null);
+            context.Post(_ => action(), null);
         }
     }
 
@@ -371,24 +507,39 @@ namespace airimayor
             return new Dictionary<string, string>
             {
                 { m_Setting.GetSettingsLocaleID(), "AIRI Mayor" },
-                { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
-                { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "Connection" },
+                { m_Setting.GetOptionTabLocaleID(Setting.kConnectionSection), "Mayor" },
+                { m_Setting.GetOptionTabLocaleID(Setting.kPermissionsSection), "City permissions" },
+                { m_Setting.GetOptionGroupLocaleID(Setting.kMayorGroup), "Mayor source" },
+                { m_Setting.GetOptionGroupLocaleID(Setting.kBuiltinGroup), "Built-in mayor" },
+                { m_Setting.GetOptionGroupLocaleID(Setting.kExternalGroup), "External agent" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "Permissions" },
 
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "Agent" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. External agents come from the ACP Registry and are prepared on first use. Sign in outside the game; Node.js/npm or uv may be needed." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MayorSource)), "Mayor source" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.MayorSource)), "Choose the built-in mayor or an external agent. Apply settings to open a new chat." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Provider)), "Provider" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Provider)), "Each provider keeps its own key, model and connection settings. Apply settings to open a chat with this connection." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalAgent)), "Agent" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalAgent)), "Choose from the ACP Registry. Models and sign-in are managed by the agent outside the game. First use prepares the selected version; Node.js/npm or uv may be needed." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchAgents)), "Refresh agents" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchAgents)), "Refresh the available agents and versions without changing your selection or applying settings." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "Endpoint" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "Responses API base URL. Apply settings to start a new chat with this connection." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API key" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ApiKey)), "Stored in settings only." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderEndpoint)), "Server address" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderEndpoint)), "The inference base URL. Anthropic uses the root without /v1; OpenAI protocols include /v1. Changing the host clears this connection's key." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelsEndpoint)), "Model list address" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelsEndpoint)), "Independent from the server address. For a custom OpenAI-compatible service, leave empty to use the server address followed by /models." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderApiKey)), "API key" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderApiKey)), "Saved only in this provider's settings. Custom services may leave this empty when authentication is not required." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Fetch models" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Load the model list from the endpoint; selects the first model when the current one is empty or missing." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Model)), "Model" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Model)), "Pick a model loaded from the endpoint." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Refresh this provider's model list without changing the selection, saving settings or reopening chat." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderModel)), "Model" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderModel)), "Choose a model from this connection's list. You can also enter a model ID in advanced connection settings." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ConnectionDetails)), "Advanced connection settings" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ConnectionDetails)), "Enter a model ID, change addresses or protocol, and choose the context budget." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelId)), "Model ID" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelId)), "Enter the provider's model ID directly; refreshing the list preserves this selection." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Protocol)), "API protocol" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Protocol)), "The request protocol supported by this server. It is separate from the provider name." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestConnection)), "Test connection" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestConnection)), "Sends one short reply the same way a turn in the city does." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestConnection)), "Test the currently edited connection and model with one short reply. Does not apply settings or reopen the city's chat." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestAcp)), "Test ACP" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestAcp)), "Starts the selected agent, asks for one sentence, and stops it." },
 
@@ -412,8 +563,8 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowPanel)), "When on, the agent can press panel buttons and fill text boxes, including city settings, the mod list, and deleting a save." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestPanel)), "Test panels" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestPanel)), "Check that panel control works." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.WindowTokens)), "Window tokens" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.WindowTokens)), "Your model's context window. Apply settings to start a new chat." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ContextTokens)), "Context budget" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ContextTokens)), "Choose a context budget within this model's window. Each provider remembers your choice." },
 
                 { ChatLocale.Id("Title"), "AIRI Mayor" },
                 { ChatLocale.Id("Composer.Loading"), "Loading city…" },

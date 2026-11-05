@@ -7,11 +7,13 @@
     <RootNamespace>airimayor.Agent</RootNamespace>
     <AssemblyName>airimayor.Agent</AssemblyName>
     <ImplicitUsings>disable</ImplicitUsings>
-    <NoWarn>$(NoWarn);MAAI001;MEAI001</NoWarn>
+    <NoWarn>$(NoWarn);MAAI001;MEAI001;OPENAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI.Harness" Version="1.27.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.0" />
+    <PackageReference Include="Anthropic" Version="13.4.0" />
   </ItemGroup>
 
 </Project>

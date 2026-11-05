@@ -96,7 +96,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="dotacp.client" Version="2026.7.19" />
-		<PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -2,6 +2,8 @@
 
 Status: accepted
 
+The Responses-only transport choice below is superseded by [0050](0050-model-provider-connections.md). Native Harness behavior remains applicable.
+
 The built-in mayor now uses `Microsoft.Agents.AI.Harness` 1.27.0 over the Responses adapter, replacing our handwritten loop. The second prototype measured 2,067 fewer normalized lines (43.3%) across the runtime and all new client adapters; preserving the old diagnostics, gateway patches and scheduling rules had erased most of that benefit. We accept the library's planning, compaction, iteration and background-task behavior rather than implementing those policies again around Harness.
 
 The shared agent module is `Agent/airimayor.Agent.csproj`, with namespace and assembly name `airimayor.Agent`. It contains session interfaces, Harness adaptation, records and shared tool access. Runtime names the mayor's complete operating environment; Harness is one part of it.

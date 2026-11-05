@@ -4,7 +4,7 @@
 
 > Learn more at [Project AIRI](https://github.com/moeru-ai/airi) and the [live demo](https://airi.moeru.ai).
 
-**AIRI Mayor** plays **Cities: Skylines II**. A Gameface chat in the game talks to an in-process Microsoft Agent Framework Harness that builds through the simulation thread. The built-in mayor uses a Responses API endpoint and API key; an external mayor is optional. Not listed on Paradox Mods yet.
+**AIRI Mayor** plays **Cities: Skylines II**. A Gameface chat in the game talks to an in-process Microsoft Agent Framework Harness that builds through the simulation thread. The built-in mayor uses the selected model provider; an external mayor is optional. Not listed on Paradox Mods yet.
 
 - Vocabulary: [CONTEXT.md](./CONTEXT.md)
 - Decisions: [docs/adr/](./docs/adr/)
@@ -13,6 +13,8 @@
 - Docs index: [docs/README.md](./docs/README.md)
 
 ## Session
+
+In settings, choose **Built-in mayor** or **External agent** on the Mayor tab; city permissions have their own tab. The built-in mayor supports OpenAI, OpenCode Go, OpenRouter, Anthropic and custom OpenAI-compatible services. Each provider retains its own key, model and connection details. Fetch models refreshes only the list; advanced settings allow a manual model ID and separate catalog address. Apply starts a fresh chat with that connection. Existing flat connection settings must be entered again. See [ADR 0050](docs/adr/0050-model-provider-connections.md).
 
 Gameface calls `Prompt`, `Cancel`, and the `update` stream. The default head is the built-in agent. City tools pass through `IAgentTools`. External mayors come from the ACP Registry and share one ACP session (`session/prompt`, `session/cancel`, `session/update`), with city tools supplied as a stdio MCP server. Refresh agents updates the cached catalog; first use prepares the selected registry version. Package agents need Node.js/npm or uv, and sign-in happens outside the game. City-only work is a prompt instruction; the mod does not restrict the agent's own tools. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md), [ADR 0036](docs/adr/0036-external-mayor-acp.md) and [ADR 0049](docs/adr/0049-registry-external-mayors.md).
 

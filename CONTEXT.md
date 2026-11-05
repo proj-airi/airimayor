@@ -22,6 +22,14 @@ _Avoid_: MCP client, apeira
 An agent process the chat drives with prompt, cancel, and the update stream. City tools and city-working instructions are handed to that process. The player signs in to that agent outside the game.
 _Avoid_: a second player chat, the built-in endpoint and API key, a guarantee that the agent cannot use its own non-city tools
 
+**Built-in mayor**:
+The mayor that runs inside the game using the player's selected model connection and the city's tools.
+_Avoid_: an external agent, a particular model provider
+
+**Model connection**:
+The built-in mayor's saved provider, model, credentials, server and model-list addresses, request protocol, and context budget. Each provider has its own connection.
+_Avoid_: external agent sign-in, a model list as the selected model, one shared key for all providers
+
 **Model-facing surface**:
 The tools and text the model is allowed to call or see.
 _Avoid_: HTTP route, backend handler, catalog row (those may exist without being model-facing); engine system and type names; HTTP routes in descriptions or result notes; loop jargon (autonomous continuation, on the surface)
