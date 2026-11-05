@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// Maps one external-agent update onto the chat stream. ACP tool rows

@@ -1,6 +1,6 @@
 # Agent runtime beside the game tool port
 
-Status: the tool port remains accepted; built-in loop, plan and steering policies are superseded by [0048](0048-native-maf-harness.md).
+Status: the tool port remains accepted; built-in loop, plan and steering policies are superseded by [0048](0048-native-maf-harness.md). The shared library is now `Agent/airimayor.Agent.csproj`; the original name below is historical.
 
 The in-process loop lives in `AgentRuntime`, a library the mod references. The game supplies tools through `IAgentTools` (`List` and `InvokeAsync` only) and passes the system prompt once, when the runtime is created. `set_plan` stays inside the runtime as a generic plan. The runtime does not reference `Game` or Colossal, and it does not name city tools. A player message stops a reply still being generated and waits for a tool that has already started, including a time advance. `Cancel` stops the turn. If that cancels an advance, the city tool restores the clock. This replaces the sentence in [ADR-0030](0030-player-message-keeps-plan.md) and [ADR-0031](0031-explicit-pause.md) that a player message ends a time advance.
 

@@ -100,7 +100,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\AgentRuntime\AgentRuntime.csproj" />
+		<ProjectReference Include="..\Agent\airimayor.Agent.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

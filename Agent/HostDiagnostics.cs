@@ -1,7 +1,7 @@
 using System;
 using Microsoft.Extensions.Logging;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     // Accept SDK warning/error diagnostics; no custom model-message/catalog/usage serialization.
     internal sealed class HostDiagnostics : ILoggerFactory

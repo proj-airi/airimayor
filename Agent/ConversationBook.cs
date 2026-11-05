@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// Conversations one root chat opened. <c>task</c> returns while the work

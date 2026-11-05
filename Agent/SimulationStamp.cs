@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// Simulation clock reading taken on the simulation thread: frame,

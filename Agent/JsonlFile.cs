@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// Append-only JSONL file inside a session record: one line per write,

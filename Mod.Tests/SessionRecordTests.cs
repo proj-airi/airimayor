@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
-using AgentRuntime;
+using airimayor.Agent;
 using Xunit;
 
 namespace airimayor.Tests

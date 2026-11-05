@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// Session facts, city-tool evidence and host events. Each owned ACP

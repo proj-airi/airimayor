@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// City tools supplied to either mayor. Agent-owned planning and delegation stay outside this list.

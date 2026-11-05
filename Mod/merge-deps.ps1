@@ -102,7 +102,7 @@ foreach ($name in $managedRefs) {
         Remove-Item -LiteralPath $path -Force
     }
 }
-foreach ($name in @('airimayor.pdb', 'AgentRuntime.pdb')) {
+foreach ($name in @('airimayor.pdb', 'airimayor.Agent.pdb')) {
     $pdb = Join-Path $DeployDir $name
     if (Test-Path -LiteralPath $pdb) {
         Remove-Item -LiteralPath $pdb -Force

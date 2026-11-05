@@ -8,7 +8,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentSession = Microsoft.Agents.AI.AgentSession;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     // SDK 1.27 persists successful service calls, but not tool results before a failed next call.
     // Apply the same repair to root and native background sessions, including SDK tool results.

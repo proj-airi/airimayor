@@ -4,8 +4,8 @@
     <TargetFrameworks>net48;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>AgentRuntime</RootNamespace>
-    <AssemblyName>AgentRuntime</AssemblyName>
+    <RootNamespace>airimayor.Agent</RootNamespace>
+    <AssemblyName>airimayor.Agent</AssemblyName>
     <ImplicitUsings>disable</ImplicitUsings>
     <NoWarn>$(NoWarn);MAAI001;MEAI001</NoWarn>
   </PropertyGroup>

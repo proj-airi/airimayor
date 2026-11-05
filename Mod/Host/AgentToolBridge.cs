@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentRuntime;
+using airimayor.Agent;
 
 namespace airimayor.Host
 {
@@ -54,7 +54,7 @@ namespace airimayor.Host
             }
             catch (Exception e)
             {
-                return Error($"invalid arguments for {tool.Name}: {AgentRuntime.SessionRecord.RedactSecrets(e.Message)}");
+                return Error($"invalid arguments for {tool.Name}: {airimayor.Agent.SessionRecord.RedactSecrets(e.Message)}");
             }
 
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&

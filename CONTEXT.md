@@ -6,6 +6,14 @@ The in-game AI mayor: a Gameface chat UI talks to a mayor that applies city work
 
 ### Runtime
 
+**Runtime**:
+The mayor's complete operating environment: chat, agent execution, city tools, permissions, the clock, and session lifetime.
+_Avoid_: the built-in Harness alone, the shared agent module alone
+
+**Harness**:
+The agent execution machinery within the runtime: model calls, tool calls, conversation history, and background work.
+_Avoid_: the complete city environment, chat UI, simulation-thread dispatch
+
 **Agent**:
 The in-game mayor session: one chat, tools queued onto the simulation thread. The default head runs in the game. An external head launches OpenCode.
 _Avoid_: MCP client, apeira

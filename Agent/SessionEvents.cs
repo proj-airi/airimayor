@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     public enum AgentStatus
     {

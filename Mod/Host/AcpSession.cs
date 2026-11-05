@@ -10,11 +10,11 @@ using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using AgentRuntime;
+using airimayor.Agent;
 using dotacp.client;
 using dotacp.protocol;
 using AcpUpdate = dotacp.protocol.SessionUpdate;
-using ChatUpdate = AgentRuntime.SessionUpdate;
+using ChatUpdate = airimayor.Agent.SessionUpdate;
 
 namespace airimayor.Host
 {

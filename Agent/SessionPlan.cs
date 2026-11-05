@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     internal static class SessionPlan
     {

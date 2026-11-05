@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     // Bounded, client-owned presentation state. It never supplies model history.
     internal sealed class ChatProjection

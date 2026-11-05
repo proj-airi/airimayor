@@ -1,6 +1,6 @@
 using System;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// The chat's session: prompt, cancel, and the update stream.

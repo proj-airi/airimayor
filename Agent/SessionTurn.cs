@@ -3,7 +3,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>
     /// One prompt on an existing session, then stop. The child conversation

@@ -10,7 +10,7 @@ using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>The built-in chat adapter. Harness owns model history, tools, plans and background tasks.</summary>
     public sealed class ClientSession : IAgentSession

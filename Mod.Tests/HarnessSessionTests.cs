@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentRuntime;
+using airimayor.Agent;
 using Microsoft.Extensions.AI;
 using Xunit;
 

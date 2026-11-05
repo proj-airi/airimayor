@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Nodes;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     /// <summary>Where a session writes its record, how it reads the simulation clock, and the facts it starts with.</summary>
     public sealed class SessionRecordOptions

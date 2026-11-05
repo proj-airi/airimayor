@@ -39,7 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentRuntime\AgentRuntime.csproj" />
+    <ProjectReference Include="..\Agent\airimayor.Agent.csproj" />
     <Reference Include="Unity.Entities" HintPath="$(GameManagedPath)\Unity.Entities.dll" />
     <Reference Include="Unity.Mathematics" HintPath="$(GameManagedPath)\Unity.Mathematics.dll" />
   </ItemGroup>

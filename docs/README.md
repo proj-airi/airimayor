@@ -37,7 +37,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
 | [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; native built-in injection is defined by [0048](./adr/0048-native-maf-harness.md) |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
-| [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. An external head uses ACP and MCP ([0036](./adr/0036-external-mayor-acp.md)) |
+| [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | City tool port shared by built-in and external sessions; current agent module and Harness behavior: [0048](./adr/0048-native-maf-harness.md) |
 | [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | ACP plan display format; built-in todos superseded by [0048](./adr/0048-native-maf-harness.md) |
 | [0034-edge-grade-not-elevation.md](./adr/0034-edge-grade-not-elevation.md) | An edge is bridge, tunnel, or ground; an embankment stays ground |
 | [0035-mod-identity-airimayor.md](./adr/0035-mod-identity-airimayor.md) | The mod ships as `airimayor`; display name `AIRI Mayor`; no migration |

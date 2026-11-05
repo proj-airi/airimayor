@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using System.Threading.Tasks;
-using AgentRuntime;
+using airimayor.Agent;
 using Newtonsoft.Json;
 
 namespace CS2MCP

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace AgentRuntime
+namespace airimayor.Agent
 {
     // The engine sees standard AIContent; city evidence stays in the record.
     internal sealed class CityFunctions
