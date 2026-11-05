@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="dotacp.client" Version="2026.7.19" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -36,6 +37,7 @@
     <Compile Include="..\Mod\CS2MCP\TypedNetworkMath.cs" Link="Production\TypedNetworkMath.cs" />
     <Compile Include="..\Mod\CS2MCP\SimWait.cs" Link="Production\SimWait.cs" />
     <Compile Include="..\Mod\Host\PointedPlaceText.cs" Link="Production\PointedPlaceText.cs" />
+    <Compile Include="..\Mod\Host\AcpSession.cs" Link="Production\AcpSession.cs" />
   </ItemGroup>
 
   <ItemGroup>

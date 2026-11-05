@@ -14,7 +14,7 @@
 
 ## Session
 
-Gameface calls `Prompt`, `Cancel`, and the `update` stream. The default head is the built-in agent. City tools pass through `IAgentTools`. When Agent is OpenCode, those same calls go to `opencode acp` over ACP (`session/prompt`, `session/cancel`, `session/update`), and city tools are handed to it as a stdio MCP server. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md) and [ADR 0036](docs/adr/0036-external-mayor-acp.md).
+Gameface calls `Prompt`, `Cancel`, and the `update` stream. The default head is the built-in agent. City tools pass through `IAgentTools`. External mayors come from the ACP Registry and share one ACP session (`session/prompt`, `session/cancel`, `session/update`), with city tools supplied as a stdio MCP server. Refresh agents updates the cached catalog; first use prepares the selected registry version. Package agents need Node.js/npm or uv, and sign-in happens outside the game. City-only work is a prompt instruction; the mod does not restrict the agent's own tools. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md), [ADR 0036](docs/adr/0036-external-mayor-acp.md) and [ADR 0049](docs/adr/0049-registry-external-mayors.md).
 
 The built-in mayor uses native todos, compaction and background tasks. New messages join at the next model boundary; Stop cancels the root turn and its current city tool. A built-in background result is retrieved explicitly. Loading a city or applying settings opens an idle chat; neither head automatically starts work or repeats completed turns. External delegated reports retain their delivery to the root chat. Connection, model and tool choices take effect in a fresh chat when settings are applied. See [ADR 0048](docs/adr/0048-native-maf-harness.md).
 
@@ -24,7 +24,7 @@ flowchart TD
   head[Session head]
   builtin["Built-in agent"]
   acp[ACP client]
-  agent[OpenCode]
+  agent[Registry agent]
   mcp["stdio MCP server"]
   bridge[Loopback bridge]
   tools[IAgentTools]

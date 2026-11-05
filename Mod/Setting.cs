@@ -30,7 +30,15 @@ namespace airimayor
 
         [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUIDropdown(typeof(Setting), nameof(GetHeadItems))]
-        public string Head { get; set; } = AgentChoices.BuiltIn;
+        [SettingsUIValueVersion(typeof(Setting), nameof(AgentListVersion))]
+        public string Head { get; set; } = AgentHead.BuiltIn;
+
+        [SettingsUISection(kSection, kConnectionGroup)]
+        [SettingsUIButton]
+        public bool FetchAgents
+        {
+            set { if (value) { StartFetchAgents(true); } }
+        }
 
         [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
@@ -77,9 +85,9 @@ namespace airimayor
             set { if (value) { StartHeadTest(); } }
         }
 
-        public bool HideBuiltinRequest() => !AgentChoices.Find(Head).IsBuiltIn;
+        public bool HideBuiltinRequest() => Head != AgentHead.BuiltIn;
 
-        public bool HideAcpRequest() => AgentChoices.Find(Head).IsBuiltIn;
+        public bool HideAcpRequest() => Head == AgentHead.BuiltIn;
 
         // ---- Agent ---------------------------------------
 
@@ -134,7 +142,7 @@ namespace airimayor
         public static bool StaticVisionTools => Instance?.VisionTools ?? true;
         public static string StaticApiKey => Instance?.ApiKey ?? "";
         public static int StaticWindowTokens => Instance?.WindowTokens ?? 128_000;
-        public static string StaticHead => Instance?.Head ?? AgentChoices.BuiltIn;
+        public static string StaticHead => Instance?.Head ?? AgentHead.BuiltIn;
 
         public static event Action HeadApplied;
 
@@ -150,22 +158,78 @@ namespace airimayor
         private static List<string> s_ModelPresets = new List<string>();
 
         public int ModelPresetVersion { get; set; }
+        public int AgentListVersion { get; set; }
+        private int m_FetchingAgents;
 
         public static DropdownItem<string>[] GetHeadItems()
         {
             string locale = Game.SceneFlow.GameManager.instance?.localizationManager?.activeLocaleId;
             bool chinese = !string.IsNullOrEmpty(locale) && locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
-            var items = new DropdownItem<string>[AgentChoices.All.Length];
-            for (int i = 0; i < AgentChoices.All.Length; i++)
+            var items = new List<DropdownItem<string>>
             {
-                AgentChoice choice = AgentChoices.All[i];
-                items[i] = new DropdownItem<string>
+                new DropdownItem<string>
                 {
-                    value = choice.Id,
-                    displayName = chinese ? choice.Chinese : choice.English,
-                };
+                    value = AgentHead.BuiltIn,
+                    displayName = chinese ? "内置" : "Built-in",
+                },
+            };
+            items.AddRange(AgentHead.Registry.Agents.Select(agent => new DropdownItem<string>
+            {
+                value = agent.Id,
+                displayName = agent.Name,
+            }));
+            string current = Instance?.Head;
+            if (!string.IsNullOrEmpty(current) && !items.Any(item => item.value == current))
+            {
+                items.Add(new DropdownItem<string>
+                {
+                    value = current,
+                    displayName = current + (chinese ? "（不可用）" : " (unavailable)"),
+                });
             }
-            return items;
+            return items.ToArray();
+        }
+
+        internal void LoadAgents()
+        {
+            try
+            {
+                AgentHead.Registry.Load();
+                AgentListVersion++;
+            }
+            catch (Exception e)
+            {
+                AgentTimeline.Warn("acp", e.Message);
+            }
+            StartFetchAgents(false);
+        }
+
+        private void StartFetchAgents(bool notify)
+        {
+            if (Interlocked.Exchange(ref m_FetchingAgents, 1) != 0)
+                return;
+            SynchronizationContext context = SynchronizationContext.Current;
+            _ = Task.Run(async () =>
+            {
+                string message;
+                try
+                {
+                    await AgentHead.Registry.RefreshAsync();
+                    AgentListVersion++;
+                    message = "Loaded " + AgentHead.Registry.Agents.Count + " agents.";
+                }
+                catch (Exception e)
+                {
+                    message = "Could not refresh agents: " + e.Message;
+                    AgentTimeline.Warn("acp", message);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref m_FetchingAgents, 0);
+                }
+                if (notify)
+                    Report(context, message);
+            });
         }
 
         public static DropdownItem<string>[] GetModelPresetItems()
@@ -220,7 +284,7 @@ namespace airimayor
 
         public override void SetDefaults()
         {
-            Head = AgentChoices.BuiltIn;
+            Head = AgentHead.BuiltIn;
             Endpoint = "https://api.openai.com/v1";
             ApiKey = "";
             Model = "";
@@ -312,7 +376,9 @@ namespace airimayor
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "Permissions" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "Agent" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. OpenCode launches opencode. Codex launches the installed codex-acp adapter. Sign in outside the game." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. External agents come from the ACP Registry and are prepared on first use. Sign in outside the game; Node.js/npm or uv may be needed." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchAgents)), "Refresh agents" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchAgents)), "Refresh the available agents and versions without changing your selection or applying settings." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "Endpoint" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "Responses API base URL. Apply settings to start a new chat with this connection." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API key" },

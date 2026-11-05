@@ -13,12 +13,15 @@ namespace airimayor.Host
     /// </summary>
     internal static class AgentHead
     {
+        internal const string BuiltIn = "built-in";
+        internal static readonly AcpRegistry Registry = new AcpRegistry(Path.Combine(ModPaths.RuntimeDataDirectory, "acp"));
+
         /// <param name="city">Loaded city name; null for the settings check.</param>
         internal static IAgentSession Open(string city)
         {
             var tools = new Cs2AgentTools();
-            AgentChoice choice = AgentChoices.Find(Setting.StaticHead);
-            if (!choice.IsBuiltIn)
+            string head = Setting.StaticHead;
+            if (head != BuiltIn)
             {
                 string root = Mod.InstallDirectory;
                 string mcp = string.IsNullOrEmpty(root)
@@ -28,11 +31,11 @@ namespace airimayor.Host
                     tools,
                     AgentSystemPrompt.Text,
                     () => Setting.StaticVisionTools,
-                    choice.Command,
-                    choice.Arguments,
+                    Registry,
+                    head,
                     mcp,
-                    string.IsNullOrEmpty(root) ? Directory.GetCurrentDirectory() : root,
-                    Record(choice, city),
+                    Path.Combine(ModPaths.RuntimeDataDirectory, "city"),
+                    Record(head, city),
                     message => Mod.log.Warn(message));
             }
             string endpoint = Setting.StaticEndpoint;
@@ -40,7 +43,7 @@ namespace airimayor.Host
             string model = Setting.StaticModel;
             return new ClientSession(() => OpenClient(endpoint, apiKey, model), tools, AgentSystemPrompt.Text,
                 Setting.StaticWindowTokens, 16_384, Setting.StaticVisionTools,
-                Record(choice, city), message => Mod.log.Warn(message));
+                Record(head, city), message => Mod.log.Warn(message));
         }
 
         private static IChatClient OpenClient(string endpoint, string apiKey, string model)
@@ -54,7 +57,7 @@ namespace airimayor.Host
             }).GetResponsesClient().AsIChatClient(model);
         }
 
-        private static SessionRecordOptions Record(AgentChoice choice, string city)
+        private static SessionRecordOptions Record(string head, string city)
         {
             return new SessionRecordOptions
             {
@@ -62,11 +65,11 @@ namespace airimayor.Host
                 Clock = () => CS2MCP.BridgeSystem.Instance?.Clock,
                 Facts = new JsonObject
                 {
-                    ["head"] = choice.IsBuiltIn ? AgentChoices.BuiltIn : choice.Id,
+                    ["head"] = head,
                     ["modVersion"] = typeof(Mod).Assembly.GetName().Version.ToString(),
                     ["city"] = city,
-                    ["model"] = choice.IsBuiltIn ? Setting.StaticModel : null,
-                    ["protocol"] = choice.IsBuiltIn ? "Responses" : "ACP",
+                    ["model"] = head == BuiltIn ? Setting.StaticModel : null,
+                    ["protocol"] = head == BuiltIn ? "Responses" : "ACP",
                 },
             };
         }

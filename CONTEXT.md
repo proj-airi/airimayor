@@ -15,12 +15,12 @@ The agent execution machinery within the runtime: model calls, tool calls, conve
 _Avoid_: the complete city environment, chat UI, simulation-thread dispatch
 
 **Agent**:
-The in-game mayor session: one chat, tools queued onto the simulation thread. The default head runs in the game. An external head launches OpenCode.
+The in-game mayor session: one chat, tools queued onto the simulation thread. The default head runs in the game. An external head runs the player's selected agent process.
 _Avoid_: MCP client, apeira
 
 **External mayor**:
-An agent process the chat drives with prompt, cancel, and the update stream. City tools are handed to that process as a tool server. The player signs in to that agent outside the game.
-_Avoid_: a second chat, the built-in endpoint and API key, a filesystem or a terminal for the agent
+An agent process the chat drives with prompt, cancel, and the update stream. City tools and city-working instructions are handed to that process. The player signs in to that agent outside the game.
+_Avoid_: a second player chat, the built-in endpoint and API key, a guarantee that the agent cannot use its own non-city tools
 
 **Model-facing surface**:
 The tools and text the model is allowed to call or see.

@@ -19,7 +19,9 @@ namespace airimayor
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "权限" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "代理" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "内置使用服务端地址和 API 密钥。OpenCode 启动 opencode。Codex 启动已安装的 codex-acp 适配器。登录在游戏外完成。" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "内置使用服务端地址和 API 密钥。外部代理来自 ACP Registry，首次使用时准备。登录在游戏外完成；部分代理需要 Node.js/npm 或 uv。" },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchAgents)), "刷新代理" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchAgents)), "刷新可用代理及版本，不改变当前选择，也不应用设置。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "服务端地址" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "Responses API 基础地址。应用设置后会以此连接开启新聊天。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API 密钥" },

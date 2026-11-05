@@ -31,7 +31,6 @@ namespace airimayor.Host
         private readonly Dictionary<string, AcpToolState> m_ToolRows =
             new Dictionary<string, AcpToolState>(StringComparer.Ordinal);
         private readonly SessionRecord m_Record;
-        private readonly IAgentTools m_Tools;
         private readonly Func<bool> m_Vision;
         private readonly CancellationTokenSource m_Life = new CancellationTokenSource();
         private readonly string m_SessionId;
@@ -57,14 +56,13 @@ namespace airimayor.Host
             IAgentTools tools,
             string instructions,
             Func<bool> visionAvailable,
-            string command,
-            string arguments,
+            AcpRegistry registry,
+            string agentId,
             string mcpExecutable,
             string workingDirectory,
             SessionRecordOptions record,
             Action<string> warn)
         {
-            m_Tools = tools;
             m_Vision = visionAvailable ?? (() => false);
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Record = new SessionRecord(m_SessionId, record, warn);
@@ -77,7 +75,7 @@ namespace airimayor.Host
             m_Record.DeclareGap("the external mayor's turns report a stop reason but no token usage");
             m_Record.DeclareGap("an external tool row id differs from its city tool call id; pair them by tool name and arguments");
             m_Previews = new ToolPreviewLatch(OnPreviewMatched);
-            _ = Task.Run(() => RunAsync(tools, instructions, command, arguments, mcpExecutable, workingDirectory));
+            _ = Task.Run(() => RunAsync(tools, instructions, registry, agentId, mcpExecutable, workingDirectory));
         }
 
         public event Action<ChatUpdate> Updated;
@@ -165,27 +163,44 @@ namespace airimayor.Host
 
         public void Dispose()
         {
-            if (m_Disposed)
+            lock (m_Lock)
             {
-                return;
+                if (m_Disposed)
+                    return;
+                m_Disposed = true;
             }
-            m_Disposed = true;
             m_Conversations?.CancelAll();
             m_Life.Cancel();
             CancelTurn();
             try
             {
-                m_Connection?.Dispose();
+                if (m_Process != null && !m_Process.HasExited)
+                {
+                    using (Process kill = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "taskkill.exe"),
+                        Arguments = "/PID " + m_Process.Id + " /T /F",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                    }))
+                    {
+                        kill.BeginOutputReadLine();
+                        kill.BeginErrorReadLine();
+                        kill.WaitForExit();
+                        if (kill.ExitCode != 0 && !m_Process.HasExited)
+                            throw new InvalidOperationException("taskkill exited with code " + kill.ExitCode + ".");
+                    }
+                }
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                m_Record.Error("acp", "Could not stop the external agent: " + e.Message);
             }
             try
             {
-                if (m_Process != null && !m_Process.HasExited)
-                {
-                    m_Process.Kill();
-                }
+                m_Connection?.Dispose();
             }
             catch (Exception)
             {
@@ -220,17 +235,21 @@ namespace airimayor.Host
         public Task<RequestPermissionResponse> RequestPermissionAsync(RequestPermissionRequest request, CancellationToken cancellationToken = default)
         {
             string sessionId = request == null ? "" : request.SessionId.ToString();
-            bool known = string.IsNullOrEmpty(sessionId) ||
-                string.Equals(sessionId, m_AcpSessionId.ToString(), StringComparison.Ordinal) ||
-                m_OwnedSessions.Contains(sessionId);
-            if (!known || request?.ToolCall == null || !IsCityTool(request.ToolCall.Title))
+            bool known;
+            lock (m_Lock)
+            {
+                known = string.IsNullOrEmpty(sessionId) ||
+                    string.Equals(sessionId, m_AcpSessionId.ToString(), StringComparison.Ordinal) ||
+                    m_OwnedSessions.Contains(sessionId);
+            }
+            if (!known || cancellationToken.IsCancellationRequested || m_Life.IsCancellationRequested)
             {
                 return Task.FromResult(new RequestPermissionResponse
                 {
                     Outcome = new RequestPermissionOutcomeCancelled(),
                 });
             }
-            if (request.Options == null)
+            if (request?.Options == null)
             {
                 return Task.FromResult(new RequestPermissionResponse
                 {
@@ -240,11 +259,13 @@ namespace airimayor.Host
             PermissionOption allow = null;
             foreach (PermissionOption option in request.Options)
             {
-                if (option.Kind == PermissionOptionKind.AllowOnce || option.Kind == PermissionOptionKind.AllowAlways)
+                if (option.Kind == PermissionOptionKind.AllowOnce)
                 {
                     allow = option;
                     break;
                 }
+                if (option.Kind == PermissionOptionKind.AllowAlways)
+                    allow = option;
             }
             if (allow == null)
             {
@@ -309,14 +330,14 @@ namespace airimayor.Host
         private async Task RunAsync(
             IAgentTools tools,
             string instructions,
-            string command,
-            string arguments,
+            AcpRegistry registry,
+            string agentId,
             string mcpExecutable,
             string workingDirectory)
         {
             try
             {
-                m_Command = command ?? "";
+                m_Command = agentId;
                 if (string.IsNullOrWhiteSpace(mcpExecutable) || !File.Exists(mcpExecutable))
                 {
                     Fail("The city tool server is not installed.");
@@ -324,10 +345,17 @@ namespace airimayor.Host
                 }
                 m_McpExecutable = mcpExecutable;
                 m_WorkingDirectory = workingDirectory;
-                m_Conversations = new ConversationBook(RunChildSessionAsync, Emit, DeliverReport);
-                m_Bridge = ToolBridge.Start(tools, m_Vision, instructions, m_Conversations, m_Previews, m_Record);
-                m_Process = StartAgent(command, arguments);
-                m_Connection = Connection.RunClient(this, m_Process.StandardInput.BaseStream, m_Process.StandardOutput.BaseStream);
+                ProcessStartInfo start = await registry.PrepareAsync(agentId, workingDirectory, m_Life.Token).ConfigureAwait(false);
+                lock (m_Lock)
+                {
+                    if (m_Disposed)
+                        return;
+                    m_Conversations = new ConversationBook(RunChildSessionAsync, Emit, DeliverReport);
+                    m_Bridge = ToolBridge.Start(tools, m_Vision, instructions, m_Conversations, m_Previews, m_Record);
+                    m_Command = start.FileName;
+                    m_Process = StartAgent(start);
+                    m_Connection = Connection.RunClient(this, m_Process.StandardInput.BaseStream, m_Process.StandardOutput.BaseStream);
+                }
                 if (m_Connection == null)
                 {
                     Fail("Could not connect to the external agent.");
@@ -356,28 +384,8 @@ namespace airimayor.Host
             }
         }
 
-        private Process StartAgent(string command, string arguments)
+        private Process StartAgent(ProcessStartInfo start)
         {
-            var start = new ProcessStartInfo
-            {
-                FileName = command,
-                Arguments = arguments ?? "",
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            if (string.Equals(Path.GetFileNameWithoutExtension(command), "opencode", StringComparison.OrdinalIgnoreCase))
-            {
-                // This process only. OpenCode 1.18.32 keeps JSON key order and the last
-                // matching rule wins, so city_* must follow * or the city tools disappear.
-                // * also denies task: a child opened inside the agent never becomes an ACP session.
-                // mcp_timeout is milliseconds. 45 minutes covers the longest advance:
-                // 8 in-game hours at the city-side budget of 5 real minutes each.
-                start.EnvironmentVariables["OPENCODE_CONFIG_CONTENT"] =
-                    "{\"permission\":{\"*\":\"deny\",\"city_*\":\"allow\"},\"experimental\":{\"mcp_timeout\":2700000}}";
-            }
             var process = new Process { StartInfo = start, EnableRaisingEvents = true };
             process.ErrorDataReceived += (sender, args) =>
             {
@@ -396,7 +404,7 @@ namespace airimayor.Host
             };
             if (!process.Start())
             {
-                throw new InvalidOperationException("Could not start " + command + ".");
+                throw new InvalidOperationException("Could not start " + start.FileName + ".");
             }
             process.BeginErrorReadLine();
             return process;
@@ -733,22 +741,6 @@ namespace airimayor.Host
                 }
             }
             return builder.ToString();
-        }
-
-        private bool IsCityTool(string title)
-        {
-            if (string.IsNullOrEmpty(title) || m_Tools == null)
-            {
-                return false;
-            }
-            foreach (AgentToolDeclaration tool in m_Tools.List(m_Vision()))
-            {
-                if (string.Equals(tool.Name, title, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-            return title.StartsWith("city", StringComparison.OrdinalIgnoreCase);
         }
 
         private void AppendAssistant(string text)

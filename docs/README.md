@@ -54,6 +54,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0046-session-record.md](./adr/0046-session-record.md) | Session evidence and clock envelope; built-in capture gaps revised by [0048](./adr/0048-native-maf-harness.md) |
 | [0047-write-evidence.md](./adr/0047-write-evidence.md) | Before/after city ledger on writes stays in the record; an offline check judges confirmed, diverged, or undetermined |
 | [0048-native-maf-harness.md](./adr/0048-native-maf-harness.md) | Built-in uses native Harness todos, compaction, injection and background tasks over a fixed Responses connection |
+| [0049-registry-external-mayors.md](./adr/0049-registry-external-mayors.md) | Registry launch metadata and prompt-only city-tool guidance for external mayors |
 
 ## Guide
 
