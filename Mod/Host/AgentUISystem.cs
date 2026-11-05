@@ -34,7 +34,6 @@ namespace airimayor.Host
         private IAgentSession m_Session;
         private SessionUpdate m_DeferredEvent;
         private int m_Reopen;
-        private bool m_AutoStartSent;
 
         private void OnHeadApplied()
         {
@@ -243,7 +242,6 @@ namespace airimayor.Host
         {
             while (m_Events.TryDequeue(out _)) { }
             m_DeferredEvent = null;
-            m_AutoStartSent = false;
             Interlocked.Exchange(ref m_StateDirty, 1);
         }
 
@@ -301,7 +299,6 @@ namespace airimayor.Host
         protected override void OnUpdate()
         {
             base.OnUpdate();
-            TryAutoStart();
             if (Interlocked.Exchange(ref m_Reopen, 0) == 1 && IsInLoadedCity())
             {
                 CloseSession();
@@ -319,26 +316,6 @@ namespace airimayor.Host
                 PushState();
             }
             PublishPointedPlaces();
-        }
-
-        private void TryAutoStart()
-        {
-            GameManager manager = GameManager.instance;
-            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
-            {
-                m_AutoStartSent = false;
-                return;
-            }
-            if (m_AutoStartSent || !Setting.StaticAutoStart)
-            {
-                return;
-            }
-            if (m_Session == null)
-            {
-                return;
-            }
-            m_AutoStartSent = true;
-            m_Session.Prompt(Setting.StaticStartupPrompt);
         }
 
         private bool TryDequeueForUi(out SessionUpdate agentEvent)

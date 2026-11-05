@@ -16,7 +16,7 @@
 
 Gameface calls `Prompt`, `Cancel`, and the `update` stream. The default head is the built-in agent. City tools pass through `IAgentTools`. When Agent is OpenCode, those same calls go to `opencode acp` over ACP (`session/prompt`, `session/cancel`, `session/update`), and city tools are handed to it as a stdio MCP server. See [ADR 0032](docs/adr/0032-agent-runtime-tool-port.md) and [ADR 0036](docs/adr/0036-external-mayor-acp.md).
 
-The built-in mayor uses native todos, compaction and background tasks. New messages join at the next model boundary; Stop cancels the root turn and its current city tool. A background result is retrieved explicitly, and the built-in does not start another turn automatically. Connection, model and tool choices take effect in a fresh chat when settings are applied. See [ADR 0048](docs/adr/0048-native-maf-harness.md).
+The built-in mayor uses native todos, compaction and background tasks. New messages join at the next model boundary; Stop cancels the root turn and its current city tool. A built-in background result is retrieved explicitly. Loading a city or applying settings opens an idle chat; neither head automatically starts work or repeats completed turns. External delegated reports retain their delivery to the root chat. Connection, model and tool choices take effect in a fresh chat when settings are applied. See [ADR 0048](docs/adr/0048-native-maf-harness.md).
 
 ```mermaid
 flowchart TD

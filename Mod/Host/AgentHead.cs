@@ -25,8 +25,6 @@ namespace airimayor.Host
                     tools,
                     AgentSystemPrompt.Text,
                     () => Setting.StaticVisionTools,
-                    () => Setting.StaticContinuous,
-                    Setting.StaticStartupPrompt,
                     choice.Command,
                     choice.Arguments,
                     mcp,

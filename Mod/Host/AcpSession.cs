@@ -33,8 +33,6 @@ namespace airimayor.Host
         private readonly SessionRecord m_Record;
         private readonly IAgentTools m_Tools;
         private readonly Func<bool> m_Vision;
-        private readonly Func<bool> m_Continue;
-        private readonly string m_Continuation;
         private readonly CancellationTokenSource m_Life = new CancellationTokenSource();
         private readonly string m_SessionId;
         private readonly StringBuilder m_Stderr = new StringBuilder();
@@ -59,8 +57,6 @@ namespace airimayor.Host
             IAgentTools tools,
             string instructions,
             Func<bool> visionAvailable,
-            Func<bool> continueWhenIdle,
-            string continuation,
             string command,
             string arguments,
             string mcpExecutable,
@@ -70,8 +66,6 @@ namespace airimayor.Host
         {
             m_Tools = tools;
             m_Vision = visionAvailable ?? (() => false);
-            m_Continue = continueWhenIdle ?? (() => false);
-            m_Continuation = continuation ?? "";
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Record = new SessionRecord(m_SessionId, record, warn);
             m_Record.Describe("prompt", new JsonObject
@@ -421,52 +415,36 @@ namespace airimayor.Host
                 {
                     return;
                 }
-                while (!m_Life.IsCancellationRequested)
+                m_Turn = new CancellationTokenSource();
+                Status = AgentStatus.Thinking;
+                Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Thinking });
+                Stopwatch turnTimer = BeginTurn(text);
+                PromptResponse response;
+                try
                 {
-                    m_Turn = new CancellationTokenSource();
-                    Status = AgentStatus.Thinking;
-                    Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Thinking });
-                    Stopwatch turnTimer = BeginTurn(text);
-                    PromptResponse response;
-                    try
+                    response = await m_Connection.PromptAsync(new PromptRequest
                     {
-                        response = await m_Connection.PromptAsync(new PromptRequest
-                        {
-                            SessionId = m_AcpSessionId,
-                            Prompt = new ContentBlock[] { new TextContent { Text = text } },
-                        }, m_Turn.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        response = new PromptResponse { StopReason = StopReason.Cancelled };
-                    }
-                    catch (Exception e)
-                    {
-                        FinishTurn("failed", turnTimer);
-                        Fail(FailureText(e));
-                        return;
-                    }
-                    FinishTurn(m_Turn.IsCancellationRequested ? "cancelled" : StopReasonText(response.StopReason), turnTimer);
-                    if (response.StopReason == StopReason.Cancelled || m_Turn.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                    if (m_Reports.Reader.TryRead(out string report))
-                    {
-                        text = report;
-                        continue;
-                    }
-                    if (response.StopReason != StopReason.EndTurn ||
-                        !m_Continue() ||
-                        m_Pending.Reader.Count > 0)
-                    {
-                        Status = AgentStatus.Idle;
-                        Emit(new ChatUpdate { Kind = "turn" });
-                        Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Idle });
-                        break;
-                    }
-                    text = m_Continuation;
+                        SessionId = m_AcpSessionId,
+                        Prompt = new ContentBlock[] { new TextContent { Text = text } },
+                    }, m_Turn.Token).ConfigureAwait(false);
                 }
+                catch (OperationCanceledException)
+                {
+                    response = new PromptResponse { StopReason = StopReason.Cancelled };
+                }
+                catch (Exception e)
+                {
+                    FinishTurn("failed", turnTimer);
+                    Fail(FailureText(e));
+                    return;
+                }
+                bool cancelled = response.StopReason == StopReason.Cancelled || m_Turn.IsCancellationRequested;
+                FinishTurn(cancelled ? "cancelled" : StopReasonText(response.StopReason), turnTimer);
+                m_Turn.Dispose();
+                m_Turn = null;
+                Status = cancelled ? AgentStatus.Interrupted : AgentStatus.Idle;
+                Emit(new ChatUpdate { Kind = "turn" });
+                Emit(new ChatUpdate { Kind = "status", Status = Status });
             }
         }
 

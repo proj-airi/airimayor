@@ -14,14 +14,13 @@ using Game.UI.Widgets;
 namespace airimayor
 {
     [FileLocation(nameof(airimayor))]
-    [SettingsUIGroupOrder(kConnectionGroup, kAgentGroup, kBehaviorGroup)]
-    [SettingsUIShowGroupName(kConnectionGroup, kAgentGroup, kBehaviorGroup)]
+    [SettingsUIGroupOrder(kConnectionGroup, kAgentGroup)]
+    [SettingsUIShowGroupName(kConnectionGroup, kAgentGroup)]
     public class Setting : ModSetting
     {
         public const string kSection = "Main";
         public const string kConnectionGroup = "Connection";
         public const string kAgentGroup = "Agent";
-        public const string kBehaviorGroup = "Behavior";
 
         public static Setting Instance { get; set; }
 
@@ -82,15 +81,6 @@ namespace airimayor
 
         public bool HideAcpRequest() => AgentChoices.Find(Head).IsBuiltIn;
 
-        // ---- Behavior ------------------------------------
-
-        [SettingsUISection(kSection, kBehaviorGroup)]
-        public bool AutoStart { get; set; } = false;
-
-        [SettingsUISection(kSection, kBehaviorGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideAcpRequest))]
-        public bool Continuous { get; set; } = false;
-
         // ---- Agent ---------------------------------------
 
         [SettingsUISection(kSection, kAgentGroup)]
@@ -132,12 +122,6 @@ namespace airimayor
         public static string StaticEndpoint => Instance?.Endpoint ?? "https://api.openai.com/v1";
         public static string StaticModel => Instance?.Model ?? "";
 
-        private const string StartupPrompt = "Run the city continuously: fix growth-blocking problems first, then expand with demand; act, don't just report.";
-
-        public static string StaticStartupPrompt => StartupPrompt;
-
-        public static bool StaticAutoStart => Instance?.AutoStart ?? false;
-        public static bool StaticContinuous => Instance?.Continuous ?? false;
         public static bool StaticAllowConstruction => Instance?.AllowConstruction ?? true;
         public static bool StaticAllowProgressionPurchases =>
             Instance?.AllowProgressionPurchases ?? true;
@@ -240,8 +224,6 @@ namespace airimayor
             Endpoint = "https://api.openai.com/v1";
             ApiKey = "";
             Model = "";
-            AutoStart = false;
-            Continuous = false;
             AllowConstruction = true;
             AllowProgressionPurchases = true;
             AllowDemolition = true;
@@ -330,7 +312,6 @@ namespace airimayor
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "Connection" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "Permissions" },
-                { m_Setting.GetOptionGroupLocaleID(Setting.kBehaviorGroup), "Behavior" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "Agent" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. OpenCode launches opencode. Codex launches the installed codex-acp adapter. Sign in outside the game." },
@@ -347,10 +328,6 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestAcp)), "Test ACP" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestAcp)), "Starts the selected agent, asks for one sentence, and stops it." },
 
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoStart)), "Auto-start" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoStart)), "Start a turn on city load." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Continuous)), "Continue" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Continuous)), "Keep the external mayor working after each reply." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowConstruction)), "Construction" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "Place buildings, roads, zones, and transit lines, and replace a road's type." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowDemolition)), "Demolition" },

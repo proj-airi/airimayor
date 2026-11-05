@@ -17,7 +17,6 @@ namespace airimayor
                 { m_Setting.GetOptionTabLocaleID(Setting.kSection), "主要" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kConnectionGroup), "连接" },
                 { m_Setting.GetOptionGroupLocaleID(Setting.kAgentGroup), "权限" },
-                { m_Setting.GetOptionGroupLocaleID(Setting.kBehaviorGroup), "运行" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "代理" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "内置使用服务端地址和 API 密钥。OpenCode 启动 opencode。Codex 启动已安装的 codex-acp 适配器。登录在游戏外完成。" },
@@ -34,10 +33,6 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestAcp)), "测试 ACP" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestAcp)), "拉起当前代理，请它用一句话回答，然后结束。" },
 
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoStart)), "自动启动" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoStart)), "加载城市时开始一轮。" },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Continuous)), "持续运行" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Continuous)), "让外部市长在每次回复后继续工作。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowConstruction)), "修建" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "放置建筑、道路、分区和线路，以及更换路型。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowDemolition)), "拆除" },
