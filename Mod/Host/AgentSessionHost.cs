@@ -3,7 +3,7 @@ using airimayor.Agent;
 namespace airimayor.Host
 {
     /// <summary>
-    /// The loaded-city runtime. The UI system creates and clears it.
+    /// The loaded city's mayor session. The UI system creates and clears it.
     /// Mod unload disposes it if the UI system has not yet.
     /// </summary>
     internal static class AgentSessionHost

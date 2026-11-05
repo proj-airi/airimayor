@@ -1,5 +1,4 @@
 using System;
-using airimayor.Agent;
 using Xunit;
 
 namespace airimayor.Agent

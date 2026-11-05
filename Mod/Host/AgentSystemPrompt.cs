@@ -5,9 +5,7 @@ using System.Text.RegularExpressions;
 namespace airimayor.Host
 {
     /// <summary>
-    /// The full system prompt in one place: working style first, then the
-    /// city building playbook. Previously split across AgentLoop and
-    /// MayorPlaybook; merged so the sent bytes live in a single literal.
+    /// Working instructions and the city-building playbook.
     /// </summary>
     internal static class AgentSystemPrompt
     {

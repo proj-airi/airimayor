@@ -1,5 +1,4 @@
 using System;
-using System.Threading;
 using System.Threading.Tasks;
 using airimayor.Agent;
 using Xunit;
@@ -16,11 +15,12 @@ namespace airimayor.Tests
                 new SessionUpdate { Kind = "turn" });
 
             SessionTurnResult result = await SessionTurn.RunAsync(
-                session, "Reply in one sentence.", null, CancellationToken.None);
+                session, "Reply in one sentence.");
 
             Assert.False(result.Failed);
             Assert.Equal("Hello.", result.Reply);
-            Assert.Equal(1, session.Cancels);
+            Assert.Equal(0, session.Cancels);
+            Assert.Equal(0, session.Subscribers);
         }
 
         [Fact]
@@ -30,10 +30,12 @@ namespace airimayor.Tests
                 new SessionUpdate { Kind = "error", Text = "Model not configured." });
 
             SessionTurnResult result = await SessionTurn.RunAsync(
-                session, "Reply in one sentence.", null, CancellationToken.None);
+                session, "Reply in one sentence.");
 
             Assert.True(result.Failed);
             Assert.Equal("Model not configured.", result.Error);
+            Assert.Equal(0, session.Cancels);
+            Assert.Equal(0, session.Subscribers);
         }
 
         private sealed class ScriptedSession : IAgentSession
@@ -48,6 +50,7 @@ namespace airimayor.Tests
             public int Cancels { get; private set; }
 
             public event Action<SessionUpdate> Updated;
+            public int Subscribers => Updated?.GetInvocationList().Length ?? 0;
 
             public SessionRecord Record => null;
 

@@ -4,7 +4,7 @@ namespace airimayor.Agent
 {
     /// <summary>
     /// The chat's session: prompt, cancel, and the update stream.
-    /// The built-in runtime and an external ACP head both sit here.
+    /// Implemented by the built-in and external mayor sessions.
     /// </summary>
     public interface IAgentSession : IDisposable
     {

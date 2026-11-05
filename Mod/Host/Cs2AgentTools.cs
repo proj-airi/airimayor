@@ -9,7 +9,7 @@ namespace airimayor.Host
 {
     /// <summary>
     /// City tools behind <see cref="IAgentTools"/>. Permission filtering
-    /// lives here; the runtime never names city tools.
+    /// lives here.
     /// </summary>
     internal sealed class Cs2AgentTools : IAgentTools
     {

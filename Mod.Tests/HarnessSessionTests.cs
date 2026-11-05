@@ -39,19 +39,28 @@ public sealed class HarnessSessionTests
         return new ClientSession(() => client, tools ?? new Tools(), "City mayor instructions", window, output, true, new SessionRecordOptions { Root = Records });
     }
 
-    private static async Task Prompt(ClientSession session, string text)
+    private static Task Prompt(ClientSession session, string text) => FinishTurn(session, () => session.Prompt(text));
+    private static Task Stop(ClientSession session) => FinishTurn(session, session.Cancel);
+
+    private static async Task FinishTurn(ClientSession session, Action action)
     {
-        int turns = 0;
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void Observe(SessionUpdate update)
         {
             if (update.Kind == "turn")
-                Interlocked.Increment(ref turns);
+                done.TrySetResult();
         }
 
         session.Updated += Observe;
-        session.Prompt(text);
-        await Wait(() => turns > 0);
-        session.Updated -= Observe;
+        try
+        {
+            action();
+            await done.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            session.Updated -= Observe;
+        }
     }
 
     [Fact]
@@ -72,8 +81,7 @@ public sealed class HarnessSessionTests
         session.Prompt("first");
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         session.Prompt("steer");
-        session.Cancel();
-        await Wait(() => session.Status == AgentStatus.Idle);
+        await Stop(session);
         await Task.Delay(100);
         Assert.True(client.Calls == 1, "pending steering restarted the stopped run");
         await Prompt(session, "next");
@@ -91,7 +99,7 @@ public sealed class HarnessSessionTests
     public async Task Connection_failure_reaches_chat_and_the_record_closes()
     {
         using var session = new ClientSession(() => throw new InvalidOperationException("connection failed"), new Tools(), "City mayor instructions", 128000, 16384, true, new SessionRecordOptions { Root = Records });
-        var turn = await SessionTurn.RunAsync(session, "hello", null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+        var turn = await SessionTurn.RunAsync(session, "hello").WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(turn.Failed);
         Assert.Equal("connection failed", turn.Error);
         await session.CloseAsync();
@@ -234,8 +242,7 @@ public sealed class HarnessSessionTests
         using var session = Open(client, tools);
         session.Prompt("first");
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        session.Cancel();
-        await Wait(() => session.Status == AgentStatus.Idle);
+        await Stop(session);
         Assert.True(tools.Cancelled, "tool not cancelled");
         await Prompt(session, "next");
         Assert.True(tools.Count == 1, "remaining batch executed");
@@ -261,8 +268,7 @@ public sealed class HarnessSessionTests
         using var session = Open(client);
         session.Prompt("first");
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        session.Cancel();
-        await Wait(() => session.Status == AgentStatus.Idle);
+        await Stop(session);
         await Prompt(session, "next");
         var result = client.LastInput.SelectMany(item => item.Contents).OfType<FunctionResultContent>().Single(item => item.CallId == "completed");
         Assert.True(result.Result as string == "{}", "completed result replaced by interruption");
@@ -286,10 +292,11 @@ public sealed class HarnessSessionTests
         using var session = Open(client);
         session.Prompt("original commitment");
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        session.Cancel();
-        await Wait(() => session.Status == AgentStatus.Idle);
+        await Stop(session);
         await Prompt(session, "next");
-        Assert.True(client.LastInput.Any(item => item.Text == "original commitment"), "first prompt lost");
+        Assert.Equal(2, client.Calls);
+        Assert.True(client.LastInput.Any(item => item.Text == "original commitment"), "first prompt lost: " +
+            string.Join("\n", client.LastInput.Select(item => item.Role + ":" + item.Text)));
         await session.CloseAsync();
     }
 
@@ -456,8 +463,7 @@ public sealed class HarnessSessionTests
         session.Prompt("delegate");
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await childEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        session.Cancel();
-        await Wait(() => session.Status == AgentStatus.Idle);
+        await Stop(session);
         Assert.True(!childCancelled, "root Stop cancelled native child");
         await Prompt(session, "continue");
         var spawn = client.LastInput.SelectMany(item => item.Contents).OfType<FunctionResultContent>().Single(item => item.CallId == "spawn");

@@ -248,9 +248,7 @@ namespace airimayor
                     {
                         SessionTurnResult turn = await SessionTurn.RunAsync(
                             session,
-                            "Reply in one sentence.",
-                            null,
-                            CancellationToken.None);
+                            "Reply in one sentence.");
                         message = Notice(turn);
                     }
                 }

@@ -254,6 +254,7 @@ namespace airimayor.Agent
                     if (!history.Any(item => item.MessageId == input.MessageId) && !pending.Any(item => item.MessageId == input.MessageId))
                         history.Add(input);
                 m_History.SetMessages(m_Session, history);
+                m_Session.StateBag.TryRemoveValue(nameof(ContextWindowCompactionStrategy));
             }
             finally { m_Gate.Release(); }
         }

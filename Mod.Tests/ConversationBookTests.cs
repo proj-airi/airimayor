@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using airimayor.Agent;
 using Xunit;
 
 namespace airimayor.Agent

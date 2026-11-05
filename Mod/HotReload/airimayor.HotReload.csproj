@@ -15,8 +15,7 @@
 
   <ItemGroup>
     <Reference Include="airimayor">
-      <!-- Compile against the exact ILRepacked host identity that the running
-           game loaded. The unmerged bin DLL has a different assembly name. -->
+      <!-- Compile against the deployed host with its merged dependencies. -->
       <HintPath>$(LocalModsPath)\airimayor\airimayor.dll</HintPath>
       <Private>false</Private>
     </Reference>
@@ -29,11 +28,11 @@
     <Reference Include="Colossal.UI"><Private>false</Private></Reference>
     <Reference Include="Colossal.Localization"><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><Private>false</Private></Reference>
     <Reference Include="UnityEngine"><Private>false</Private></Reference>
     <Reference Include="Unity.Collections"><Private>false</Private></Reference>
     <Reference Include="Unity.Entities"><Private>false</Private></Reference>
     <Reference Include="Unity.Mathematics"><Private>false</Private></Reference>
-    <Reference Include="Newtonsoft.Json"><Private>false</Private></Reference>
   </ItemGroup>
 
   <Target Name="DeployHotReloadPayload" AfterTargets="Build">
@@ -43,12 +42,10 @@
            mods. The host loads this payload explicitly from bytes, so keep a
            non-.dll extension to prevent a second, unintended mod load at boot. -->
       <HotReloadHandlersPayload>$(HotReloadDir)\RequestHandlers.payload</HotReloadHandlersPayload>
-      <LegacyHotReloadHandlersDll>$(HotReloadDir)\RequestHandlers.dll</LegacyHotReloadHandlersDll>
     </PropertyGroup>
     <MakeDir Directories="$(HotReloadDir)" />
-    <Delete Files="$(LegacyHotReloadHandlersDll)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(HotReloadHandlersPayload)" />
-    <Copy SourceFiles="..\Agent\ToolCatalog.json" DestinationFiles="$(HotReloadDir)\ToolCatalog.json" />
+    <Copy SourceFiles="..\Host\ToolCatalog.json" DestinationFiles="$(HotReloadDir)\ToolCatalog.json" />
     <Message Text="Hot-reload payload deployed to $(HotReloadDir)" Importance="high" />
   </Target>
 
