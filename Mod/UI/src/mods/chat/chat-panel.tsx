@@ -203,33 +203,18 @@ export const ChatPanel = ({ children }: { children?: ReactNode }) => {
             focusKey={FOCUS_AUTO}
             className={styles.panelColumn}
             onClose={() => setPanelOpen(false)}
-                footer={
-                  <div>
-                    {chat.queued.length > 0 ? (
-                      <div className={styles.statusBar}>
-                        <span className={styles.statusText}>
-                          {`${chat.queued.length} queued · ${chat.queued[chat.queued.length - 1].text.slice(0, 60)}`}
-                        </span>
-                      </div>
-                    ) : null}
-                    <Composer
-                      loading={chat.session === ""}
-                      busy={chat.busy}
-                      onSend={(text) => chat.send(text)}
-                      onInterrupt={() => chat.interrupt()}
-                    />
-                  </div>
-                }
-              >
-                <StatusBar
-                  status={chat.status}
-                  busy={chat.busy}
-                  pending={chat.pending}
-                  note={chat.note}
-                  context={chat.context}
-                />
-                <PlanStrip plan={chat.plan} />
-                <MessageList lines={chat.lines} busy={chat.busy} />
+            footer={
+              <Composer
+                loading={chat.session === ""}
+                busy={chat.busy}
+                onSend={chat.send}
+                onInterrupt={chat.interrupt}
+              />
+            }
+          >
+            <StatusBar status={chat.status} busy={chat.busy} pending={chat.pending} />
+            <PlanStrip plan={chat.plan} />
+            <MessageList lines={chat.lines} busy={chat.busy} />
           </Panel>
           {RESIZE_HANDLES.map((handle) => (
             <span

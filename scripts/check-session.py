@@ -99,30 +99,8 @@ def check_record(directory, report, label):
         report.fail(label, f"prompt blob {prompt['blob']} is missing")
 
     timeline = read_lines(directory / "timeline.jsonl")
-    model_calls = read_lines(directory / "model-calls.jsonl")
     check_envelope(timeline, report, f"{label}/timeline.jsonl")
-    check_envelope(model_calls, report, f"{label}/model-calls.jsonl")
-    seqs = [line["seq"] for _, line in timeline] + [line["seq"] for _, line in model_calls]
-    if len(seqs) != len(set(seqs)):
-        report.fail(label, "a seq appears in both logs")
-
-    model_call_ids = set()
-    for number, line in model_calls:
-        data = line["data"]
-        model_call_ids.add(data.get("id"))
-        where = f"{label}/model-calls.jsonl:{number}"
-        catalog = data.get("request", {}).get("catalog")
-        if catalog and not (directory / "catalogs" / f"{catalog}.json").exists():
-            report.fail(where, f"catalog {catalog} is missing")
-        for message in data.get("request", {}).get("messages", []):
-            for part in message.get("content", []):
-                if part.get("blob") and not (directory / part["blob"]).exists():
-                    report.fail(where, f"blob {part['blob']} is missing")
-        status = data.get("outcome", {}).get("status")
-        if status != "completed":
-            report.note(where, f"model call {data.get('id')} ended {status}")
-
-    check_timeline(directory, timeline, model_call_ids, facts, report, label)
+    check_timeline(directory, timeline, facts, report, label)
 
     conversations = directory / "conversations"
     if conversations.exists():
@@ -149,7 +127,7 @@ def check_envelope(lines, report, label):
             last_frame = frame
 
 
-def check_timeline(directory, timeline, model_call_ids, facts, report, label):
+def check_timeline(directory, timeline, facts, report, label):
     started_calls = {}
     open_turns = {}
     for number, line in timeline:
@@ -166,10 +144,6 @@ def check_timeline(directory, timeline, model_call_ids, facts, report, label):
         elif kind == "function":
             started_calls.pop(call, None)
             check_function(directory, where, line, data, report)
-        elif kind == "generation":
-            model_call = data.get("modelCall")
-            if model_call and model_call not in model_call_ids:
-                report.fail(where, f"generation names model call {model_call}, which is not in model-calls.jsonl")
     for call, (where, tool) in started_calls.items():
         report.fail(where, f"{tool} call {call} started and never ended")
     if "ended" in facts:

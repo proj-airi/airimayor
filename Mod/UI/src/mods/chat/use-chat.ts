@@ -1,28 +1,20 @@
 // Single owner of chat view state. Rule: a fresh mount hydrates the
 // transcript from the state snapshot; afterwards lines only grow via live
 // events, same-session snapshots only patch the chrome (status/busy/pending/
-// context/plan). This keeps the two C# sources from diverging in the UI.
+// plan). This keeps the two C# sources from diverging in the UI.
 
 import { useEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { agentEvents$, agentState$, interruptTurn, sendChatMessage } from "mods/bindings";
-import type { AgentContextInfo, AgentSnapshot, AgentWireEvent, ChatLine, PlanEntry } from "./chat-types";
+import type { AgentSnapshot, AgentWireEvent, ChatLine, PlanEntry } from "./chat-types";
 import { applyWireEvent, emptyTranscript, hydrateTranscript } from "./transcript";
-
-export interface QueuedMessage {
-  key: number;
-  text: string;
-}
 
 export interface ChatModel {
   session: string;
   lines: ChatLine[];
-  queued: QueuedMessage[];
   status: string;
   busy: boolean;
   pending: number;
-  note: string;
-  context: AgentContextInfo | null;
   plan: PlanEntry[] | null;
   send: (text: string) => void;
   interrupt: () => void;
@@ -95,16 +87,12 @@ const parseEvent = (json: string): AgentWireEvent | null => {
 export const useChat = (): ChatModel => {
   const [session, setSession] = useState("");
   const [lines, setLines] = useState<ChatLine[]>(emptyTranscript.lines);
-  const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [status, setStatus] = useState("Idle");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(0);
-  const [note, setNote] = useState("");
-  const [context, setContext] = useState<AgentContextInfo | null>(null);
   const [plan, setPlan] = useState<PlanEntry[] | null>(null);
   const sessionRef = useRef("");
   const nextIdRef = useRef(0);
-  const queuedRef = useRef<QueuedMessage[]>([]);
   const snapshotJson = useValue(agentState$);
   const subscribed = useRef(false);
 
@@ -126,7 +114,6 @@ export const useChat = (): ChatModel => {
       switch (event.kind) {
         case "user":
           setBusy(true);
-          setNote("");
           break;
         case "delta":
           setBusy(true);
@@ -138,22 +125,13 @@ export const useChat = (): ChatModel => {
           const next = event.status ?? event.text;
           setStatus(next);
           setBusy(isActiveStatus(next));
-          if (next === "Idle" || next === "Interrupted" || next === "Error") {
-            setNote("");
-          }
           break;
         }
-        case "progress":
-          setNote(event.text);
-          break;
         case "error":
           setBusy(false);
           break;
         case "turn":
           setBusy(false);
-          setNote("");
-          break;
-        case "compact":
           break;
         case "plan":
           setPlan(parsePlan(event.text));
@@ -171,19 +149,15 @@ export const useChat = (): ChatModel => {
     if (!snapshot) {
       return;
     }
-      if (!snapshot.session) {
+    if (!snapshot.session) {
       if (sessionRef.current) {
         sessionRef.current = "";
         nextIdRef.current = 0;
-        queuedRef.current = [];
         setSession("");
-        setQueued([]);
         setLines([]);
         setStatus("Idle");
         setBusy(false);
         setPending(0);
-        setNote("");
-        setContext(null);
         setPlan(null);
       }
       return;
@@ -196,7 +170,6 @@ export const useChat = (): ChatModel => {
       setStatus(snapshot.status);
       setBusy(snapshot.busy);
       setPending(snapshot.pendingInputs ?? 0);
-      setContext(snapshot.context ?? null);
       setPlan(parsePlan(snapshot.plan));
       setLines(hydrated.lines);
       return;
@@ -204,19 +177,15 @@ export const useChat = (): ChatModel => {
     setStatus(snapshot.status);
     setBusy(snapshot.busy);
     setPending(snapshot.pendingInputs ?? 0);
-    setContext(snapshot.context ?? null);
     setPlan(parsePlan(snapshot.plan));
   }, [snapshotJson]);
 
   return {
     session,
     lines,
-    queued,
     status,
     busy,
     pending,
-    note,
-    context,
     plan,
     send: (text: string) => {
       if (text.trim().length === 0 || !sessionRef.current) {

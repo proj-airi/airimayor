@@ -4,21 +4,11 @@ import type { PointedPlace } from "./place";
 // The transcript is a flat append-only log; snapshots only hydrate it on
 // session switch, live events append to it. See transcript.ts.
 
-export type AgentStatusText = "Idle" | "Thinking" | "Working" | "Interrupted" | "Error";
-
 export interface StateMessage {
   role: string;
   text: string;
   tool: string | null;
   places?: unknown;
-}
-
-export interface AgentContextInfo {
-  windowTokens: number;
-  estimatedTokens: number;
-  compactAtTokens: number;
-  source: string;
-  vision: boolean;
 }
 
 export type PlanPriority = "high" | "medium" | "low";
@@ -35,7 +25,6 @@ export interface AgentSnapshot {
   busy: boolean;
   pendingInputs: number;
   session: string;
-  context?: AgentContextInfo;
   plan?: unknown;
   messages: StateMessage[];
 }
@@ -46,9 +35,7 @@ export type WireEventKind =
   | "status"
   | "user"
   | "error"
-  | "compact"
   | "turn"
-  | "progress"
   | "plan";
 
 export interface AgentWireEvent {

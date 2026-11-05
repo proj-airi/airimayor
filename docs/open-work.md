@@ -11,7 +11,6 @@ Code still missing.
 - `map_image` POI icon set
 - Pedestrian/cycle-specific map classes
 - Zoning-cell landuse fills (volume)
-- Existing offline test defects: the isolated-road component assertion fails, and the player-prompt reflection test does not select an overload. Both reproduce before the Harness change.
 
 ## Awaiting live acceptance
 

@@ -48,17 +48,22 @@ namespace CS2MCP
         }
 
         [Fact]
-        public void Road_without_outside_connection_is_an_isolated_component()
+        public void Smaller_road_component_without_outside_connection_is_isolated()
         {
             TypedNetworkEdge[] edges =
             {
                 Road(1, 10, 11, Xz(0f, 0f), Xz(20f, 0f)),
                 Road(2, 11, 12, Xz(20f, 0f), Xz(40f, 0f)),
+                Road(3, 20, 21, Xz(0f, 100f), Xz(20f, 100f)),
+                Road(4, 21, 22, Xz(20f, 100f), Xz(40f, 100f)),
+                Road(5, 22, 23, Xz(40f, 100f), Xz(60f, 100f)),
             };
 
             List<NetworkTopologyFinding> findings = TypedNetworkMath.FindRoadIssues(edges);
 
-            Assert.Contains(findings, f => f.Class == NetworkTopologyClass.IsolatedRoad && f.ComponentSize == 2);
+            NetworkTopologyFinding isolated = Assert.Single(findings, f => f.Class == NetworkTopologyClass.IsolatedRoad);
+            Assert.Equal(2, isolated.ComponentSize);
+            Assert.Equal(0, isolated.EdgeA);
         }
 
         [Fact]

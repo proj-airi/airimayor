@@ -217,8 +217,6 @@ export function applyWireEvent(
       }
       return push(transcript, settled, (id) => ({ id, kind: "error", text }));
     }
-    case "progress":
-    case "compact":
     case "plan":
     default: {
       return transcript;

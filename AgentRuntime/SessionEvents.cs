@@ -14,7 +14,7 @@ namespace AgentRuntime
     /// <summary>Client-facing chat event.</summary>
     public sealed class SessionUpdate
     {
-        public string Kind; // status|delta|tool|user|error|compact|turn|progress|plan
+        public string Kind; // status|delta|tool|user|error|turn|plan
         public string Text;
         public string Tool;
         public AgentStatus Status;

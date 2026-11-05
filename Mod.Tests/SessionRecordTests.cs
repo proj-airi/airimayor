@@ -93,11 +93,15 @@ namespace airimayor.Tests
 
             record.DeclareGap("model calls are not observable");
             record.DeclareGap("model calls are not observable");
+            string blob = record.KeepBlob("city instructions");
+            record.Describe("prompt", new JsonObject { ["blob"] = blob });
             record.Dispose();
 
             JsonObject closed = (JsonObject)JsonNode.Parse(File.ReadAllText(sessionFile));
             Assert.NotNull(closed["ended"]["utc"]);
             Assert.Single((JsonArray)closed["knownGaps"]);
+            Assert.Equal(blob, (string)closed["prompt"]["blob"]);
+            Assert.Equal("city instructions", File.ReadAllText(Path.Combine(record.Directory, blob)));
         }
 
         [Fact]
@@ -106,7 +110,7 @@ namespace airimayor.Tests
             using (var parent = new SessionRecord("root", new SessionRecordOptions
             {
                 Root = m_Root,
-                Facts = new JsonObject { ["head"] = "built-in" },
+                Facts = new JsonObject { ["head"] = "OpenCode" },
             }, null))
             {
                 parent.TurnStart("t9", "delegate");
@@ -121,7 +125,7 @@ namespace airimayor.Tests
                 Assert.Equal("root", (string)facts["parent"]["session"]);
                 Assert.Equal("t9", (string)facts["parent"]["turn"]);
                 Assert.Equal("c1", (string)facts["parent"]["conversation"]);
-                Assert.Equal("built-in", (string)facts["head"]);
+                Assert.Equal("OpenCode", (string)facts["head"]);
             }
         }
 

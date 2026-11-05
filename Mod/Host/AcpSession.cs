@@ -73,7 +73,7 @@ namespace airimayor.Host
                 ["blob"] = m_Record.KeepBlob(instructions),
                 ["chars"] = (instructions ?? "").Length,
             });
-            m_Record.DeclareGap("the external mayor's model calls are not observable; model-calls.jsonl stays empty");
+            m_Record.DeclareGap("the external mayor's model calls are not observable");
             m_Record.DeclareGap("the external mayor's turns report a stop reason but no token usage");
             m_Record.DeclareGap("an external tool row id differs from its city tool call id; pair them by tool name and arguments");
             m_Previews = new ToolPreviewLatch(OnPreviewMatched);

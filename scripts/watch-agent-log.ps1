@@ -117,10 +117,6 @@ function Format-EventCompact([pscustomobject]$e, [string]$head) {
             $err = if ($d.error) { ' | ' + (Expand-JsonBlob $d.error) } else { '' }
             return ($head + ' ' + $d.tool + ' [' + $ok + ' ' + $d.elapsedMs + 'ms]' + $err)
         }
-        'generation' {
-            $names = @($d.toolCalls | ForEach-Object { $_.name }) -join ','
-            return ($head + ' ' + $d.model + ' tools=' + $names + ' (' + $d.elapsedMs + 'ms)')
-        }
         'turn.start' {
             return ($head + ' user=' + (Limit-Text ([string]$d.user) 120))
         }
@@ -157,19 +153,6 @@ function Show-Event([pscustomobject]$e) {
                 Write-ContextBlock -Title 'result' -Body (Format-Jsonish $d.result $ResultChars) -Color Gray
             }
         }
-        'generation' {
-            Write-Host ($head + ' ' + $d.model + ' in=' + $d.usage.input + ' out=' + $d.usage.output + ' (' + $d.elapsedMs + 'ms) model call ' + $d.modelCall) -ForegroundColor Cyan
-            if ($d.reasoning) {
-                Write-ContextBlock -Title 'reasoning' -Body (Limit-Text ([string]$d.reasoning) $InputChars) -Color DarkYellow
-            }
-            $calls = @($d.toolCalls)
-            if ($calls.Count -gt 0) {
-                $callText = ($calls | ForEach-Object {
-                        $_.name + ' ' + (Format-Jsonish $_.arguments 240)
-                    }) -join "`n"
-                Write-ContextBlock -Title 'toolCalls' -Body $callText -Color White
-            }
-        }
         'turn.start' {
             Write-Host $head -ForegroundColor Blue
             Write-ContextBlock -Title 'user' -Body ([string]$d.user) -Color White
@@ -179,7 +162,7 @@ function Show-Event([pscustomobject]$e) {
                 Write-Host ($head + ' stop=' + $d.stopReason + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
                 Write-ContextBlock -Title 'reply' -Body (Limit-Text ([string]$d.reply) $InputChars) -Color White
             } else {
-                Write-Host ($head + ' gens=' + $d.generations + ' fns=' + $d.functions + ' (' + $d.elapsedMs + 'ms)') -ForegroundColor DarkBlue
+                Write-Host $head -ForegroundColor DarkBlue
             }
         }
         'error' {

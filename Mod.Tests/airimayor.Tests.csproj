@@ -6,12 +6,10 @@
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>$(NoWarn);MAAI001;MEAI001;OPENAI001</NoWarn>
     <GameManagedPath>$([System.Environment]::GetEnvironmentVariable('CSII_MANAGEDPATH', 'EnvironmentVariableTarget.User'))</GameManagedPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.ClientModel" Version="1.14.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
@@ -20,7 +18,7 @@
     </PackageReference>
   </ItemGroup>
 
-    <ItemGroup>
+  <ItemGroup>
     <Compile Include="..\Mod\CS2MCP\MapRgb.cs" Link="Production\MapRgb.cs" />
     <Compile Include="..\Mod\CS2MCP\MapImageModel.cs" Link="Production\MapImageModel.cs" />
     <Compile Include="..\Mod\CS2MCP\MapStrokeRaster.cs" Link="Production\MapStrokeRaster.cs" />

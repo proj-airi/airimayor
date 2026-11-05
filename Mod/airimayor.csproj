@@ -2,6 +2,7 @@
 
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
+		<NoWarn>$(NoWarn);OPENAI001</NoWarn>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
@@ -95,6 +96,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="dotacp.client" Version="2026.7.19" />
+		<PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.0" />
 	</ItemGroup>
 
 	<ItemGroup>

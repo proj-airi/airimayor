@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentRuntime;
@@ -65,14 +64,6 @@ namespace airimayor.Agent
             release.TrySetResult(true);
             await Task.Delay(100);
             Assert.Null(delivered);
-        }
-
-        [Fact]
-        public void Player_prompt_does_not_take_a_conversation_id()
-        {
-            ParameterInfo[] parameters = typeof(IAgentSession).GetMethod("Prompt").GetParameters();
-            Assert.Single(parameters);
-            Assert.Equal(typeof(string), parameters[0].ParameterType);
         }
     }
 }

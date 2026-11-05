@@ -6,7 +6,9 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace AgentRuntime
 {
@@ -28,8 +30,11 @@ namespace AgentRuntime
         private Task m_Ready;
         private CancellationTokenSource m_RunCancellation;
         private Task m_Active;
+        private AIAgent m_Agent;
+        private Microsoft.Agents.AI.AgentSession m_Session;
+        private InMemoryChatHistoryProvider m_History;
+        private MessageInjectingChatClient m_Injection;
 
-        internal NativeHead Head { get; private set; }
         public SessionRecord Record { get; }
         public AgentStatus Status => m_View.Status;
         public event Action<SessionUpdate> Updated
@@ -50,13 +55,39 @@ namespace AgentRuntime
             {
                 m_Client = openClient();
                 var logger = new HostDiagnostics(Record, warn);
-                var child = new NativeHead(m_Client, m_Functions.List(vision), instructions,
-                    windowTokens, outputTokens, logger, name: "inspector");
-                Head = new NativeHead(m_Client, m_Functions.List(vision), instructions,
-                    windowTokens, outputTokens, logger, new[] { child.Agent });
-                await Head.OpenAsync(m_Lifetime.Token).ConfigureAwait(false);
+                var child = CreateAgent("inspector", vision, instructions, windowTokens, outputTokens, logger, null, out _);
+                m_Agent = CreateAgent("mayor", vision, instructions, windowTokens, outputTokens, logger, new[] { child }, out m_History);
+                m_Session = await m_Agent.CreateSessionAsync(m_Lifetime.Token).ConfigureAwait(false);
+                m_Injection = m_Agent.GetService<MessageInjectingChatClient>();
             };
             m_Loop = Task.Run(LoopAsync);
+        }
+
+        private AIAgent CreateAgent(string name, bool vision, string instructions, int window, int outputTokens,
+            ILoggerFactory logger, IEnumerable<AIAgent> children, out InMemoryChatHistoryProvider history)
+        {
+            var compaction = new ContextWindowCompactionStrategy(window, outputTokens);
+            history = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions { ChatReducer = compaction.AsChatReducer() });
+            var agent = new HarnessAgent(m_Client, new HarnessAgentOptions
+            {
+                Name = name,
+                HarnessInstructions = "",
+                DisableWebSearch = true,
+                DisableFileMemory = true,
+                DisableAgentSkillsProvider = true,
+                DisableAgentModeProvider = true,
+                DisableToolAutoApproval = true,
+                DisableApprovalResponseBinding = true,
+                DisableApprovalNotRequiredFunctionBypassing = true,
+                DisableOpenTelemetry = true,
+                ChatHistoryProvider = history,
+                CompactionStrategy = compaction,
+                MaxContextWindowTokens = window,
+                MaxOutputTokens = outputTokens,
+                ChatOptions = new ChatOptions { Instructions = instructions, Tools = m_Functions.List(vision), MaxOutputTokens = outputTokens },
+                BackgroundAgents = children,
+            }, logger);
+            return CancelledRunRecovery.Wrap(agent, history);
         }
 
         public void Prompt(string text) => Prompt(text, text, null);
@@ -78,7 +109,7 @@ namespace AgentRuntime
             {
                 if (m_Ready == null) m_Ready = m_Open();
                 await m_Ready.ConfigureAwait(false);
-                await Head.Injection.EnqueueMessagesAsync(Head.Session, new[] { input }, m_Lifetime.Token).ConfigureAwait(false);
+                await m_Injection.EnqueueMessagesAsync(m_Session, new[] { input }, m_Lifetime.Token).ConfigureAwait(false);
                 if (m_Active != null && !m_Active.IsCompleted && !m_RunCancellation.IsCancellationRequested)
                     m_CurrentInput.Add(input);
                 else
@@ -114,7 +145,7 @@ namespace AgentRuntime
                     try
                     {
                         if (!m_Wake.Reader.TryRead(out _)) continue;
-                        var input = await Head.Injection.GetPendingMessagesAsync(Head.Session, m_Lifetime.Token).ConfigureAwait(false);
+                        var input = await m_Injection.GetPendingMessagesAsync(m_Session, m_Lifetime.Token).ConfigureAwait(false);
                         if (input.Count == 0) continue;
                         m_CurrentInput.Clear();
                         m_CurrentInput.AddRange(input);
@@ -128,7 +159,7 @@ namespace AgentRuntime
                     {
                         // A prompt can arrive after the SDK's final queue check. Stop leaves it for the next player prompt.
                         if (!m_RunCancellation.IsCancellationRequested &&
-                            (await Head.Injection.GetPendingMessagesAsync(Head.Session).ConfigureAwait(false)).Count > 0)
+                            (await m_Injection.GetPendingMessagesAsync(m_Session).ConfigureAwait(false)).Count > 0)
                             m_Wake.Writer.TryWrite(true);
                         m_Active = null;
                         m_RunCancellation.Dispose();
@@ -143,7 +174,8 @@ namespace AgentRuntime
             {
                 try
                 {
-                    if (Head != null) await Head.ReleaseAsync().ConfigureAwait(false);
+                    if (m_Session != null)
+                        await m_Agent.GetService<BackgroundAgentsProvider>().ReleaseSessionAsync(m_Session).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -160,7 +192,7 @@ namespace AgentRuntime
             var calls = new Dictionary<string, FunctionCallContent>();
             try
             {
-                await foreach (var update in Head.RunAsync(Array.Empty<ChatMessage>(), cancellationToken).ConfigureAwait(false))
+                await foreach (var update in m_Agent.RunStreamingAsync(Array.Empty<ChatMessage>(), m_Session, cancellationToken: cancellationToken).ConfigureAwait(false))
                 {
                     foreach (var content in update.Contents)
                     {
@@ -172,7 +204,7 @@ namespace AgentRuntime
                             if (!m_Functions.Contains(call.Name))
                                 m_View.Apply(new SessionUpdate
                                 {
-                                    Kind = "tool", CallId = m_Functions.Id(Head.Session, call.CallId), Tool = call.Name,
+                                    Kind = "tool", CallId = m_Functions.Id(m_Session, call.CallId), Tool = call.Name,
                                     Text = JsonSerializer.Serialize(call.Arguments), Status = AgentStatus.Working,
                                 });
                         }
@@ -181,7 +213,7 @@ namespace AgentRuntime
                         {
                             m_View.Apply(new SessionUpdate
                             {
-                                Kind = "tool", CallId = m_Functions.Id(Head.Session, result.CallId), Tool = original.Name,
+                                Kind = "tool", CallId = m_Functions.Id(m_Session, result.CallId), Tool = original.Name,
                                 Text = JsonSerializer.Serialize(original.Arguments), Result = ResultText(result.Result),
                                 Status = result.Exception == null ? AgentStatus.Idle : AgentStatus.Error,
                             });
@@ -199,7 +231,7 @@ namespace AgentRuntime
             }
             finally
             {
-                var todos = await Head.Agent.GetService<TodoProvider>().GetAllTodosAsync(Head.Session).ConfigureAwait(false);
+                var todos = await m_Agent.GetService<TodoProvider>().GetAllTodosAsync(m_Session).ConfigureAwait(false);
                 m_View.Apply(new SessionUpdate
                 {
                     Kind = "plan", Text = SessionPlan.Format(todos.Select(todo =>
@@ -216,12 +248,12 @@ namespace AgentRuntime
             await m_Gate.WaitAsync().ConfigureAwait(false);
             try
             {
-                var history = Head.History.GetMessages(Head.Session).ToList();
-                var pending = await Head.Injection.GetPendingMessagesAsync(Head.Session).ConfigureAwait(false);
+                var history = m_History.GetMessages(m_Session).ToList();
+                var pending = await m_Injection.GetPendingMessagesAsync(m_Session).ConfigureAwait(false);
                 foreach (var input in m_CurrentInput)
                     if (!history.Any(item => item.MessageId == input.MessageId) && !pending.Any(item => item.MessageId == input.MessageId))
                         history.Add(input);
-                Head.History.SetMessages(Head.Session, history);
+                m_History.SetMessages(m_Session, history);
             }
             finally { m_Gate.Release(); }
         }

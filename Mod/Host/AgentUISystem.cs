@@ -279,7 +279,6 @@ namespace airimayor.Host
             if (agentEvent.Kind == "user" ||
                 agentEvent.Kind == "error" ||
                 agentEvent.Kind == "turn" ||
-                agentEvent.Kind == "compact" ||
                 agentEvent.Kind == "tool" ||
                 agentEvent.Kind == "delta" ||
                 agentEvent.Kind == "plan")
