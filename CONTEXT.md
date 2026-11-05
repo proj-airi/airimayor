@@ -1,6 +1,6 @@
 # AIRI Mayor
 
-The in-game AI mayor: a Gameface chat UI talks to a C# loop that enqueues construction and city tools onto the simulation thread. The default mayor runs in the game and uses an API key. An optional external mayor is a separate agent process.
+The in-game AI mayor: a Gameface chat UI talks to a mayor that applies city work through the simulation thread. The default mayor runs in the game and uses an API key. An optional external mayor is a separate agent process.
 
 ## Language
 
@@ -31,19 +31,19 @@ Reading and setting the simulation clock. `get_simulation` reads whether the cit
 _Avoid_: forced pause as the product runtime, polling, a nested overview/problems digest on the advance result, waitedMs, SimWait internals
 
 **Context budget**:
-How many tokens the loop treats as the window. Always the player-set WindowTokens; the loop never parses the model name. The request shape follows the player-set API kind (Chat Completions or Responses).
+The model conversation's token capacity, chosen by the player to match the model's window.
 _Avoid_: Endpoint, provider, or model name as the source of the window
 
 **Compaction**:
-Summarizing older turns when estimated tokens reach the compact threshold.
+Reducing older conversation detail to keep current city work within the context budget.
 _Avoid_: deleting the session, starting a new chat
 
 **Owned conversation**:
-A conversation the current chat opened for one task. The final text comes back on this chat. The player cannot address it.
+A conversation the external mayor opened for one task. The final text comes back on this chat. The player cannot address it.
 _Avoid_: a second chat, the player sending a message to that conversation, a conversation this client does not own, a follow-up, reading or cancelling it as its own tool
 
 **Session record**:
-The directory one chat session leaves behind as evidence: its once-only facts, its timeline, its model calls, the files its tool calls returned, and the records of the conversations it owned. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
+The directory one chat session leaves behind as evidence: its once-only facts, timeline, city-tool results and returned files. Additional model and conversation evidence depends on what that mayor can expose. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
 _Avoid_: agent log, timeline file (the timeline is one part), telemetry, a set of files gathered by hand for acceptance
 
 **Write evidence**:
@@ -51,8 +51,12 @@ The city ledger read before and after a write: treasury, development points, bui
 _Avoid_: a snapshot on the write result, a retry trigger, proof while the simulation runs
 
 **Plan**:
-The one list of steps declared with `set_plan`. Each step has content, a priority (high, medium, or low), and a status (pending, in progress, or completed). Only another `set_plan` replaces the whole list; player messages and autonomous continuation leave it in place.
+The mayor's list of city steps and their completion. The player sees the current list beside the chat; a player message can constrain it without clearing it.
 _Avoid_: a statutory plan, `goal` and `success` as the plan, compact JSON as the live plan, gating the tool catalog, the plan prompting a time advance, a live note as the plan, several plans at once
+
+**Background task**:
+City work the built-in mayor delegates while it continues the root conversation. The mayor retrieves the outcome when needed. Stop leaves that work running; leaving the city closes it. The player addresses the root conversation.
+_Avoid_: a second player chat, an automatic report that wakes the root conversation
 
 ### Construction
 

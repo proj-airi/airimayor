@@ -67,7 +67,7 @@ namespace airimayor.Tests
             using (var record = new SessionRecord("s2", new SessionRecordOptions { Root = m_Root }, null))
             {
                 directory = record.Directory;
-                record.Function("call-2", "set_plan", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
+                record.Function("call-2", "todos_add", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
             }
 
             JsonObject line = Lines(Path.Combine(directory, SessionRecord.TimelineFile))[0];

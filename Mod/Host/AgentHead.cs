@@ -34,12 +34,16 @@ namespace airimayor.Host
                     Record(choice, city),
                     message => Mod.log.Warn(message));
             }
-            return new AgentRuntime.AgentRuntime(
-                tools,
-                AgentSystemPrompt.Text,
-                ReadModel,
-                Record(choice, city),
-                message => Mod.log.Warn(message));
+            var connection = new ModelConnection
+            {
+                Endpoint = Setting.StaticEndpoint,
+                ApiKey = Setting.StaticApiKey,
+                Model = Setting.StaticModel,
+                WindowTokens = Setting.StaticWindowTokens,
+            };
+            return new ClientSession(connection.Open, tools, AgentSystemPrompt.Text,
+                connection.WindowTokens, connection.OutputTokens, Setting.StaticVisionTools,
+                Record(choice, city), message => Mod.log.Warn(message));
         }
 
         private static SessionRecordOptions Record(AgentChoice choice, string city)
@@ -53,23 +57,9 @@ namespace airimayor.Host
                     ["head"] = choice.IsBuiltIn ? AgentChoices.BuiltIn : choice.Id,
                     ["modVersion"] = typeof(Mod).Assembly.GetName().Version.ToString(),
                     ["city"] = city,
+                    ["model"] = choice.IsBuiltIn ? Setting.StaticModel : null,
+                    ["protocol"] = choice.IsBuiltIn ? "Responses" : "ACP",
                 },
-            };
-        }
-
-        private static ModelSettings ReadModel()
-        {
-            return new ModelSettings
-            {
-                Endpoint = Setting.StaticEndpoint,
-                ApiKey = Setting.StaticApiKey,
-                Model = Setting.StaticModel,
-                WindowTokens = Setting.StaticWindowTokens,
-                Vision = Setting.StaticVisionTools,
-                ContinueWhenIdle = Setting.StaticContinuous,
-                Wire = Setting.StaticApiKind == ApiKind.Responses
-                    ? ModelWire.Responses
-                    : ModelWire.ChatCompletions,
             };
         }
     }

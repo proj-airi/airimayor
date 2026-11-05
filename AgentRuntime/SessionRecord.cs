@@ -21,6 +21,8 @@ namespace AgentRuntime
     /// Every line of both logs carries the same envelope: schema, seq, ts,
     /// session, turn, an optional call, and the simulation clock while a city
     /// runs. Events between turns carry no turn. API keys never appear.
+    /// Heads declare gaps in this layout: Harness does not capture model
+    /// snapshots or separate child records; external model calls are also absent.
     /// </summary>
     public sealed class SessionRecord : IDisposable
     {

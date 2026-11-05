@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace AgentRuntime
 {
     /// <summary>
-    /// Game tools the runtime can list and call. set_plan is not in this list.
+    /// City tools supplied to either mayor. Agent-owned planning and delegation stay outside this list.
     /// </summary>
     public interface IAgentTools
     {
@@ -55,20 +55,4 @@ namespace AgentRuntime
         public long? QueuedMs;
     }
 
-    public enum ModelWire
-    {
-        ChatCompletions,
-        Responses,
-    }
-
-    public sealed class ModelSettings
-    {
-        public string Endpoint;
-        public string ApiKey;
-        public string Model;
-        public long WindowTokens;
-        public bool Vision;
-        public bool ContinueWhenIdle;
-        public ModelWire Wire;
-    }
 }

@@ -1,6 +1,6 @@
 # Loop-owned mayor mandate
 
-Status: accepted. The sentences that `goal` names the plan and that each model round pins one live note are replaced by [ADR-0033](0033-chat-plan-entries.md).
+Status: built-in plan ownership, iteration and continuation superseded by [0048](0048-native-maf-harness.md). City writes remain ungated by the plan. Earlier plan-shape changes are in [0033](0033-chat-plan-entries.md).
 
 Playbook text and compaction `current_plan` did not stop reactive one-tool turns: autonomous continuation asked the model to review the whole city, and a 30-generation cap chopped a plan into fresh citywide reviews. The loop now holds a **mayor mandate**. The model declares it with `set_plan`; player messages leave it in place ([ADR-0030](0030-player-message-keeps-plan.md) replaces “player messages clear it”); autonomous continuation does not clear it either. City writes are not gated on it. Each model round pins one live note; that note is not an append-only history copy. The player sees it as chat chrome (snapshot + `plan` event), not a transcript line. `set_simulation` stays player-clock playbook ([ADR-0029](0029-player-owned-clock.md), [ADR-0031](0031-explicit-pause.md)): advance when the next decision needs simulated time, not because the mandate entered a verifying phase.
 

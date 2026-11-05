@@ -1,6 +1,6 @@
 # Player messages keep the plan
 
-Status: accepted. The sentence that a player message ends a time advance is replaced by [ADR-0032](0032-agent-runtime-tool-port.md).
+Status: built-in steering superseded by [0048](0048-native-maf-harness.md). Player messages still keep the plan. Earlier advance behavior was replaced by [0032](0032-agent-runtime-tool-port.md).
 
 A player message used to clear the mayor mandate and cancel the whole turn, including a tool already running. The plan now stays until the model calls `set_plan` again. The latest player message constrains that plan. A message during a reply cancels only that reply. A message during a tool step waits until the tools already requested in that step finish, then the message is the next turn. A message during a time advance ends that advance, restores the previous clock, and does not start later tools in that step. Stop still cancels the turn, including tools. Autonomous continuation also leaves the plan in place. This replaces the “player messages clear it” sentence in [ADR-0028](0028-mayor-mandate.md).
 

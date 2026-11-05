@@ -1,6 +1,6 @@
 # Context budget: Auto from the model name, Custom from the player
 
-Status: superseded — the loop no longer parses model names. Window is always the player-set WindowTokens; request shape follows the player-set API kind. See CONTEXT Context budget and `AgentModelProfile` (player settings only).
+Status: superseded by [0048](0048-native-maf-harness.md). WindowTokens is player-set; the built-in uses Responses and native Harness compaction.
 
 Visual tools already use Auto / On / Off. The token window should match: Auto infers the window from the model name; Custom uses the player setting and wins over the profile.
 

@@ -13,12 +13,6 @@ using Game.UI.Widgets;
 
 namespace airimayor
 {
-    public enum ApiKind
-    {
-        ChatCompletions,
-        Responses,
-    }
-
     [FileLocation(nameof(airimayor))]
     [SettingsUIGroupOrder(kConnectionGroup, kAgentGroup, kBehaviorGroup)]
     [SettingsUIShowGroupName(kConnectionGroup, kAgentGroup, kBehaviorGroup)]
@@ -65,10 +59,6 @@ namespace airimayor
 
         [SettingsUISection(kSection, kConnectionGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
-        public ApiKind Api { get; set; } = ApiKind.ChatCompletions;
-
-        [SettingsUISection(kSection, kConnectionGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUISlider(min = 128_000, max = 1_000_000, step = 1_000)]
         public int WindowTokens { get; set; } = 128_000;
 
@@ -98,6 +88,7 @@ namespace airimayor
         public bool AutoStart { get; set; } = false;
 
         [SettingsUISection(kSection, kBehaviorGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideAcpRequest))]
         public bool Continuous { get; set; } = false;
 
         // ---- Agent ---------------------------------------
@@ -157,10 +148,8 @@ namespace airimayor
         public static bool StaticAllowDiagnostics => Instance?.AllowDiagnostics ?? false;
         public static bool StaticAllowPanel => Instance?.AllowPanel ?? false;
         public static bool StaticVisionTools => Instance?.VisionTools ?? true;
-        public static ApiKind StaticApiKind =>
-            Instance?.Api ?? ApiKind.ChatCompletions;
         public static string StaticApiKey => Instance?.ApiKey ?? "";
-        public static long StaticWindowTokens => Instance?.WindowTokens ?? 128_000;
+        public static int StaticWindowTokens => Instance?.WindowTokens ?? 128_000;
         public static string StaticHead => Instance?.Head ?? AgentChoices.BuiltIn;
 
         public static event Action HeadApplied;
@@ -262,7 +251,6 @@ namespace airimayor
             AllowDiagnostics = false;
             AllowPanel = false;
             VisionTools = true;
-            Api = ApiKind.ChatCompletions;
             WindowTokens = 128_000;
         }
 
@@ -347,7 +335,7 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Head)), "Agent" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Head)), "Built-in uses the endpoint and API key. OpenCode launches opencode. Codex launches the installed codex-acp adapter. Sign in outside the game." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Endpoint)), "Endpoint" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "OpenAI-compatible API base URL." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Endpoint)), "Responses API base URL. Apply settings to start a new chat with this connection." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ApiKey)), "API key" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ApiKey)), "Stored in settings only." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Fetch models" },
@@ -362,7 +350,7 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoStart)), "Auto-start" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoStart)), "Start a turn on city load." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Continuous)), "Continue" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Continuous)), "Keep the agent running." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Continuous)), "Keep the external mayor working after each reply." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowConstruction)), "Construction" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "Place buildings, roads, zones, and transit lines, and replace a road's type." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowDemolition)), "Demolition" },
@@ -383,13 +371,8 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowPanel)), "When on, the agent can press panel buttons and fill text boxes, including city settings, the mod list, and deleting a save." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestPanel)), "Test panels" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestPanel)), "Check that panel control works." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Api)), "API kind" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Api)), "Chat Completions or Responses: the loop's request shape." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.WindowTokens)), "Window tokens" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.WindowTokens)), "How many tokens the loop treats as the window." },
-
-                { m_Setting.GetEnumValueLocaleID(ApiKind.ChatCompletions), "Chat Completions" },
-                { m_Setting.GetEnumValueLocaleID(ApiKind.Responses), "Responses" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.WindowTokens)), "Your model's context window. Apply settings to start a new chat." },
 
                 { ChatLocale.Id("Title"), "AIRI Mayor" },
                 { ChatLocale.Id("Composer.Loading"), "Loading city…" },

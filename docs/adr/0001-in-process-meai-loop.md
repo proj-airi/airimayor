@@ -1,6 +1,6 @@
 # In-process MEAI loop
 
-Status: accepted
+Status: superseded by [0048](0048-native-maf-harness.md). The built-in remains in process and uses MAF Harness.
 
 The shippable product is a Paradox mod, so the mayor loop has to run inside the game process on Unity's managed surface. We use MEAI `IChatClient` plus a hand-written function-calling loop, and enqueue every tool onto the simulation thread.
 

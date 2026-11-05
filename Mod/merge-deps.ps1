@@ -23,43 +23,22 @@ if (-not (Test-Path -LiteralPath $mainDll)) {
 # (ExecutableAsset.GetModAssets calls Assembly.Location on every loaded
 # assembly and Mono throws for dynamic ones). Keep the folder lean: merge
 # all managed dependencies into the single mod dll.
-# Project-reference outputs are copied to the deploy folder by DeployWIP like
-# any other dependency. The game's mod manager scans every dll in the mod
-# folder during registration, so they must be merged too: a loose dll is
-# picked up as its own mod candidate and aborts InitializeMods.
-$projectRefs = @(
-    'AgentRuntime.dll'
-)
-
 $managedRefs = @(
-    'System.Buffers.dll', 'System.Memory.dll', 'System.Numerics.Vectors.dll',
-    'System.Runtime.CompilerServices.Unsafe.dll', 'System.Threading.Tasks.Extensions.dll',
-    'System.Text.Encodings.Web.dll', 'System.Text.Json.dll', 'System.Memory.Data.dll',
-    'System.Threading.Channels.dll', 'System.IO.Pipelines.dll',
-    'System.Net.ServerSentEvents.dll', 'System.Diagnostics.DiagnosticSource.dll',
-    'System.Numerics.Tensors.dll', 'Microsoft.Bcl.AsyncInterfaces.dll',
-    'Microsoft.Bcl.Numerics.dll', 'Microsoft.Extensions.Primitives.dll',
-    'Microsoft.Extensions.Configuration.Abstractions.dll',
-    'Microsoft.Extensions.DependencyInjection.Abstractions.dll',
-    'Microsoft.Extensions.Diagnostics.Abstractions.dll',
-    'Microsoft.Extensions.FileProviders.Abstractions.dll',
-    'Microsoft.Extensions.Hosting.Abstractions.dll',
-    'Microsoft.Extensions.Logging.Abstractions.dll', 'Microsoft.Extensions.Options.dll',
-    'Microsoft.Extensions.Caching.Abstractions.dll', 'System.ClientModel.dll',
-    'Microsoft.Extensions.AI.Abstractions.dll', 'Microsoft.Extensions.AI.dll',
-    'Microsoft.Extensions.AI.OpenAI.dll', 'OpenAI.dll',
-    'dotacp.client.dll', 'dotacp.protocol.dll', 'StreamJsonRpc.dll',
-    'MessagePack.dll', 'Microsoft.VisualStudio.Threading.dll',
-    'Nerdbank.Streams.dll', 'System.Collections.Immutable.dll',
-    'System.Threading.Tasks.Dataflow.dll'
+    Get-ChildItem -LiteralPath $DeployDir -Filter '*.dll' -File |
+        Where-Object Name -ne 'airimayor.dll' | ForEach-Object Name
 )
+if ($managedRefs.Count -eq 0) {
+    exit 0
+}
 
 $inputs = @($mainDll)
-foreach ($name in ($projectRefs + $managedRefs)) {
+foreach ($name in $managedRefs) {
     $path = Join-Path $DeployDir $name
-    if (Test-Path -LiteralPath $path) {
-        $inputs += $path
+    # ACP and the game use Json.NET 13; prefer the game's assembly over the SDK's older copy.
+    if ($name -eq 'Newtonsoft.Json.dll') {
+        $path = Join-Path $GameManaged $name
     }
+    $inputs += $path
 }
 
 # BCL assemblies the merged dll still references but the game's Managed
@@ -88,11 +67,6 @@ foreach ($path in $extraRefs) {
     }
 }
 
-if ($inputs.Count -eq 1) {
-    # Nothing to merge (already merged).
-    exit 0
-}
-
 # ILRepack names the output assembly after the /out file name, so the temp
 # output must keep the real file name; a guid file name would leak into the
 # shipped assembly identity.
@@ -101,7 +75,7 @@ New-Item -ItemType Directory -Path $mergeDir | Out-Null
 $merged = Join-Path $mergeDir 'airimayor.dll'
 
 $env:PATH = 'C:\Program Files\dotnet;' + $env:PATH
-$args = @(
+$repackArgs = @(
     ('/out:' + $merged),
     '/target:library',
     '/internalize',
@@ -109,17 +83,20 @@ $args = @(
     ('/lib:' + $GameManaged)
 ) + $inputs
 
-& $IlRepackPath $args
+& $IlRepackPath $repackArgs
 if ($LASTEXITCODE -ne 0) {
     throw "ilrepack failed with exit code $LASTEXITCODE"
 }
 
 Copy-Item -LiteralPath $merged -Destination $mainDll -Force
+if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($mergeDir)) -ne [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')) {
+    throw "Merge cleanup target is outside the temporary directory: $mergeDir"
+}
 Remove-Item -LiteralPath $mergeDir -Recurse -Force
 
 # The merged dll embeds everything; drop the now-redundant dependency dlls and
 # the stale pdbs so the mod folder stays as small as possible.
-foreach ($name in ($projectRefs + $managedRefs)) {
+foreach ($name in $managedRefs) {
     $path = Join-Path $DeployDir $name
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Force

@@ -6,14 +6,14 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Decision |
 | --- | --- |
-| [0001-in-process-meai-loop.md](./adr/0001-in-process-meai-loop.md) | In-process MEAI loop; not apeira, SK, MAF, or an external process |
+| [0001-in-process-meai-loop.md](./adr/0001-in-process-meai-loop.md) | Historical handwritten-loop choice, superseded by [0048](./adr/0048-native-maf-harness.md) |
 | [0002-native-validation.md](./adr/0002-native-validation.md) | Ordinary native validation; no Anarchy or `force` |
 | [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | `place_building` is the only model-facing building write |
 | [0004-linear-networks.md](./adr/0004-linear-networks.md) | Linear write (`build_network` since [0027](./adr/0027-tool-surface-renaming.md)); ground vs grade-separated; no silent promotion |
 | [0005-player-permissions.md](./adr/0005-player-permissions.md) | Settings, not flags (grouping superseded by [0042](./adr/0042-player-permission-groups.md)) |
 | [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain`/`LOCAL_MAP` superseded by 0017; now `map_text` MAP_TEXT plus separate `map_image` |
 | [0007-session-lifecycle.md](./adr/0007-session-lifecycle.md) | Session follows the loaded city; data under `ModsData` |
-| [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Superseded; window is always player-set WindowTokens, request shape follows player-set API kind |
+| [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Superseded; player-set window and native Harness compaction ([0048](./adr/0048-native-maf-harness.md)) |
 | [0009-typed-network-graph.md](./adr/0009-typed-network-graph.md) | One typed network behind list, demolish, and topology QA |
 | [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines via Route Tool apply; roadside stops are placed by [0044](./adr/0044-roadside-objects-share-place-building.md) |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
@@ -33,17 +33,17 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0025-map-image-native-node-ways.md](./adr/0025-map-image-native-node-ways.md) | Ways walk native nodes; width is paint |
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
 | [0027-tool-surface-renaming.md](./adr/0027-tool-surface-renaming.md) | Verbs first, no shape suffixes, one finance write |
-| [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | Loop-owned city plan; no write gating; no per-turn generation cap |
+| [0028-mayor-mandate.md](./adr/0028-mayor-mandate.md) | City plan never gates writes; built-in planning/iteration superseded by [0048](./adr/0048-native-maf-harness.md) |
 | [0029-player-owned-clock.md](./adr/0029-player-owned-clock.md) | Player owns the clock; an advance restores speed/pause; no snapshot on the advance result |
-| [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; a reply stops, a tool step finishes including advance; Cancel cancels (see 0032) |
+| [0030-player-message-keeps-plan.md](./adr/0030-player-message-keeps-plan.md) | Player messages keep the plan; native built-in injection is defined by [0048](./adr/0048-native-maf-harness.md) |
 | [0031-explicit-pause.md](./adr/0031-explicit-pause.md) | `get_simulation` reads the clock; `set_simulation` can advance or pause |
 | [0032-agent-runtime-tool-port.md](./adr/0032-agent-runtime-tool-port.md) | In-process loop is `AgentRuntime`; city tools are a port. An external head uses ACP and MCP ([0036](./adr/0036-external-mayor-acp.md)) |
-| [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | Built-in plan and the chat strip are one step list; `set_plan` replaces it and returns it |
+| [0033-chat-plan-entries.md](./adr/0033-chat-plan-entries.md) | ACP plan display format; built-in todos superseded by [0048](./adr/0048-native-maf-harness.md) |
 | [0034-edge-grade-not-elevation.md](./adr/0034-edge-grade-not-elevation.md) | An edge is bridge, tunnel, or ground; an embankment stays ground |
 | [0035-mod-identity-airimayor.md](./adr/0035-mod-identity-airimayor.md) | The mod ships as `airimayor`; display name `AIRI Mayor`; no migration |
 | [0036-external-mayor-acp.md](./adr/0036-external-mayor-acp.md) | Optional external mayor: ACP child plus a stdio MCP server over the city tool port |
-| [0037-owned-conversations.md](./adr/0037-owned-conversations.md) | Both mayors may open conversations from the current chat; the player cannot address them |
-| [0038-one-task-tool.md](./adr/0038-one-task-tool.md) | One `task` tool; the report is the root agent's next turn; Stop leaves it running |
+| [0037-owned-conversations.md](./adr/0037-owned-conversations.md) | External owned conversations; built-in background tasks are defined by [0048](./adr/0048-native-maf-harness.md) |
+| [0038-one-task-tool.md](./adr/0038-one-task-tool.md) | External `task` report delivery; built-in uses native start/wait/results ([0048](./adr/0048-native-maf-harness.md)) |
 | [0039-acp-tool-preview.md](./adr/0039-acp-tool-preview.md) | External tool rows use the same in-game JPEG thumbnail, paired to the ACP tool call |
 | [0040-advance-hands-over-on-pause.md](./adr/0040-advance-hands-over-on-pause.md) | An advance hands over only on pause; a lower positive speed keeps waiting |
 | [0041-network-connection-shapes.md](./adr/0041-network-connection-shapes.md) | `build_network` shape is a straight segment, a tangent-locked curve, a smooth bend, or a frontage copy |
@@ -51,8 +51,9 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0043-pointed-places.md](./adr/0043-pointed-places.md) | A pointed place is a card on the player message, not a mark drawn in the city |
 | [0044-roadside-objects-share-place-building.md](./adr/0044-roadside-objects-share-place-building.md) | Roadside objects share `place_building`; the snap stays inside the write |
 | [0045-message-clips.md](./adr/0045-message-clips.md) | Agent places are inline `<clip>` tags; click moves the camera, no persistent highlight |
-| [0046-session-record.md](./adr/0046-session-record.md) | One self-contained directory per session; one envelope with the simulation clock; model calls and known gaps recorded |
+| [0046-session-record.md](./adr/0046-session-record.md) | Session evidence and clock envelope; built-in capture gaps revised by [0048](./adr/0048-native-maf-harness.md) |
 | [0047-write-evidence.md](./adr/0047-write-evidence.md) | Before/after city ledger on writes stays in the record; an offline check judges confirmed, diverged, or undetermined |
+| [0048-native-maf-harness.md](./adr/0048-native-maf-harness.md) | Built-in uses native Harness todos, compaction, injection and background tasks over a fixed Responses connection |
 
 ## Guide
 

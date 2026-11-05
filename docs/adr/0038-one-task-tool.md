@@ -1,5 +1,7 @@
 # One task tool
 
+Status: built-in delegation superseded by [0048](0048-native-maf-harness.md). The external mayor retains `task` and automatic report delivery.
+
 The model opens an owned conversation with one tool, `task`, passing a `description` and a `prompt`. The call returns while that work is still running, and the final text is the root agent's next turn, including when the root agent is idle. The conversation does not follow the continuous setting. Stopping the current turn leaves it running. Closing the agent session stops it.
 
 ## Considered Options
