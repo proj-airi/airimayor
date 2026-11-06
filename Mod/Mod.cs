@@ -31,6 +31,7 @@ namespace airimayor
             GameManager.instance.localizationManager.AddSource("zh-HANS", new LocaleZhHans(m_Setting));
             AssetDatabase.global.LoadSettings(nameof(airimayor), m_Setting, new Setting(this));
             Setting.Instance = m_Setting;
+            m_Setting.LoadProviders();
             m_Setting.CaptureAppliedMayor();
             m_Setting.LoadAgents();
 

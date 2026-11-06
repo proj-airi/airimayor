@@ -13,7 +13,7 @@ namespace airimayor.Tests
         public void Provider_switching_and_serialization_preserve_independent_connections()
         {
             var profiles = new ProviderConnections();
-            ProviderConnection openai = profiles.Read(ModelProviders.OpenAi).With(apiKey: "openai-test-key", model: "gpt-test", windowTokens: 256_000);
+            ProviderConnection openai = profiles.Read("openai").With(apiKey: "openai-test-key", model: "gpt-test", windowTokens: 256_000);
             ProviderConnection go = profiles.Read(ModelProviders.Go).With(apiKey: "go-test-key", model: "kimi-test");
             profiles.Set(openai);
             profiles.Set(go);
@@ -21,9 +21,9 @@ namespace airimayor.Tests
             Assert.Equal("gpt-test", openai.Model);
             Assert.Equal("kimi-test", profiles.Read(ModelProviders.Go).Model);
             ProviderConnections restored = ProviderConnections.FromJson(profiles.ToJson());
-            Assert.Equal("next-model", restored.Read(ModelProviders.OpenAi).Model);
-            Assert.Equal("openai-test-key", restored.Read(ModelProviders.OpenAi).ApiKey);
-            Assert.Equal(256_000, restored.Read(ModelProviders.OpenAi).WindowTokens);
+            Assert.Equal("next-model", restored.Read("openai").Model);
+            Assert.Equal("openai-test-key", restored.Read("openai").ApiKey);
+            Assert.Equal(256_000, restored.Read("openai").WindowTokens);
             Assert.Equal("go-test-key", restored.Read(ModelProviders.Go).ApiKey);
         }
 
@@ -43,7 +43,7 @@ namespace airimayor.Tests
         }
 
         [Theory]
-        [InlineData("{\"schema\":2,\"connections\":[]}")]
+        [InlineData("{\"schema\":3,\"connections\":[]}")]
         [InlineData("{\"schema\":1,\"connections\":[],\"oldEndpoint\":\"https://old.test\"}")]
         [InlineData("{\"schema\":1}")]
         public void Unknown_settings_shapes_are_rejected(string json)
@@ -54,11 +54,11 @@ namespace airimayor.Tests
         [Theory]
         [InlineData("0")]
         [InlineData("Unknown")]
-        [InlineData("AnthropicMessages")]
+        [InlineData("999")]
         public void Unsupported_saved_protocols_are_rejected(string protocol)
         {
             var profiles = new ProviderConnections();
-            profiles.Set(profiles.Read(ModelProviders.OpenAi));
+            profiles.Set(profiles.Read("openai"));
             JsonNode saved = JsonNode.Parse(profiles.ToJson())!;
             saved["connections"]![0]!["protocol"] = protocol;
             Assert.Throws<InvalidDataException>(() => ProviderConnections.FromJson(saved.ToJsonString()));
@@ -68,13 +68,13 @@ namespace airimayor.Tests
         public async Task Catalogs_stay_with_their_source_and_preserve_a_manual_model()
         {
             var profiles = new ProviderConnections();
-            ProviderConnection source = profiles.Read(ModelProviders.Go).With(apiKey: "old-key", model: "manually-entered");
+            ProviderConnection source = profiles.Read(ModelProviders.Go).With(endpoint: "https://provider.test/v1", apiKey: "old-key", model: "manually-entered");
             profiles.Set(source);
             using var http = new HttpClient(new ReplyHandler("{\"data\":[{\"id\":\"listed-model\"}]}"));
             IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(source, http: http);
             Assert.True(profiles.AcceptModels(source, models));
             Assert.Single(profiles.Models(ModelProviders.Go));
-            Assert.Empty(profiles.Models(ModelProviders.OpenAi));
+            Assert.Empty(profiles.Models("openai"));
             Assert.Equal("manually-entered", profiles.Read(ModelProviders.Go).Model);
             profiles.Set(source.With(model: "another-manual-model"));
             Assert.Single(profiles.Models(ModelProviders.Go));
@@ -92,7 +92,7 @@ namespace airimayor.Tests
                 {"id":"image-model","type":"image"}]}
                 """);
             using var http = new HttpClient(handler);
-            ProviderConnection go = ModelProviders.Find(ModelProviders.Go).DefaultConnection().With(apiKey: "go-test-key");
+            ProviderConnection go = new ProviderConnections().Read(ModelProviders.Go).With(endpoint: "https://opencode.ai/inference/go/openai/v1", apiKey: "go-test-key");
             IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(go, http: http);
             ProviderModel model = Assert.Single(models);
             Assert.Equal("/inference/go/v1/models", Assert.Single(handler.Requests).Path);
@@ -108,7 +108,7 @@ namespace airimayor.Tests
             var handler = new ReplyHandler("{\"data\":[{\"id\":\"first\",\"display_name\":\"First\"}],\"has_more\":true,\"last_id\":\"first\"}",
                 "{\"data\":[{\"id\":\"second\"}],\"has_more\":false}");
             using var http = new HttpClient(handler);
-            ProviderConnection connection = ModelProviders.Find(ModelProviders.Anthropic).DefaultConnection().With(apiKey: "anthropic-test-key");
+            ProviderConnection connection = new ProviderConnections().Read("anthropic").With(endpoint: "https://api.anthropic.com/v1", protocol: ModelProtocol.AnthropicMessages, apiKey: "anthropic-test-key");
             IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(connection, http: http);
             Assert.Equal(2, models.Count);
             Assert.Equal("Bearer anthropic-test-key", handler.Requests[0].Authorization);
@@ -120,7 +120,7 @@ namespace airimayor.Tests
         {
             var handler = new ReplyHandler("{\"data\":[]}");
             using var http = new HttpClient(handler);
-            ProviderConnection connection = ModelProviders.Find(ModelProviders.OpenAi).DefaultConnection()
+            ProviderConnection connection = new ProviderConnections().Read("openai").With(endpoint: "https://provider.test/v1")
                 .With(apiKey: "test-key", modelsEndpoint: "https://another.test/models");
             await Assert.ThrowsAsync<InvalidOperationException>(() => ModelProviders.LoadModelsAsync(connection, http: http));
             Assert.Empty(handler.Requests);
@@ -135,25 +135,25 @@ namespace airimayor.Tests
         {
             var handler = new ReplyHandler(body) { Status = HttpStatusCode.Unauthorized };
             using var http = new HttpClient(handler);
-            ProviderConnection connection = ModelProviders.Find(ModelProviders.OpenAi).DefaultConnection().With(apiKey: "secret-value");
+            ProviderConnection connection = new ProviderConnections().Read("openai").With(endpoint: "https://provider.test/v1").With(apiKey: "secret-value");
             Exception error = await Assert.ThrowsAsync<HttpRequestException>(() => ModelProviders.LoadModelsAsync(connection, http: http));
             Assert.Contains("HTTP 401", error.Message);
             Assert.DoesNotContain("secret-value", error.Message);
         }
 
         [Theory]
-        [InlineData(ModelProviders.OpenAi, "/v1/responses", ModelProtocol.Responses)]
+        [InlineData("openai", "/v1/responses", ModelProtocol.Responses)]
         [InlineData(ModelProviders.Go, "/inference/go/openai/v1/responses", ModelProtocol.Responses)]
-        [InlineData(ModelProviders.OpenRouter, "/api/v1/chat/completions", ModelProtocol.ChatCompletions)]
-        [InlineData(ModelProviders.Anthropic, "/v1/messages", ModelProtocol.AnthropicMessages)]
+        [InlineData("openrouter", "/api/v1/chat/completions", ModelProtocol.ChatCompletions)]
+        [InlineData("anthropic", "/v1/messages", ModelProtocol.AnthropicMessages)]
         [InlineData(ModelProviders.Compatible, "/v1/chat/completions", ModelProtocol.ChatCompletions)]
         public async Task Sdk_adapters_use_the_selected_route_authentication_and_tools(string provider, string path, ModelProtocol protocol)
         {
             var handler = new ReplyHandler(Response(protocol));
-            ProviderConnection connection = ModelProviders.Find(provider).DefaultConnection().With(model: "test-model", apiKey: "test-key");
+            ProviderConnection connection = new ProviderConnections().Read(provider).With(model: "test-model", apiKey: "test-key", protocol: protocol, endpoint: "https://provider.test" + path.Substring(0, path.Length - (protocol == ModelProtocol.ChatCompletions ? "/chat/completions" : protocol == ModelProtocol.Responses ? "/responses" : "/messages").Length));
             if (provider == ModelProviders.Compatible)
                 connection = connection.With(endpoint: "http://localhost:11434/v1", apiKey: "");
-            using (IChatClient client = ModelProviders.CreateChatClient(connection, "conversation-123", handler))
+            using (IChatClient client = ModelProviders.CreateChatClient(ModelCatalogSnapshot.Empty.Resolve(connection), "conversation-123", handler))
             {
                 ChatResponse response = await client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "Ready?") }, Options());
                 Assert.Equal("Ready.", response.Text);
@@ -174,14 +174,41 @@ namespace airimayor.Tests
         public async Task Every_protocol_streams_text_through_IChatClient(ModelProtocol protocol)
         {
             var handler = new ReplyHandler(StreamResponse(protocol)) { Streaming = true };
-            ProviderConnection connection = ModelProviders.Find(protocol == ModelProtocol.AnthropicMessages
-                ? ModelProviders.Anthropic : ModelProviders.OpenAi).DefaultConnection().With(model: "test-model", apiKey: "test-key", protocol: protocol);
-            using IChatClient client = ModelProviders.CreateChatClient(connection, "stream-chat", handler);
+            ProviderConnection connection = new ProviderConnections().Read("stream-provider")
+                .With(endpoint: "https://provider.test/v1", model: "test-model", apiKey: "test-key", protocol: protocol);
+            using IChatClient client = ModelProviders.CreateChatClient(ModelCatalogSnapshot.Empty.Resolve(connection), "stream-chat", handler);
             var text = new StringBuilder();
             await foreach (ChatResponseUpdate update in client.GetStreamingResponseAsync(new[] { new ChatMessage(ChatRole.User, "Ready?") }, Options()))
                 text.Append(update.Text);
             Assert.Equal("Ready.", text.ToString());
             Assert.True(JsonNode.Parse(Assert.Single(handler.Requests).Body)["stream"].GetValue<bool>());
+        }
+
+        [Fact]
+        public async Task Catalog_compatibility_keeps_reasoning_on_a_tool_round_trip_and_uses_the_declared_token_field()
+        {
+            var handler = new ReplyHandler("""
+                {"id":"chatcmpl_tool","object":"chat.completion","created":0,"model":"chat-model",
+                  "choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":"",
+                    "reasoning_content":"Inspect the city first.","tool_calls":[{"id":"city-call","type":"function",
+                    "function":{"name":"city_echo","arguments":"{\"message\":\"ready\"}"}}]}}],
+                  "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+                """, Response(ModelProtocol.ChatCompletions));
+            ProviderConnection draft = new ProviderConnections().Read("new-cloud-provider").With(model: "chat-model", apiKey: "test-key");
+            ResolvedModelConnection selected = ModelCatalogSnapshot.Parse(ModelCatalogTests.Catalog).Resolve(draft);
+            using IChatClient client = ModelProviders.CreateChatClient(selected, "tool-chat", handler);
+            var history = new List<ChatMessage> { new ChatMessage(ChatRole.User, "Inspect the city.") };
+            ChatResponse first = await client.GetResponseAsync(history, Options());
+            Assert.Equal("Inspect the city first.", Assert.Single(first.Messages[0].Contents.OfType<TextReasoningContent>()).Text);
+            history.AddRange(first.Messages);
+            history.Add(new ChatMessage(ChatRole.Tool, new[] { new FunctionResultContent("city-call", "Ready.") }));
+            await client.GetResponseAsync(history, Options());
+            JsonNode body = JsonNode.Parse(handler.Requests[1].Body);
+            Assert.Equal("Inspect the city first.", body["messages"][1]["reasoning_content"].GetValue<string>());
+            Assert.Equal("city-call", body["messages"][1]["tool_calls"][0]["id"].GetValue<string>());
+            Assert.Equal(128, body["max_tokens"].GetValue<int>());
+            Assert.Null(body["max_completion_tokens"]);
+            Assert.NotNull(first.Messages[0].RawRepresentation);
         }
 
         private static ChatOptions Options() => new ChatOptions

@@ -27,8 +27,12 @@ The mayor that runs inside the game using the player's selected model connection
 _Avoid_: an external agent, a particular model provider
 
 **Model connection**:
-The built-in mayor's saved provider, model, credentials, server and model-list addresses, request protocol, and context budget. Each provider has its own connection.
+The built-in mayor's saved provider and model choice, local credentials, and optional address, protocol and context overrides. Each provider has its own connection.
 _Avoid_: external agent sign-in, a model list as the selected model, one shared key for all providers
+
+**Model catalog**:
+The directory of providers and models, including their supported interfaces, addresses and capabilities. A catalog entry describes an offering; access depends on the provider and the player's account.
+_Avoid_: the city-tool catalog, a guarantee that every listed model is currently available
 
 **Model-facing surface**:
 The tools and text the model is allowed to call or see.
@@ -47,8 +51,8 @@ Reading and setting the simulation clock. `get_simulation` reads whether the cit
 _Avoid_: forced pause as the product runtime, polling, a nested overview/problems digest on the advance result, waitedMs, SimWait internals
 
 **Context budget**:
-The model conversation's token capacity, chosen by the player to match the model's window.
-_Avoid_: Endpoint, provider, or model name as the source of the window
+The model conversation's token capacity, using the model's declared window or a smaller budget chosen by the player.
+_Avoid_: guessing the window from an endpoint, provider, or model name
 
 **Compaction**:
 Reducing older conversation detail to keep current city work within the context budget.

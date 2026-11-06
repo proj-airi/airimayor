@@ -1,0 +1,19 @@
+# Models.dev supplies provider and model routes
+
+Status: accepted
+
+Replace the fixed provider presets in [0050](0050-model-provider-connections.md) with the public Models.dev v2 catalog. The `ModelCatalog` module loads, validates and caches the directory; its immutable snapshot resolves a saved connection to an address, protocol, context budget, output limit and image capability. Native settings owns editing and Apply. `ModelProviders` retains SDK construction behind `IChatClient`; Harness orchestration remains unchanged.
+
+Use `https://models.dev/experimental/v2.0/api.json`, whose model entries explicitly contain `api.<protocol>.base_url`, capabilities and compatibility requirements. The ordinary `api.json` and `catalog.json` publish the older projection. The endpoint is experimental: malformed or unsupported refreshes leave the last validated snapshot and disk cache intact. Cache replacement is atomic, requests use ETags, and startup reads the last valid cache before refreshing asynchronously. A cold offline install offers the local custom connection until a catalog is available. No bundled copy or hand-maintained provider/model list is shipped. See the [upstream route](https://github.com/anomalyco/models.dev/blob/dev/packages/function/src/worker.ts) and [v2 schema](https://github.com/anomalyco/models.dev/blob/dev/packages/core/src/schema-v2.ts).
+
+Only text chat models with tools, at least a 32,000-token declared window, and a route executable by the installed adapters are offered. The adapters support Responses, Anthropic Messages and Chat Completions, in that automatic preference order; an explicit supported protocol overrides it. Routes requiring unresolved URL templates, custom paths or unsupported compatibility behavior are excluded. JavaScript SDK identifiers are metadata, never executable dependencies. Chat Completions preserves SDK-exposed reasoning in tool history and applies declared token-field compatibility. Protocol selection depends on the model's offering, not a provider-name heuristic.
+
+Provider credentials, model selection and optional overrides stay in strict version-2 connection settings. Version 1 and unknown shapes are rejected without migration; connections must be re-entered. Context uses the catalog window by default, with a manual lower-budget option. Custom services retain explicit address/protocol configuration and optional authentication. Keys bind to the host against which they were configured; a changed catalog host requires re-entering the key. Public catalog requests never contain model credentials.
+
+Apply freezes the resolved connection, so refreshing the directory cannot change a running chat. Invalid or unavailable selections remain visible and report their configuration error on use; no model is silently substituted. Connection checks use the edited selection. The optional server-model check filters the current connection's dropdown without applying settings; a manual model ID remains selected. Go retains its separate live catalog address and stable conversation header, and every request identifies airimayor in User-Agent. These small integration rules do not define the provider directory.
+
+## Considered options
+
+- Keep provider presets and use Models.dev only for capability enrichment: rejected because this preserves the provider list and per-model routing maintenance the directory can replace.
+- Combine directory, saved connections, SDK execution and settings lifecycle into one extensible manager: rejected because the common caller needs a directory snapshot and resolution; native settings already owns the editing lifecycle.
+- Use a Node bridge or the community .NET SDK: rejected because direct HTTP/JSON works with the existing net48 stack, while the official SDK is TypeScript and the examined community package requires newer .NET and its own agent framework.

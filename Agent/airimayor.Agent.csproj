@@ -7,7 +7,7 @@
     <RootNamespace>airimayor.Agent</RootNamespace>
     <AssemblyName>airimayor.Agent</AssemblyName>
     <ImplicitUsings>disable</ImplicitUsings>
-    <NoWarn>$(NoWarn);MAAI001;MEAI001;OPENAI001</NoWarn>
+    <NoWarn>$(NoWarn);MAAI001;MEAI001;OPENAI001;SCME0001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

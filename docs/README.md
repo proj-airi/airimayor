@@ -55,7 +55,8 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0047-write-evidence.md](./adr/0047-write-evidence.md) | Before/after city ledger on writes stays in the record; an offline check judges confirmed, diverged, or undetermined |
 | [0048-native-maf-harness.md](./adr/0048-native-maf-harness.md) | Built-in uses native Harness todos, compaction, injection and background tasks; provider connections revised by [0050](./adr/0050-model-provider-connections.md) |
 | [0049-registry-external-mayors.md](./adr/0049-registry-external-mayors.md) | Registry launch metadata and prompt-only city-tool guidance for external mayors |
-| [0050-model-provider-connections.md](./adr/0050-model-provider-connections.md) | Independent provider connections, discovery and SDK adapters behind IChatClient |
+| [0050-model-provider-connections.md](./adr/0050-model-provider-connections.md) | Independent connections and SDK adapters; fixed provider presets superseded by [0051](./adr/0051-models-dev-catalog-routing.md) |
+| [0051-models-dev-catalog-routing.md](./adr/0051-models-dev-catalog-routing.md) | Models.dev v2 provider/model directory, cached immutable routes and local connection overrides |
 
 ## Guide
 

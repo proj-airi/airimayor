@@ -10,14 +10,21 @@ namespace airimayor.Host
         public readonly string Source;
         public readonly string ExternalAgent;
         public readonly ProviderConnection Connection;
+        public readonly ResolvedModelConnection Model;
+        public readonly string ConnectionError;
 
-        public MayorSelection(string source, string externalAgent, ProviderConnection connection)
+        public MayorSelection(string source, string externalAgent, ProviderConnection connection, ModelCatalogSnapshot catalog)
         {
             if (source != AgentHead.BuiltIn && source != AgentHead.External)
                 throw new InvalidOperationException("Unknown mayor source.");
             Source = source;
             ExternalAgent = externalAgent;
             Connection = connection;
+            if (source == AgentHead.BuiltIn)
+            {
+                try { Model = catalog.Resolve(connection); }
+                catch (InvalidOperationException e) { ConnectionError = e.Message; }
+            }
         }
     }
 
@@ -29,6 +36,7 @@ namespace airimayor.Host
         internal const string BuiltIn = "built-in";
         internal const string External = "external";
         internal static readonly AcpRegistry Registry = new AcpRegistry(Path.Combine(ModPaths.RuntimeDataDirectory, "acp"));
+        internal static readonly ModelCatalog Catalog = new ModelCatalog(Path.Combine(ModPaths.RuntimeDataDirectory, "models-dev-v2.json"));
 
         /// <param name="city">Loaded city name; null for the settings check.</param>
         internal static IAgentSession Open(string city, MayorSelection selection = null)
@@ -54,9 +62,13 @@ namespace airimayor.Host
                     Record(selection, city),
                     message => Mod.log.Warn(message));
             }
-            ProviderConnection connection = selection.Connection;
-            return new ClientSession(id => ModelProviders.CreateChatClient(connection, id), tools, AgentSystemPrompt.Text,
-                connection.WindowTokens, 16_384, Setting.StaticVisionTools,
+            ResolvedModelConnection model = selection.Model;
+            return new ClientSession(id =>
+            {
+                if (selection.ConnectionError != null) throw new InvalidOperationException(selection.ConnectionError);
+                return ModelProviders.CreateChatClient(model, id);
+            }, tools, AgentSystemPrompt.Text,
+                model?.WindowTokens ?? 128_000, model?.OutputTokens ?? 16_384, Setting.StaticVisionTools && (model?.Images ?? true),
                 Record(selection, city), message => Mod.log.Warn(message));
         }
 
@@ -73,7 +85,7 @@ namespace airimayor.Host
                     ["city"] = city,
                     ["provider"] = selection.Source == BuiltIn ? selection.Connection.ProviderId : null,
                     ["model"] = selection.Source == BuiltIn ? selection.Connection.Model : null,
-                    ["protocol"] = selection.Source == BuiltIn ? selection.Connection.Protocol.ToString() : "ACP",
+                    ["protocol"] = selection.Source == BuiltIn ? selection.Model?.Route.Protocol.ToString() ?? "unconfigured" : "ACP",
                 },
             };
         }

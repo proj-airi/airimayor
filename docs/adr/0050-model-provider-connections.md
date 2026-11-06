@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Provider presets, discovery and the saved connection shape below are superseded by [0051](0051-models-dev-catalog-routing.md). The IChatClient and native-settings separation remain applicable.
+
 Keep the native Harness from [0048](0048-native-maf-harness.md) and its `IChatClient` boundary. `Agent/ModelProviders.cs` owns provider presets, model discovery, SDK construction and required request headers. OpenAI Responses and Chat Completions use `Microsoft.Extensions.AI.OpenAI`; Anthropic Messages uses the official `Anthropic` SDK's adapter. Provider integration does not introduce another agent loop or alter Harness orchestration.
 
 A provider is separate from its request protocol. The initial presets are OpenAI, OpenCode Go, OpenRouter, Anthropic and a custom OpenAI-compatible service. Model-list and inference addresses are independent: Go's public catalog is `/inference/go/v1/models`, while its OpenAI inference base is `/inference/go/openai/v1`. Go uses the application's own User-Agent and one stable `x-opencode-session` value per conversation, including background calls. Public catalogs receive no key; authenticated catalogs require the inference origin. Provider identity comes from the selected preset rather than URL guessing. Unsupported protocol or provider errors are surfaced without retrying another protocol. See the [Go integration contract](https://opencode.ai/v2/docs/console/go/), [IChatClient abstraction](https://learn.microsoft.com/en-us/dotnet/ai/ichatclient), and [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-csharp).

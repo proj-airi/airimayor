@@ -32,7 +32,7 @@ namespace airimayor
         public Setting(IMod mod) : base(mod) { }
 
         private ProviderConnections m_Connections = new ProviderConnections();
-        private string m_Provider = ModelProviders.OpenAi;
+        private string m_Provider = "";
         private MayorSelection m_Applied;
 
         [SettingsUIHidden]
@@ -49,30 +49,30 @@ namespace airimayor
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
         [SettingsUIDropdown(typeof(Setting), nameof(GetProviderItems))]
+        [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
         public string Provider
         {
             get => m_Provider;
             set
             {
-                ModelProviders.Find(value);
-                m_Provider = value;
+                m_Provider = value ?? "";
                 ModelPresetVersion++;
             }
         }
 
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionRequest))]
         [SettingsUITextInput]
         public string ProviderApiKey
         {
             get => Connection.ApiKey;
-            set { Edit(Connection.With(apiKey: value.Trim())); }
+            set { Edit(Connection.With(apiKey: value.Trim(), credentialOrigin: "")); }
         }
 
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionRequest))]
         [SettingsUIDropdown(typeof(Setting), nameof(GetModelPresetItems))]
         [SettingsUIValueVersion(typeof(Setting), nameof(ModelPresetVersion))]
         public string ProviderModel
@@ -90,7 +90,7 @@ namespace airimayor
         }
 
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionRequest))]
         [SettingsUIButton]
         public bool TestConnection
         {
@@ -99,7 +99,7 @@ namespace airimayor
 
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
-        [SettingsUIHideByCondition(typeof(Setting), nameof(HideBuiltinRequest))]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionRequest))]
         public bool ConnectionDetails { get; set; }
 
         [Exclude]
@@ -132,6 +132,14 @@ namespace airimayor
             set { Edit(Connection.With(modelsEndpoint: value.Trim())); }
         }
 
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
+        [SettingsUIButton]
+        public bool CheckModels
+        {
+            set { if (value) StartCheckModels(); }
+        }
+
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
@@ -146,10 +154,19 @@ namespace airimayor
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideConnectionDetails))]
-        [SettingsUISlider(min = 32_000, max = 1_000_000, step = 1_000)]
+        public bool AutomaticContext
+        {
+            get => Connection.WindowTokens == 0;
+            set { Edit(Connection.With(windowTokens: value ? 0 : Math.Min(2_000_000, ModelWindow))); }
+        }
+
+        [Exclude]
+        [SettingsUISection(kConnectionSection, kBuiltinGroup)]
+        [SettingsUIHideByCondition(typeof(Setting), nameof(HideContextBudget))]
+        [SettingsUISlider(min = 32_000, max = 2_000_000, step = 1_000)]
         public int ContextTokens
         {
-            get => Connection.WindowTokens;
+            get => Connection.WindowTokens == 0 ? ModelWindow : Connection.WindowTokens;
             set { Edit(Connection.With(windowTokens: value)); }
         }
 
@@ -177,19 +194,31 @@ namespace airimayor
 
         public bool HideBuiltinRequest() => MayorSource != AgentHead.BuiltIn;
         public bool HideAcpRequest() => MayorSource != AgentHead.External;
-        public bool HideConnectionDetails() => HideBuiltinRequest() || !ConnectionDetails;
+        public bool HideConnectionRequest() => HideBuiltinRequest() || string.IsNullOrEmpty(Provider);
+        public bool HideConnectionDetails() => HideConnectionRequest() || !ConnectionDetails;
+        public bool HideContextBudget() => HideConnectionDetails() || AutomaticContext;
         private ProviderConnection Connection => m_Connections.Read(Provider);
+        private int ModelWindow => AgentHead.Catalog.Current.Find(Provider)?.Models.FirstOrDefault(model => model.Id == Connection.Model)?.ContextTokens ?? 128_000;
 
         private void Edit(ProviderConnection connection)
         {
+            if (!string.IsNullOrEmpty(connection.ApiKey) && string.IsNullOrEmpty(connection.CredentialOrigin))
+            {
+                try
+                {
+                    ResolvedModelConnection resolved = AgentHead.Catalog.Current.Resolve(connection);
+                    connection = connection.With(credentialOrigin: new Uri(resolved.Route.Endpoint).GetLeftPart(UriPartial.Authority));
+                }
+                catch (InvalidOperationException) { } // A draft can have its key entered before its model or address.
+            }
             m_Connections.Set(connection);
             ModelPresetVersion++;
         }
 
-        internal MayorSelection CaptureMayor() => new MayorSelection(MayorSource, ExternalAgent, Connection);
+        internal MayorSelection CaptureMayor() => new MayorSelection(MayorSource, ExternalAgent, Connection, AgentHead.Catalog.Current);
         internal void CaptureAppliedMayor() => m_Applied = CaptureMayor();
         internal static MayorSelection AppliedMayor => Instance?.m_Applied ??
-            new MayorSelection(AgentHead.BuiltIn, "", ModelProviders.Find(ModelProviders.OpenAi).DefaultConnection());
+            new MayorSelection(AgentHead.BuiltIn, "", new ProviderConnections().Read(""), ModelCatalogSnapshot.Empty);
 
         // ---- Agent ---------------------------------------
 
@@ -256,6 +285,7 @@ namespace airimayor
         [Exclude, SettingsUIHidden]
         public int AgentListVersion { get; set; }
         private int m_FetchingAgents;
+        private int m_FetchingProviders;
 
         private static bool Chinese => Game.SceneFlow.GameManager.instance?.localizationManager?.activeLocaleId
             ?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true;
@@ -266,20 +296,44 @@ namespace airimayor
             new DropdownItem<string> { value = AgentHead.External, displayName = Chinese ? "外部代理" : "External agent" },
         };
 
-        public static DropdownItem<string>[] GetProviderItems() => ModelProviders.All.Select(provider =>
-            new DropdownItem<string>
+        public static DropdownItem<string>[] GetProviderItems()
+        {
+            var items = new List<DropdownItem<string>>
+            {
+                new DropdownItem<string> { value = "", displayName = Chinese ? "选择供应商" : "Select a provider" },
+            };
+            items.AddRange(AgentHead.Catalog.Current.Providers.Select(provider => new DropdownItem<string>
             {
                 value = provider.Id,
-                displayName = provider.Id == ModelProviders.Compatible && Chinese ? "自定义 OpenAI 兼容服务" : provider.Name,
-            }).ToArray();
+                displayName = provider.Name,
+            }));
+            items.Add(new DropdownItem<string> { value = ModelProviders.Compatible,
+                displayName = Chinese ? "自定义 OpenAI 兼容服务" : "Custom OpenAI-compatible service" });
+            string current = Instance?.Provider;
+            if (!string.IsNullOrEmpty(current) && !items.Any(item => item.value == current))
+                items.Add(new DropdownItem<string> { value = current, displayName = current + (Chinese ? "（不可用）" : " (unavailable)") });
+            return items.ToArray();
+        }
 
         public static DropdownItem<string>[] GetProtocolItems()
         {
-            IReadOnlyList<ModelProtocol> protocols = ModelProviders.Find(Instance?.Provider ?? ModelProviders.OpenAi).Protocols;
+            Setting instance = Instance;
+            ProviderModel model = AgentHead.Catalog.Current.Find(instance?.Provider)?.Models.FirstOrDefault(item => item.Id == instance?.ProviderModel);
+            IEnumerable<ModelProtocol> protocols = model == null
+                ? new[] { ModelProtocol.Responses, ModelProtocol.ChatCompletions, ModelProtocol.AnthropicMessages }
+                : model.Routes.Select(route => route.Protocol);
+            if (instance?.Provider == ModelProviders.Compatible)
+                protocols = new[] { ModelProtocol.Responses, ModelProtocol.ChatCompletions };
+            if (instance?.Provider != ModelProviders.Compatible)
+                protocols = new[] { ModelProtocol.Automatic }.Concat(protocols).Distinct();
+            if (instance != null)
+                protocols = protocols.Concat(new[] { instance.Connection.Protocol }).Distinct();
             return protocols.Select(protocol => new DropdownItem<string>
             {
                 value = protocol.ToString(),
-                displayName = protocol == ModelProtocol.ChatCompletions ? "Chat Completions" : protocol.ToString(),
+                displayName = protocol == ModelProtocol.Automatic ? (Chinese ? "自动" : "Automatic") :
+                    protocol == ModelProtocol.ChatCompletions ? "Chat Completions" :
+                    protocol == ModelProtocol.AnthropicMessages ? "Anthropic Messages" : "Responses",
             }).ToArray();
         }
 
@@ -324,6 +378,14 @@ namespace airimayor
             StartFetchAgents(false);
         }
 
+        internal void LoadProviders()
+        {
+            try { AgentHead.Catalog.Load(); }
+            catch (Exception e) { AgentTimeline.Warn("models", e.Message); }
+            ModelPresetVersion++;
+            StartFetchModels(false);
+        }
+
         private void StartFetchAgents(bool notify)
         {
             if (Interlocked.Exchange(ref m_FetchingAgents, 1) != 0)
@@ -361,7 +423,15 @@ namespace airimayor
             };
             if (instance == null)
                 return items.ToArray();
-            items.AddRange(instance.m_Connections.Models(instance.Provider).Select(model => new DropdownItem<string>
+            IReadOnlyList<ProviderModel> live = instance.m_Connections.Models(instance.Provider);
+            IEnumerable<ProviderModel> models = instance.Provider == ModelProviders.Compatible
+                ? live : AgentHead.Catalog.Current.Find(instance.Provider)?.Models ?? Array.Empty<ProviderModel>();
+            if (live.Count > 0 && instance.Provider != ModelProviders.Compatible)
+            {
+                var available = new HashSet<string>(live.Select(model => model.Id), StringComparer.Ordinal);
+                models = models.Where(model => available.Contains(model.Id));
+            }
+            items.AddRange(models.Select(model => new DropdownItem<string>
             {
                 value = model.Id,
                 displayName = model.Name == model.Id ? model.Id : model.Name + " (" + model.Id + ")",
@@ -378,7 +448,34 @@ namespace airimayor
             return items.ToArray();
         }
 
-        private void StartFetchModels()
+        private void StartFetchModels(bool notify = true)
+        {
+            if (Interlocked.Exchange(ref m_FetchingProviders, 1) != 0) return;
+            SynchronizationContext context = SynchronizationContext.Current;
+            _ = Task.Run(async () =>
+            {
+                string message;
+                try
+                {
+                    await AgentHead.Catalog.RefreshAsync();
+                    message = "Loaded " + AgentHead.Catalog.Current.Providers.Count + " supported providers from Models.dev.";
+                }
+                catch (Exception e)
+                {
+                    message = "Could not refresh the model catalog: " + e.Message;
+                    AgentTimeline.Warn("models", message);
+                }
+                finally { Interlocked.Exchange(ref m_FetchingProviders, 0); }
+                OnSettingsThread(context, () =>
+                {
+                    if (!ReferenceEquals(Instance, this)) return;
+                    ModelPresetVersion++;
+                    if (notify) SettingsNotice.Show(message);
+                });
+            });
+        }
+
+        private void StartCheckModels()
         {
             ProviderConnections profiles = m_Connections;
             ProviderConnection connection = Connection;
@@ -388,10 +485,16 @@ namespace airimayor
                 string message;
                 try
                 {
-                    IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(connection);
+                    ProviderConnection request = connection;
+                    if (connection.ProviderId != ModelProviders.Compatible)
+                    {
+                        ResolvedModelConnection resolved = AgentHead.Catalog.Current.Resolve(connection);
+                        request = connection.With(endpoint: resolved.Route.Endpoint, protocol: resolved.Route.Protocol);
+                    }
+                    IReadOnlyList<ProviderModel> models = await ModelProviders.LoadModelsAsync(request);
                     if (!ReferenceEquals(profiles, m_Connections) || !profiles.AcceptModels(connection, models))
                         return;
-                    message = "Loaded " + models.Count + " models for " + ModelProviders.Find(connection.ProviderId).Name + ".";
+                    message = "The server listed " + models.Count + " models. Your selection has been preserved.";
                 }
                 catch (Exception e)
                 {
@@ -411,7 +514,7 @@ namespace airimayor
             MayorSource = AgentHead.BuiltIn;
             ExternalAgent = "";
             m_Connections = new ProviderConnections();
-            Provider = ModelProviders.OpenAi;
+            Provider = "";
             AllowConstruction = true;
             AllowProgressionPurchases = true;
             AllowDemolition = true;
@@ -517,19 +620,21 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.MayorSource)), "Mayor source" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.MayorSource)), "Choose the built-in mayor or an external agent. Apply settings to open a new chat." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Provider)), "Provider" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Provider)), "Each provider keeps its own key, model and connection settings. Apply settings to open a chat with this connection." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Provider)), "Choose from the supported providers in Models.dev. Each provider keeps its own key, model and connection settings locally. Apply to open a chat with this connection." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ExternalAgent)), "Agent" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ExternalAgent)), "Choose from the ACP Registry. Models and sign-in are managed by the agent outside the game. First use prepares the selected version; Node.js/npm or uv may be needed." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchAgents)), "Refresh agents" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchAgents)), "Refresh the available agents and versions without changing your selection or applying settings." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderEndpoint)), "Server address" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderEndpoint)), "The inference base URL. Anthropic uses the root without /v1; OpenAI protocols include /v1. Changing the host clears this connection's key." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelsEndpoint)), "Model list address" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelsEndpoint)), "Independent from the server address. For a custom OpenAI-compatible service, leave empty to use the server address followed by /models." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderEndpoint)), "Server address override" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderEndpoint)), "Leave empty to use the selected model's address from the catalog. Custom services need their base URL, usually including /v1. Changing the host clears this connection's key." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelsEndpoint)), "Availability list address" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelsEndpoint)), "Used by Check server models. Leave empty to append /models to the selected server; Go uses its separate list address." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.CheckModels)), "Check server models" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.CheckModels)), "Ask this server which models are available. For a catalog provider, select a model first. Custom services need an address. Updates this connection's list without changing the selection or applying settings." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderApiKey)), "API key" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderApiKey)), "Saved only in this provider's settings. Custom services may leave this empty when authentication is not required." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Fetch models" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Refresh this provider's model list without changing the selection, saving settings or reopening chat." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchModels)), "Refresh model catalog" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchModels)), "Refresh providers and models from Models.dev. Sends no API key. Keeps your selection and running chat; a failed refresh keeps the cached catalog." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ProviderModel)), "Model" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ProviderModel)), "Choose a model from this connection's list. You can also enter a model ID in advanced connection settings." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ConnectionDetails)), "Advanced connection settings" },
@@ -537,7 +642,7 @@ namespace airimayor
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ModelId)), "Model ID" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ModelId)), "Enter the provider's model ID directly; refreshing the list preserves this selection." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Protocol)), "API protocol" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Protocol)), "The request protocol supported by this server. It is separate from the provider name." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Protocol)), "Automatic uses the selected model's catalog entry. Choose a protocol explicitly for a custom service or a manually configured model." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestConnection)), "Test connection" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestConnection)), "Test the currently edited connection and model with one short reply. Does not apply settings or reopen the city's chat." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestAcp)), "Test ACP" },
@@ -563,6 +668,8 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowPanel)), "When on, the agent can press panel buttons and fill text boxes, including city settings, the mod list, and deleting a save." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestPanel)), "Test panels" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestPanel)), "Check that panel control works." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutomaticContext)), "Use model context window" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutomaticContext)), "Use the selected model's context window from the catalog. Custom services default to 128,000 tokens. Turn off to choose a smaller budget." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ContextTokens)), "Context budget" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ContextTokens)), "Choose a context budget within this model's window. Each provider remembers your choice." },
 

@@ -8,6 +8,7 @@ namespace airimayor.Agent
 {
     public enum ModelProtocol
     {
+        Automatic,
         Responses,
         ChatCompletions,
         AnthropicMessages,
@@ -22,9 +23,10 @@ namespace airimayor.Agent
         public string Model { get; }
         public ModelProtocol Protocol { get; }
         public int WindowTokens { get; }
+        public string CredentialOrigin { get; }
 
         public ProviderConnection(string providerId, string endpoint, string modelsEndpoint, string apiKey,
-            string model, ModelProtocol protocol, int windowTokens)
+            string model, ModelProtocol protocol, int windowTokens, string credentialOrigin = "")
         {
             ProviderId = providerId;
             Endpoint = endpoint ?? "";
@@ -33,13 +35,15 @@ namespace airimayor.Agent
             Model = model ?? "";
             Protocol = protocol;
             WindowTokens = windowTokens;
+            CredentialOrigin = credentialOrigin ?? "";
         }
 
         public ProviderConnection With(string endpoint = null, string modelsEndpoint = null, string apiKey = null,
-            string model = null, ModelProtocol? protocol = null, int? windowTokens = null)
+            string model = null, ModelProtocol? protocol = null, int? windowTokens = null, string credentialOrigin = null)
         {
             return new ProviderConnection(ProviderId, endpoint ?? Endpoint, modelsEndpoint ?? ModelsEndpoint,
-                apiKey ?? ApiKey, model ?? Model, protocol ?? Protocol, windowTokens ?? WindowTokens);
+                apiKey ?? ApiKey, model ?? Model, protocol ?? Protocol, windowTokens ?? WindowTokens,
+                credentialOrigin ?? CredentialOrigin);
         }
 
         internal bool SameCatalog(ProviderConnection other) => other != null &&
@@ -59,19 +63,21 @@ namespace airimayor.Agent
             lock (m_Gate)
             {
                 return m_Connections.TryGetValue(providerId, out ProviderConnection saved)
-                    ? saved : ModelProviders.Find(providerId).DefaultConnection();
+                    ? saved : new ProviderConnection(providerId, "", "", "", "",
+                        providerId == ModelProviders.Compatible ? ModelProtocol.ChatCompletions : ModelProtocol.Automatic, 0);
             }
         }
 
         public void Set(ProviderConnection connection)
         {
-            if (!ModelProviders.Find(connection.ProviderId).Allows(connection.Protocol) || connection.WindowTokens < 32_000)
+            if (string.IsNullOrWhiteSpace(connection.ProviderId) || !Enum.IsDefined(typeof(ModelProtocol), connection.Protocol) ||
+                (connection.WindowTokens != 0 && connection.WindowTokens < 32_000))
                 throw new InvalidDataException("Invalid model connection settings.");
             lock (m_Gate)
             {
                 ProviderConnection previous = Read(connection.ProviderId);
                 if (Origin(previous.Endpoint) != Origin(connection.Endpoint) && previous.ApiKey == connection.ApiKey)
-                    connection = connection.With(apiKey: "");
+                    connection = connection.With(apiKey: "", credentialOrigin: "");
                 m_Connections[connection.ProviderId] = connection;
             }
         }
@@ -112,9 +118,10 @@ namespace airimayor.Agent
                         ["model"] = connection.Model,
                         ["protocol"] = connection.Protocol.ToString(),
                         ["windowTokens"] = connection.WindowTokens,
+                        ["credentialOrigin"] = connection.CredentialOrigin,
                     });
                 }
-                return new JsonObject { ["schema"] = 1, ["connections"] = entries }.ToJsonString();
+                return new JsonObject { ["schema"] = 2, ["connections"] = entries }.ToJsonString();
             }
         }
 
@@ -122,25 +129,25 @@ namespace airimayor.Agent
         {
             JsonObject root = JsonNode.Parse(json)?.AsObject();
             RequireKeys(root, "schema", "connections");
-            if (root["schema"]?.GetValue<int>() != 1 || !(root["connections"] is JsonArray entries))
+            if (root["schema"]?.GetValue<int>() != 2 || !(root["connections"] is JsonArray entries))
                 throw new InvalidDataException("Unsupported model connection settings format.");
             var profiles = new ProviderConnections();
             foreach (JsonNode node in entries)
             {
                 JsonObject entry = node.AsObject();
-                RequireKeys(entry, "provider", "endpoint", "modelsEndpoint", "apiKey", "model", "protocol", "windowTokens");
+                RequireKeys(entry, "provider", "endpoint", "modelsEndpoint", "apiKey", "model", "protocol", "windowTokens", "credentialOrigin");
                 string provider = entry["provider"].GetValue<string>();
-                ModelProvider definition = ModelProviders.Find(provider);
                 string protocolName = entry["protocol"].GetValue<string>();
                 if (!Enum.TryParse(protocolName, out ModelProtocol protocol) || protocol.ToString() != protocolName ||
-                    !definition.Allows(protocol) || profiles.m_Connections.ContainsKey(provider))
+                    !Enum.IsDefined(typeof(ModelProtocol), protocol) || string.IsNullOrWhiteSpace(provider) || profiles.m_Connections.ContainsKey(provider))
                     throw new InvalidDataException("Invalid model connection settings.");
                 int window = entry["windowTokens"].GetValue<int>();
-                if (window < 32_000)
+                if (window != 0 && window < 32_000)
                     throw new InvalidDataException("Invalid context budget.");
                 profiles.m_Connections.Add(provider, new ProviderConnection(provider,
                     entry["endpoint"].GetValue<string>(), entry["modelsEndpoint"].GetValue<string>(),
-                    entry["apiKey"].GetValue<string>(), entry["model"].GetValue<string>(), protocol, window));
+                    entry["apiKey"].GetValue<string>(), entry["model"].GetValue<string>(), protocol, window,
+                    entry["credentialOrigin"].GetValue<string>()));
             }
             return profiles;
         }
