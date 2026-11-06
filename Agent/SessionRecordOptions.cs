@@ -14,8 +14,5 @@ namespace airimayor.Agent
 
         /// <summary>Host facts that occur once, such as head, mod version, and city.</summary>
         public JsonObject Facts;
-
-        /// <summary>Session, turn, and conversation that opened this one. Null for a chat the player opened.</summary>
-        public JsonObject Parent;
     }
 }

@@ -361,32 +361,36 @@ namespace airimayor.Agent
             }
             var timer = System.Diagnostics.Stopwatch.StartNew();
             SimulationStamp submitted = m_Record.Clock();
+            callId = string.IsNullOrEmpty(callId) ? Guid.NewGuid().ToString("N") : callId;
             m_Record.FunctionStart(callId, name);
-            AgentToolResult result;
+            AgentToolResult result = null;
             try
             {
                 result = await invoke().ConfigureAwait(false);
+                return result;
             }
-            catch (OperationCanceledException)
+            catch (Exception error)
             {
-                m_Record.Function(callId, name, arguments,
-                    new AgentToolResult { Success = false, Text = "tool call interrupted" },
-                    timer.ElapsedMilliseconds,
-                    new ToolAnchors { Submitted = submitted, Completed = m_Record.Clock() },
-                    "interrupted");
+                result = new AgentToolResult
+                {
+                    Success = false,
+                    Text = error is OperationCanceledException ? "tool call interrupted" : error.Message,
+                };
                 throw;
             }
-            m_Record.Function(callId, name, arguments, result, timer.ElapsedMilliseconds,
-                new ToolAnchors
-                {
-                    Submitted = submitted,
-                    Applied = result.Applied,
-                    Completed = m_Record.Clock(),
-                    QueuedMs = result.QueuedMs,
-                },
-                result.Success ? null : result.Text,
-                isRoot ? null : "conversation");
-            return result;
+            finally
+            {
+                m_Record.Function(callId, name, arguments, result, timer.ElapsedMilliseconds,
+                    new ToolAnchors
+                    {
+                        Submitted = submitted,
+                        Applied = result.Applied,
+                        Completed = m_Record.Clock(),
+                        QueuedMs = result.QueuedMs,
+                    },
+                    result.Success ? null : result.Text,
+                    isRoot ? "mayor" : "conversation");
+            }
         }
 
         private static JsonObject ToolJson(AgentToolDeclaration tool)

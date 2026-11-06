@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace airimayor.Agent
 {
-    // Accept SDK warning/error diagnostics; no custom model-message/catalog/usage serialization.
+    // SDK diagnostics share the session trace; native activities carry model evidence.
     internal sealed class HostDiagnostics : ILoggerFactory
     {
         private readonly SessionRecord m_Record;
@@ -42,7 +42,7 @@ namespace airimayor.Agent
                 if (IsEnabled(level))
                 {
                     string message = SessionRecord.RedactSecrets(formatter(state, exception));
-                    m_Record.System(m_Category, message);
+                    m_Record.Log(m_Category, message, level >= LogLevel.Error ? "error" : "warn");
                     m_Warn?.Invoke(message);
                 }
             }

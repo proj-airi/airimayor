@@ -24,6 +24,7 @@ namespace airimayor.Agent
         private readonly List<ChatMessage> m_CurrentInput = new List<ChatMessage>();
         private readonly ChatProjection m_View;
         private readonly CityFunctions m_Functions;
+        private readonly HarnessTrace m_Trace;
         private readonly Func<Task> m_Open;
         private readonly Task m_Loop;
         private IChatClient m_Client;
@@ -47,13 +48,14 @@ namespace airimayor.Agent
             int windowTokens, int outputTokens, bool vision, SessionRecordOptions recordOptions, Action<string> warn = null)
         {
             Record = new SessionRecord(Guid.NewGuid().ToString("N"), recordOptions, warn);
-            Record.DeclareGap("Harness owns model history and compaction; full model requests, replies and per-round usage are not recorded");
-            Record.DeclareGap("native background tasks share city-tool evidence here; separate child records and task transcripts are not captured");
+            Record.DeclareGap("An abrupt process exit can lose unfinished model output; each request is recorded before the model starts");
+            Record.DeclareGap("Model records use SDK semantic content; raw transport payloads and provider-private fields are unavailable");
+            m_Trace = new HarnessTrace(Record);
             m_View = new ChatProjection { SessionId = Record.SessionId };
             m_Functions = new CityFunctions(tools, Record, m_View.Apply);
             m_Open = async () =>
             {
-                m_Client = openClient(Record.SessionId);
+                m_Client = m_Trace.Observe(openClient(Record.SessionId));
                 var logger = new HostDiagnostics(Record, warn);
                 var child = CreateAgent("inspector", vision, instructions, windowTokens, outputTokens, logger, null, out _);
                 m_Agent = CreateAgent("mayor", vision, instructions, windowTokens, outputTokens, logger, new[] { child }, out m_History);
@@ -79,7 +81,8 @@ namespace airimayor.Agent
                 DisableToolAutoApproval = true,
                 DisableApprovalResponseBinding = true,
                 DisableApprovalNotRequiredFunctionBypassing = true,
-                DisableOpenTelemetry = true,
+                DisableOpenTelemetry = false,
+                OpenTelemetrySourceName = HarnessTrace.SourceName,
                 ChatHistoryProvider = history,
                 CompactionStrategy = compaction,
                 MaxContextWindowTokens = window,
@@ -87,7 +90,7 @@ namespace airimayor.Agent
                 ChatOptions = new ChatOptions { Instructions = instructions, Tools = m_Functions.List(vision), MaxOutputTokens = outputTokens },
                 BackgroundAgents = children,
             }, logger);
-            return CancelledRunRecovery.Wrap(agent, history);
+            return m_Trace.Observe(CancelledRunRecovery.Wrap(agent, history));
         }
 
         public void Prompt(string text) => Prompt(text, text, null);
@@ -180,6 +183,7 @@ namespace airimayor.Agent
                 finally
                 {
                     m_Client?.Dispose();
+                    m_Trace.Dispose();
                     Record.Dispose();
                 }
             }

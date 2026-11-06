@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -224,15 +226,16 @@ namespace airimayor.Agent
                     }
                 }
 
-                string[] lines = System.IO.File.ReadAllLines(System.IO.Path.Combine(directory, SessionRecord.TimelineFile));
-                Assert.Equal(2, lines.Length);
-                using (JsonDocument start = JsonDocument.Parse(lines[0]))
-                using (JsonDocument finish = JsonDocument.Parse(lines[1]))
-                {
-                    Assert.Equal("function.start", start.RootElement.GetProperty("type").GetString());
-                    Assert.Equal("mcp-7", finish.RootElement.GetProperty("call").GetString());
-                    Assert.Equal("calls/mcp-7/image.png", finish.RootElement.GetProperty("data").GetProperty("files")[0].GetString());
-                }
+                var lines = System.IO.File.ReadAllLines(System.IO.Path.Combine(directory, SessionRecord.RecordsFile))
+                    .Select(line => JsonNode.Parse(line)).ToArray();
+                var finish = Assert.Single(lines.Where(line => (string)line["name"] == "city.tool.result"));
+                Assert.Equal("mcp-7", (string)finish["ids"]["toolCall"]);
+                var data = JsonNode.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(directory,
+                    (string)finish["attrs"]["airimayor.data"]["$asset"])));
+                var image = Assert.Single(data["files"].AsArray())["asset"];
+                Assert.Equal("image/png", (string)image["mediaType"]);
+                Assert.Equal(new byte[] { 104, 105 }, System.IO.File.ReadAllBytes(
+                    System.IO.Path.Combine(directory, (string)image["$asset"])));
             }
             finally
             {

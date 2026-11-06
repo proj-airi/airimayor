@@ -1,0 +1,443 @@
+[
+  {
+    "type": "definition",
+    "kind": "profile",
+    "key": "agent",
+    "data": {
+      "key": "agent",
+      "version": "1",
+      "label": {
+        "en": "Agent",
+        "zh-Hans": "智能体"
+      },
+      "description": {
+        "en": "Chat turns, model requests, tools, sub-agents, and async work such as memory decisions.",
+        "zh-Hans": "聊天轮次、模型请求、工具、子智能体，以及记忆决策这类异步工作。"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "agents/{agent}/state",
+    "data": {
+      "path": "agents/{agent}/state",
+      "entity": "agent",
+      "group": "agents",
+      "order": 0,
+      "render": [
+        "state"
+      ],
+      "states": [
+        "running",
+        "paused",
+        "waiting",
+        "done"
+      ],
+      "label": {
+        "en": "State",
+        "zh-Hans": "状态"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "agents/{agent}/turn",
+    "data": {
+      "path": "agents/{agent}/turn",
+      "entity": "agent",
+      "activity": "waiting",
+      "group": "agents",
+      "order": 10,
+      "render": [
+        "spans"
+      ],
+      "color": "#64748b",
+      "icon": "i-mingcute:chat-2-line",
+      "label": {
+        "en": "Chat turn",
+        "zh-Hans": "聊天轮次"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "agents/{agent}/llm",
+    "data": {
+      "path": "agents/{agent}/llm",
+      "entity": "agent",
+      "activity": "thinking",
+      "activitySplit": {
+        "instant": "llm.first_chunk",
+        "activity": "active"
+      },
+      "group": "agents",
+      "order": 20,
+      "render": [
+        "spans",
+        "instants"
+      ],
+      "color": "#a855f7",
+      "icon": "i-mingcute:ai-line",
+      "label": {
+        "en": "Model",
+        "zh-Hans": "模型"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "agents/{agent}/tools",
+    "data": {
+      "path": "agents/{agent}/tools",
+      "entity": "agent",
+      "activity": "active",
+      "itemLabel": "name",
+      "group": "agents",
+      "order": 30,
+      "render": [
+        "spans"
+      ],
+      "color": "#0ea5e9",
+      "icon": "i-mingcute:tool-line",
+      "label": {
+        "en": "Tools",
+        "zh-Hans": "工具"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "agents/{agent}/control",
+    "data": {
+      "path": "agents/{agent}/control",
+      "entity": "agent",
+      "group": "agents",
+      "order": 40,
+      "render": [
+        "spans",
+        "instants"
+      ],
+      "color": "#06b6d4",
+      "icon": "i-mingcute:signal-line",
+      "label": {
+        "en": "Streaming control",
+        "zh-Hans": "流式控制"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "background/decision",
+    "data": {
+      "path": "background/decision",
+      "activity": "thinking",
+      "group": "background",
+      "order": 0,
+      "render": [
+        "spans"
+      ],
+      "color": "#eab308",
+      "icon": "i-mingcute:git-branch-line",
+      "label": {
+        "en": "Decisions",
+        "zh-Hans": "决策"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "track",
+    "key": "background/memory",
+    "data": {
+      "path": "background/memory",
+      "activity": "active",
+      "group": "background",
+      "order": 10,
+      "render": [
+        "spans",
+        "instants"
+      ],
+      "color": "#84cc16",
+      "icon": "i-mingcute:storage-line",
+      "label": {
+        "en": "Memory",
+        "zh-Hans": "记忆"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "attribute",
+    "key": "turn.input_text",
+    "data": {
+      "key": "turn.input_text",
+      "type": "string",
+      "sensitivity": "content"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "attribute",
+    "key": "control.raw_token",
+    "data": {
+      "key": "control.raw_token",
+      "type": "string",
+      "sensitivity": "content"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "attribute",
+    "key": "control.parameter",
+    "data": {
+      "key": "control.parameter",
+      "type": "string",
+      "sensitivity": "content"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "attribute",
+    "key": "llm.ttft_ms",
+    "data": {
+      "key": "llm.ttft_ms",
+      "type": "number",
+      "unit": "ms",
+      "sensitivity": "none",
+      "aggregatable": true
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "attribute",
+    "key": "airi.topic.id",
+    "data": {
+      "key": "airi.topic.id",
+      "type": "string",
+      "sensitivity": "none"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "topic",
+    "data": {
+      "key": "topic"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "round",
+    "data": {
+      "key": "round"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "request",
+    "data": {
+      "key": "request"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "message",
+    "data": {
+      "key": "message"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "toolCall",
+    "data": {
+      "key": "toolCall"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "toolGroup",
+    "data": {
+      "key": "toolGroup"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "intent",
+    "data": {
+      "key": "intent"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "decision",
+    "data": {
+      "key": "decision"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "job",
+    "data": {
+      "key": "job"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "agent",
+    "data": {
+      "key": "agent"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "run",
+    "data": {
+      "key": "run"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "causationRoot",
+    "data": {
+      "key": "causationRoot"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "id-key",
+    "key": "causationChain",
+    "data": {
+      "key": "causationChain"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "link",
+    "key": "handed-off-to",
+    "data": {
+      "rel": "handed-off-to",
+      "label": {
+        "en": "Handed off to",
+        "zh-Hans": "移交给"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "end-reason",
+    "key": "max-steps",
+    "data": {
+      "reason": "max-steps",
+      "label": {
+        "en": "Max steps",
+        "zh-Hans": "达到步数上限"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "end-reason",
+    "key": "handed-off",
+    "data": {
+      "reason": "handed-off",
+      "label": {
+        "en": "Handed off",
+        "zh-Hans": "已移交"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "end-reason",
+    "key": "awaiting-input",
+    "data": {
+      "reason": "awaiting-input",
+      "label": {
+        "en": "Awaiting input",
+        "zh-Hans": "等待输入"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "llm.ttft_ms",
+    "data": {
+      "key": "llm.ttft_ms",
+      "label": {
+        "en": "Time to first token",
+        "zh-Hans": "首 token 延迟"
+      },
+      "description": {
+        "en": "From the model request to the first content chunk.",
+        "zh-Hans": "从发出模型请求到收到第一个内容块。"
+      },
+      "unit": "ms",
+      "better": "lower",
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "llm.ttft_ms"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "llm.ttfat_ms",
+    "data": {
+      "key": "llm.ttfat_ms",
+      "label": {
+        "en": "Time to first answer",
+        "zh-Hans": "首个回答延迟"
+      },
+      "description": {
+        "en": "From the model request to the first answer token or tool call, after reasoning.",
+        "zh-Hans": "从发出模型请求到推理之后的第一个回答 token 或工具调用。"
+      },
+      "unit": "ms",
+      "better": "lower",
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "llm.ttfat_ms"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "preset",
+    "key": "agent.memory",
+    "data": {
+      "key": "agent.memory",
+      "label": {
+        "en": "Memory",
+        "zh-Hans": "记忆"
+      },
+      "tracks": [
+        "agents/{agent}/turn",
+        "background/decision",
+        "background/memory"
+      ]
+    }
+  }
+]

@@ -1,430 +1,378 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace airimayor.Agent
 {
-    /// <summary>
-    /// Session facts, city-tool evidence and host events. Each owned ACP
-    /// conversation has its own record under <c>conversations/</c>.
-    /// Model snapshots and native child transcripts are declared gaps.
-    /// </summary>
+    /// <summary>One trace-kit recording: native records and the complete evidence they reference.</summary>
     public sealed class SessionRecord : IDisposable
     {
-        public const int Schema = 1;
-        public const string SessionFile = "session.json";
-        public const string TimelineFile = "timeline.jsonl";
-
+        public const string RecordsFile = "records.jsonl";
+        private const string EventsTrack = "city/events";
+        private const string LogTrack = "city/diagnostics";
+        private static readonly Regex s_SecretKey = new Regex("^(?:api[_ -]?key|authorization|x-api-key|(?:access[_ -]?|refresh[_ -]?)?token)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private readonly object m_Lock = new object();
-        private readonly string m_SessionId;
         private readonly Action<string> m_Warn;
         private readonly Func<SimulationStamp> m_Clock;
-        private readonly JsonObject m_Facts;
-        private readonly JsonlFile m_Timeline;
-        private string m_Turn;
+        private readonly Stopwatch m_Watch = Stopwatch.StartNew();
+        private readonly AsyncLocal<Context> m_Context = new AsyncLocal<Context>();
+        private readonly Dictionary<string, string> m_Calls = new Dictionary<string, string>();
+        private readonly HashSet<string> m_Gaps = new HashSet<string>(StringComparer.Ordinal);
+        private readonly JsonlFile m_Records;
         private long m_Sequence;
+        private bool m_Incomplete;
         private bool m_Disposed;
 
         public SessionRecord(string sessionId, SessionRecordOptions options, Action<string> warn)
         {
-            m_SessionId = sessionId;
+            SessionId = sessionId;
             m_Warn = warn;
             m_Clock = options?.Clock;
-            DateTime started = DateTime.UtcNow;
-            m_Facts = new JsonObject
-            {
-                ["schema"] = Schema,
-                ["session"] = sessionId,
-                ["parent"] = options?.Parent?.DeepClone(),
-            };
-            if (options?.Facts != null)
-            {
-                foreach (KeyValuePair<string, JsonNode> fact in options.Facts)
-                {
-                    m_Facts[fact.Key] = fact.Value?.DeepClone();
-                }
-            }
-            m_Facts["started"] = Moment(started);
-            m_Facts["knownGaps"] = new JsonArray();
-            if (string.IsNullOrWhiteSpace(options?.Root))
-            {
-                return;
-            }
-            string directory = Path.Combine(
-                options.Root,
-                started.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "--" + sessionId);
+            if (string.IsNullOrWhiteSpace(options?.Root)) return;
             try
             {
-                global::System.IO.Directory.CreateDirectory(directory);
-                Directory = directory;
-                WriteSessionFile();
-                m_Timeline = new JsonlFile(
-                    Path.Combine(directory, TimelineFile), warn, rotated => DeclareGap(rotated + " rotated out"));
+                Directory = Path.Combine(options.Root, DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "--" + sessionId);
+                global::System.IO.Directory.CreateDirectory(Directory);
+                m_Records = new JsonlFile(Path.Combine(Directory, RecordsFile));
             }
-            catch (Exception e)
+            catch (Exception error) when (IsFileError(error)) { Directory = null; Fail(error); return; }
+
+            EmitTrace(new JsonObject
             {
-                Directory = null;
-                Warn("session record unavailable: " + e.Message);
+                ["type"] = "source.started", ["format"] = 1, ["runtime"] = "dotnet",
+                ["profiles"] = new JsonArray(new JsonObject { ["key"] = "agent", ["version"] = "1" }),
+            });
+            using (var stream = typeof(SessionRecord).Assembly.GetManifestResourceStream("airimayor.Agent.TraceProfile.json"))
+            using (var reader = new StreamReader(stream ?? throw new InvalidOperationException("The trace profile is missing.")))
+                foreach (JsonObject definition in (JsonArray)JsonNode.Parse(reader.ReadToEnd())) EmitTrace(definition);
+            DefineTrack(EventsTrack, "City evidence", 0);
+            DefineTrack(LogTrack, "Diagnostics", 10);
+            EmitTrace(new JsonObject
+            {
+                ["type"] = "clock.snapshot", ["uncertaintyMs"] = 1,
+                ["values"] = new JsonArray(new JsonObject { ["clock"] = TraceClock, ["value"] = TraceNow }, new JsonObject { ["clock"] = "utc", ["value"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }),
+            });
+            if (options.Facts != null) Describe("session", options.Facts);
+        }
+
+        public string SessionId { get; }
+        public string Directory { get; private set; }
+        private string TraceClock => "mono:cs2:game:" + SessionId;
+        internal double TraceNow => m_Watch.Elapsed.TotalMilliseconds;
+        internal JsonObject TraceIds
+        {
+            get
+            {
+                var ids = (JsonObject)m_Context.Value?.Ids.DeepClone() ?? new JsonObject();
+                ids["conversation"] = SessionId;
+                return ids;
             }
         }
 
-        public string SessionId => m_SessionId;
+        public SimulationStamp Clock() => m_Clock?.Invoke();
 
-        /// <summary>Record directory, or null when nothing is written.</summary>
-        public string Directory { get; private set; }
-
-        /// <summary>Latest simulation clock reading, or null while no city runs.</summary>
-        public SimulationStamp Clock()
+        internal IDisposable BindRun(string agentSession, string run, string agent)
         {
-            return m_Clock?.Invoke();
+            JsonObject ids = TraceIds;
+            string previousSession = (string)ids["agentSession"];
+            if (previousSession != null && previousSession != agentSession)
+            {
+                if (ids["turn"] != null) ids["originTurn"] = ids["turn"].DeepClone();
+                if (ids["run"] != null) ids["originRun"] = ids["run"].DeepClone();
+                ids.Remove("turn");
+            }
+            ids["agentSession"] = agentSession;
+            ids["run"] = run;
+            ids["agent"] = agent;
+            return BindContext(ids);
         }
 
-        /// <summary>Sets one fact in <c>session.json</c>.</summary>
-        public void Describe(string key, JsonNode value)
+        internal IDisposable BindContext(JsonObject capturedIds)
+        {
+            Context previous = m_Context.Value;
+            var ids = (JsonObject)capturedIds.DeepClone();
+            ids["conversation"] = SessionId;
+            string turn = (string)ids["turn"];
+            m_Context.Value = new Context(ids, turn != null && turn == (string)previous?.Ids["turn"] ? previous?.TurnSpan : null);
+            return new Binding(() => m_Context.Value = previous);
+        }
+
+        internal void EmitTrace(JsonObject input)
         {
             lock (m_Lock)
             {
-                m_Facts[key] = value;
-                WriteSessionFile();
+                if (m_Records == null || m_Disposed) return;
+                var record = (JsonObject)Redact(input);
+                if (record.TryGetPropertyValue("attrs", out var attrs) && !(attrs is JsonObject))
+                    throw new ArgumentException("Trace attributes must be an object.");
+                ValidateAttributes(attrs as JsonObject);
+                record["source"] = "cs2:game";
+                record["epoch"] = SessionId;
+                record["seq"] = m_Sequence++;
+                if (record["ts"] == null) record["ts"] = TraceNow;
+                if (record["clock"] == null) record["clock"] = TraceClock;
+                var ids = (JsonObject)record["ids"]?.DeepClone() ?? TraceIds;
+                ids["conversation"] = SessionId;
+                record["ids"] = ids;
+                try { m_Records.Append(record); }
+                catch (Exception error) when (IsFileError(error)) { Fail(error); }
             }
         }
 
-        /// <summary>
-        /// Names something this record cannot show, once. A gap is declared,
-        /// never filled in: unknown is not written as empty.
-        /// </summary>
+        internal JsonObject KeepAsset(JsonNode value)
+        {
+            if (Directory == null || m_Disposed) return null;
+            return KeepAsset(Encoding.UTF8.GetBytes(value?.ToJsonString() ?? "null"), "application/json");
+        }
+
+        public JsonObject KeepAsset(byte[] value, string mediaType)
+        {
+            lock (m_Lock)
+            {
+                if (Directory == null || m_Disposed) return null;
+                byte[] bytes = value;
+                if (mediaType == "application/json")
+                    bytes = Encoding.UTF8.GetBytes(Redact(JsonNode.Parse(Encoding.UTF8.GetString(value)))?.ToJsonString() ?? "null");
+                else if (mediaType.StartsWith("text/", StringComparison.Ordinal))
+                    bytes = Encoding.UTF8.GetBytes(RedactSecrets(Encoding.UTF8.GetString(value)));
+                string hash;
+                using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+                string relative = "assets/" + hash;
+                try
+                {
+                    global::System.IO.Directory.CreateDirectory(Path.Combine(Directory, "assets"));
+                    string path = Path.Combine(Directory, relative);
+                    if (!File.Exists(path)) File.WriteAllBytes(path, bytes);
+                    return new JsonObject { ["$asset"] = relative, ["mediaType"] = mediaType, ["bytes"] = bytes.Length };
+                }
+                catch (Exception error) when (IsFileError(error)) { Fail(error); return null; }
+            }
+        }
+
+        public void Describe(string key, JsonNode value) => Record("session.fact", new JsonObject { ["key"] = key, ["value"] = value?.DeepClone() });
+
         public void DeclareGap(string gap)
         {
             lock (m_Lock)
-            {
-                var gaps = (JsonArray)m_Facts["knownGaps"];
-                foreach (JsonNode known in gaps)
-                {
-                    if ((string)known == gap)
-                    {
-                        return;
-                    }
-                }
-                gaps.Add(gap);
-                WriteSessionFile();
-            }
-        }
-
-        /// <summary>Record options for a conversation this session opens in its current turn.</summary>
-        public SessionRecordOptions Conversation(string conversationId)
-        {
-            lock (m_Lock)
-            {
-                var facts = new JsonObject();
-                foreach (string key in new[] { "head", "modVersion", "city" })
-                {
-                    if (m_Facts.TryGetPropertyValue(key, out JsonNode value))
-                    {
-                        facts[key] = value?.DeepClone();
-                    }
-                }
-                return new SessionRecordOptions
-                {
-                    Root = Directory == null ? null : Path.Combine(Directory, "conversations"),
-                    Clock = m_Clock,
-                    Facts = facts,
-                    Parent = new JsonObject
-                    {
-                        ["session"] = m_SessionId,
-                        ["turn"] = m_Turn,
-                        ["conversation"] = conversationId,
-                    },
-                };
-            }
-        }
-
-        /// <summary>
-        /// Keeps what a tool call returned beside its events: the model image
-        /// and any diagnostic files. Returns the record-relative paths.
-        /// </summary>
-        private JsonArray SaveCallFiles(string callId, byte[] image, IReadOnlyDictionary<string, byte[]> files)
-        {
-            var saved = new JsonArray();
-            bool hasImage = image != null && image.Length > 0;
-            if (Directory == null || (!hasImage && (files == null || files.Count == 0)))
-            {
-                return saved;
-            }
-            string relative = "calls/" + FileSafe(callId);
-            try
-            {
-                string directory = Path.Combine(Directory, "calls", FileSafe(callId));
-                global::System.IO.Directory.CreateDirectory(directory);
-                if (hasImage)
-                {
-                    File.WriteAllBytes(Path.Combine(directory, "image.png"), image);
-                    saved.Add(relative + "/image.png");
-                }
-                if (files != null)
-                {
-                    foreach (KeyValuePair<string, byte[]> file in files)
-                    {
-                        File.WriteAllBytes(Path.Combine(directory, FileSafe(file.Key)), file.Value);
-                        saved.Add(relative + "/" + FileSafe(file.Key));
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                Warn("session record could not keep call files: " + e.Message);
-            }
-            return saved;
-        }
-
-        /// <summary>
-        /// Keeps a long text once under <c>blobs/</c> and returns its
-        /// record-relative path, or null when nothing is written.
-        /// </summary>
-        public string KeepBlob(string text)
-        {
-            if (Directory == null)
-            {
-                return null;
-            }
-            byte[] bytes = Encoding.UTF8.GetBytes(text ?? "");
-            string relative;
-            using (var sha = global::System.Security.Cryptography.SHA256.Create())
-            {
-                relative = "blobs/" + BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant() + ".txt";
-            }
-            lock (m_Lock)
-            {
-                try
-                {
-                    global::System.IO.Directory.CreateDirectory(Path.Combine(Directory, "blobs"));
-                    File.WriteAllBytes(Path.Combine(Directory, relative), bytes);
-                }
-                catch (Exception e)
-                {
-                    Warn("session record could not keep " + relative + ": " + e.Message);
-                    return null;
-                }
-            }
-            return relative;
+                if (m_Gaps.Add(gap)) Record("recording.gap", new JsonObject { ["message"] = gap });
         }
 
         public void Record(string type, JsonObject data, string call = null)
         {
-            lock (m_Lock)
-            {
-                if (m_Timeline == null || m_Disposed)
-                {
-                    return;
-                }
-                var line = new JsonObject
-                {
-                    ["schema"] = Schema,
-                    ["seq"] = ++m_Sequence,
-                    ["ts"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
-                    ["session"] = m_SessionId,
-                    ["turn"] = m_Turn,
-                };
-                if (call != null)
-                {
-                    line["call"] = call;
-                }
-                SimulationStamp clock = Clock();
-                if (clock != null)
-                {
-                    line["clock"] = clock.ToJson();
-                }
-                line["type"] = type;
-                line["data"] = data ?? new JsonObject();
-                m_Timeline.Append(line);
-            }
+            JsonObject ids = TraceIds;
+            if (call != null) ids["toolCall"] = call;
+            EmitTrace(new JsonObject { ["type"] = "instant", ["name"] = type, ["track"] = EventsTrack, ["ids"] = ids, ["attrs"] = DataAttributes(data) });
         }
 
         public void TurnStart(string turnId, string userText)
         {
-            lock (m_Lock)
+            JsonObject ids = TraceIds;
+            ids["turn"] = turnId;
+            string span = Guid.NewGuid().ToString("N");
+            m_Context.Value = new Context(ids, span);
+            EmitTrace(new JsonObject
             {
-                m_Turn = turnId;
-            }
-            Record("turn.start", new JsonObject { ["user"] = userText });
+                ["type"] = "span.begin", ["spanId"] = span, ["name"] = "chat-turn", ["track"] = "agents/mayor/turn",
+                ["attrs"] = DataAttributes(new JsonObject { ["user"] = userText, ["simulation"] = Clock()?.ToJson() }),
+            });
         }
 
-        /// <summary>Closes the open turn; events after it carry no turn.</summary>
         public void TurnFinish(JsonObject data)
         {
-            Record("turn.finish", data);
+            Context context = m_Context.Value;
+            if (context?.TurnSpan == null) return;
+            string reason = (string)data?["stopReason"];
+            EmitTrace(new JsonObject
+            {
+                ["type"] = "span.end", ["spanId"] = context.TurnSpan, ["track"] = "agents/mayor/turn",
+                ["status"] = reason == "cancelled" ? "cancelled" : reason == "failed" ? "error" : "ok", ["attrs"] = DataAttributes(data),
+            });
+            var ids = (JsonObject)context.Ids.DeepClone();
+            ids.Remove("turn");
+            m_Context.Value = new Context(ids, null);
+        }
+
+        public void FunctionStart(string callId, string toolName)
+        {
+            if (NativeTool() != null) return;
             lock (m_Lock)
             {
-                m_Turn = null;
+                string span = Guid.NewGuid().ToString("N");
+                m_Calls.Add(callId, span);
+                EmitTrace(new JsonObject
+                {
+                    ["type"] = "span.begin", ["spanId"] = span, ["name"] = "execute_tool", ["track"] = ToolTrack,
+                    ["ids"] = CallIds(callId), ["attrs"] = new JsonObject { ["gen_ai.tool.name"] = toolName },
+                });
             }
         }
 
-        /// <summary>Written before a tool runs, so a call that never ends still leaves a trace.</summary>
-        public void FunctionStart(string callId, string toolName)
-        {
-            Record("function.start", new JsonObject { ["tool"] = toolName }, callId);
-        }
-
-        /// <summary>
-        /// One finished tool call. Submitted and completed come from the
-        /// clock; applied is the frame where the simulation thread ran the
-        /// request, absent for tools that never reach it. Returned images and
-        /// diagnostic files are kept under the call and listed in <c>files</c>.
-        /// <paramref name="caller"/> identifies the native agent or an owned
-        /// conversation of the external mayor.
-        /// </summary>
-        public void Function(
-            string callId,
-            string toolName,
-            string arguments,
-            AgentToolResult result,
-            long elapsedMs,
-            ToolAnchors anchors,
-            string error = null,
-            string caller = null)
+        public void Function(string callId, string toolName, string arguments, AgentToolResult result, long elapsedMs, ToolAnchors anchors, string error = null, string caller = null)
         {
             var data = new JsonObject
             {
-                ["tool"] = toolName,
-                ["arguments"] = Truncate(arguments, 32768),
-                ["result"] = Truncate(result.Text, 32768),
-                ["success"] = result.Success,
-                ["elapsedMs"] = elapsedMs,
-                ["error"] = error,
+                ["tool"] = toolName, ["arguments"] = arguments, ["result"] = result.Text, ["success"] = result.Success,
+                ["elapsedMs"] = elapsedMs, ["error"] = error, ["caller"] = caller, ["evidence"] = result.Evidence?.DeepClone(),
             };
-            if (caller != null)
-            {
-                data["caller"] = caller;
-            }
-            if (result.Evidence != null)
-            {
-                data["evidence"] = result.Evidence.DeepClone();
-            }
-            if (anchors.QueuedMs.HasValue)
-            {
-                data["queuedMs"] = anchors.QueuedMs.Value;
-            }
+            if (anchors.QueuedMs.HasValue) data["queuedMs"] = anchors.QueuedMs.Value;
             var timeline = new JsonObject();
-            AddAnchor(timeline, "submitted", anchors.Submitted);
-            AddAnchor(timeline, "applied", anchors.Applied);
-            AddAnchor(timeline, "completed", anchors.Completed);
+            if (anchors.Submitted != null) timeline["submitted"] = anchors.Submitted.ToJson();
+            if (anchors.Applied != null) timeline["applied"] = anchors.Applied.ToJson();
+            if (anchors.Completed != null) timeline["completed"] = anchors.Completed.ToJson();
             data["timeline"] = timeline;
-            JsonArray files = SaveCallFiles(callId, result.ImagePng, result.Files);
-            if (files.Count > 0)
+            var files = new JsonArray();
+            if (result.ImagePng != null) files.Add(new JsonObject { ["name"] = "image.png", ["asset"] = KeepAsset(result.ImagePng, "image/png") });
+            if (result.Files != null)
+                foreach (var file in result.Files) files.Add(new JsonObject { ["name"] = file.Key, ["asset"] = KeepAsset(file.Value, MediaType(file.Key)) });
+            data["files"] = files;
+            lock (m_Lock)
             {
-                data["files"] = files;
+                string span = NativeTool()?.SpanId.ToHexString();
+                bool owned = span == null && m_Calls.TryGetValue(callId, out span);
+                var instant = new JsonObject
+                {
+                    ["type"] = "instant", ["name"] = "city.tool.result", ["track"] = ToolTrack,
+                    ["ids"] = CallIds(callId), ["attrs"] = DataAttributes(data),
+                };
+                if (span != null) instant["spanId"] = span;
+                EmitTrace(instant);
+                if (owned)
+                {
+                    EmitTrace(new JsonObject { ["type"] = "span.end", ["spanId"] = span, ["track"] = ToolTrack, ["status"] = result.Success ? "ok" : "error", ["ids"] = CallIds(callId) });
+                    m_Calls.Remove(callId);
+                }
             }
-            Record("function", data, callId);
         }
 
-        public void System(string source, string message)
+        private JsonObject CallIds(string callId)
         {
-            Record("system", new JsonObject
-            {
-                ["source"] = source,
-                ["message"] = Truncate(message, 32768),
-            });
+            JsonObject ids = TraceIds;
+            ids["toolCall"] = callId;
+            return ids;
         }
 
-        public void Error(string source, string message)
+        private string ToolTrack => "agents/" + ((string)TraceIds["agent"] ?? "mayor") + "/tools";
+        private static Activity NativeTool()
         {
-            Record("error", new JsonObject
-            {
-                ["source"] = source,
-                ["message"] = Truncate(message, 8192),
-            });
+            Activity current = Activity.Current;
+            return current?.Source.Name == "airimayor.harness" && (current.OperationName.StartsWith("execute_tool", StringComparison.Ordinal) || (string)current.GetTagItem("gen_ai.operation.name") == "execute_tool") ? current : null;
         }
 
-        public static string Truncate(string value, int maxChars)
+        public void System(string source, string message) => Log(source, message, "info");
+        public void Error(string source, string message) => Log(source, message, "error");
+        public void Log(string source, string message, string level) => EmitTrace(new JsonObject
         {
-            if (value == null)
-            {
-                return null;
-            }
-            return value.Length <= maxChars ? value : value.Substring(0, maxChars) + "…[truncated]";
-        }
+            ["type"] = "log", ["track"] = LogTrack, ["level"] = level, ["message"] = message,
+            ["attrs"] = new JsonObject { ["log.source"] = source },
+        });
 
-        public static string RedactSecrets(string value)
-        {
-            return JsonlFile.RedactSecrets(value);
-        }
+        public static string Truncate(string value, int maxChars) => value == null || value.Length <= maxChars ? value : value.Substring(0, maxChars) + "…[truncated]";
+        public static string RedactSecrets(string value) => JsonlFile.RedactSecrets(value);
 
         public void Dispose()
         {
             lock (m_Lock)
             {
-                if (m_Disposed)
-                {
-                    return;
-                }
+                if (m_Disposed) return;
+                if (!m_Incomplete) EmitTrace(new JsonObject { ["type"] = "source.stopped" });
                 m_Disposed = true;
-                m_Timeline?.Dispose();
-                m_Facts["ended"] = Moment(DateTime.UtcNow);
-                WriteSessionFile();
+                try { m_Records?.Dispose(); }
+                catch (Exception error) when (IsFileError(error)) { Fail(error); }
             }
         }
 
-        private JsonObject Moment(DateTime utc)
+        private JsonObject DataAttributes(JsonNode data)
         {
-            var moment = new JsonObject { ["utc"] = utc.ToString("o", CultureInfo.InvariantCulture) };
-            SimulationStamp clock = Clock();
-            if (clock != null)
-            {
-                moment["clock"] = clock.ToJson();
-            }
-            return moment;
+            JsonObject asset = KeepAsset(data);
+            return asset == null ? new JsonObject() : new JsonObject { ["airimayor.data"] = asset };
         }
 
-        private static void AddAnchor(JsonObject timeline, string name, SimulationStamp stamp)
+        private void DefineTrack(string path, string label, int order) => EmitTrace(new JsonObject
         {
-            if (stamp != null)
+            ["type"] = "definition", ["kind"] = "track", ["key"] = path,
+            ["data"] = new JsonObject { ["path"] = path, ["label"] = label, ["group"] = "city", ["order"] = order, ["render"] = new JsonArray("instants") },
+        });
+
+        private static JsonNode Redact(JsonNode value)
+        {
+            if (value is JsonObject obj)
             {
-                timeline[name] = stamp.ToJson();
+                var copy = new JsonObject();
+                foreach (var item in obj) copy[item.Key] = s_SecretKey.IsMatch(item.Key) ? JsonValue.Create("[REDACTED]") : Redact(item.Value);
+                return copy;
             }
+            if (value is JsonArray array)
+            {
+                var copy = new JsonArray();
+                foreach (var item in array) copy.Add(Redact(item));
+                return copy;
+            }
+            return value is JsonValue scalar && scalar.TryGetValue<string>(out var text) ? JsonValue.Create(RedactSecrets(text)) : value?.DeepClone();
         }
 
-        /// <summary>Writes beside the file and swaps it in, so a reader never sees half a document.</summary>
-        private void WriteSessionFile()
+        private static void ValidateAttributes(JsonObject attrs)
         {
-            if (Directory == null)
+            if (attrs == null) return;
+            foreach (var item in attrs)
             {
-                return;
-            }
-            string path = Path.Combine(Directory, SessionFile);
-            string staging = path + ".tmp";
-            try
-            {
-                File.WriteAllText(staging, m_Facts.ToJsonString(), new UTF8Encoding(false));
-                if (File.Exists(path))
+                JsonNode value = item.Value;
+                if (value is JsonValue scalar && (scalar.GetValueKind() == JsonValueKind.String || scalar.GetValueKind() == JsonValueKind.Number || scalar.GetValueKind() == JsonValueKind.True || scalar.GetValueKind() == JsonValueKind.False)) continue;
+                if (value is JsonObject asset && asset.Count == 3 && asset["$asset"]?.GetValueKind() == JsonValueKind.String && asset["mediaType"]?.GetValueKind() == JsonValueKind.String && asset["bytes"]?.GetValueKind() == JsonValueKind.Number) continue;
+                if (value is JsonArray array)
                 {
-                    File.Replace(staging, path, null);
+                    JsonValueKind? kind = null;
+                    bool valid = true;
+                    foreach (var element in array)
+                    {
+                        JsonValueKind? next = element?.GetValueKind();
+                        if ((next != JsonValueKind.String && next != JsonValueKind.Number) || kind.HasValue && next != kind) { valid = false; break; }
+                        kind = next;
+                    }
+                    if (valid) continue;
                 }
-                else
-                {
-                    File.Move(staging, path);
-                }
-            }
-            catch (Exception e)
-            {
-                Warn("session record could not write " + SessionFile + ": " + e.Message);
+                throw new ArgumentException("Trace attribute '" + item.Key + "' must be a primitive, homogeneous string/number array, or asset reference.");
             }
         }
 
-        private static string FileSafe(string name)
+        private static string MediaType(string name)
         {
-            var builder = new StringBuilder(name ?? "");
-            foreach (char invalid in Path.GetInvalidFileNameChars())
+            switch (Path.GetExtension(name).ToLowerInvariant())
             {
-                builder.Replace(invalid, '_');
+                case ".json": return "application/json";
+                case ".txt": case ".log": case ".csv": return "text/plain";
+                case ".png": return "image/png";
+                case ".jpg": case ".jpeg": return "image/jpeg";
+                default: return "application/octet-stream";
             }
-            return builder.Length == 0 ? "_" : builder.ToString();
         }
 
-        private void Warn(string message)
+        private static bool IsFileError(Exception error) => error is IOException || error is UnauthorizedAccessException;
+        private void Fail(Exception error)
         {
-            m_Warn?.Invoke(message);
+            m_Incomplete = true;
+            m_Warn?.Invoke("session record incomplete: " + RedactSecrets(error.Message));
+        }
+
+        private sealed class Context
+        {
+            public Context(JsonObject ids, string turnSpan) { Ids = ids; TurnSpan = turnSpan; }
+            public JsonObject Ids { get; }
+            public string TurnSpan { get; }
+        }
+
+        private sealed class Binding : IDisposable
+        {
+            private readonly Action m_Restore;
+            public Binding(Action restore) { m_Restore = restore; }
+            public void Dispose() => m_Restore();
         }
     }
 }

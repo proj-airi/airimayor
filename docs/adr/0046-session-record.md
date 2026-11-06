@@ -1,6 +1,6 @@
 # One session, one record
 
-Status: envelope and city evidence remain accepted. Built-in model snapshots and separate native child records are superseded by [0048](0048-native-maf-harness.md), with those gaps declared.
+Status: disk layout and capture contract superseded by [0052](0052-trace-kit-session-records.md). The self-contained session evidence requirement remains.
 
 Each chat session writes one self-contained directory under `ModsData/airimayor/sessions/<startedUtc>--<session>/`. It holds `session.json`, `timeline.jsonl`, `model-calls.jsonl`, the tool catalogs the model saw (`catalogs/<sha256>.json`), the images and diagnostic files a tool call returned (`calls/<call>/`), and the records of owned conversations (`conversations/`, same layout). Tool handlers return files; only the record writes them. Live acceptance evidence is that directory, not a set of files gathered by hand. `session.json` carries the facts that occur once: head, mod version, city, the system prompt (as a blob), the parent session and turn of an owned conversation, start, and declared known gaps. The model is per request, so it lives on each model call. `ended` is written last. A record without `ended` was cut short.
 

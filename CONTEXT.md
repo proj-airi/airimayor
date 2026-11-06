@@ -63,7 +63,7 @@ A conversation the external mayor opened for one task. The final text comes back
 _Avoid_: a second chat, the player sending a message to that conversation, a conversation this client does not own, a follow-up, reading or cancelling it as its own tool
 
 **Session record**:
-The directory one chat session leaves behind as evidence: its once-only facts, timeline, city-tool results and returned files. Additional model and conversation evidence depends on what that mayor can expose. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
+The directory one chat session leaves behind as evidence: its facts, ordered activity, model and city-tool results, and returned files. Additional evidence depends on what that mayor can expose. A record without an end was cut short. What it cannot show is named as a known gap, never filled in.
 _Avoid_: agent log, timeline file (the timeline is one part), telemetry, a set of files gathered by hand for acceptance
 
 **Write evidence**:

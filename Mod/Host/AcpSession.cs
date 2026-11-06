@@ -66,11 +66,7 @@ namespace airimayor.Host
             m_Vision = visionAvailable ?? (() => false);
             m_SessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
             m_Record = new SessionRecord(m_SessionId, record, warn);
-            m_Record.Describe("prompt", new JsonObject
-            {
-                ["blob"] = m_Record.KeepBlob(instructions),
-                ["chars"] = (instructions ?? "").Length,
-            });
+            m_Record.Describe("prompt", m_Record.KeepAsset(Encoding.UTF8.GetBytes(instructions ?? ""), "text/plain"));
             m_Record.DeclareGap("the external mayor's model calls are not observable");
             m_Record.DeclareGap("the external mayor's turns report a stop reason but no token usage");
             m_Record.DeclareGap("an external tool row id differs from its city tool call id; pair them by tool name and arguments");
@@ -477,7 +473,7 @@ namespace airimayor.Host
             {
                 ["stopReason"] = stopReason,
                 ["elapsedMs"] = timer.ElapsedMilliseconds,
-                ["reply"] = SessionRecord.Truncate(reply, 32768),
+                ["reply"] = reply,
             });
         }
 
@@ -664,8 +660,8 @@ namespace airimayor.Host
                 ["id"] = state.CallId,
                 ["title"] = state.Title,
                 ["status"] = state.Failed ? "failed" : "completed",
-                ["input"] = SessionRecord.Truncate(state.RawInput, 32768),
-                ["content"] = SessionRecord.Truncate(state.Content, 32768),
+                ["input"] = state.RawInput,
+                ["content"] = state.Content,
             };
             if (conversation != null)
             {

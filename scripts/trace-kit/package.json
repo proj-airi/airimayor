@@ -1,0 +1,21 @@
+{
+  "name": "airimayor-trace-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node prepare.mjs",
+    "check": "tsx check.ts",
+    "test": "tsx --test check.test.ts",
+    "typecheck": "tsc --noEmit",
+    "generate-profile": "tsx generate-profile.ts"
+  },
+  "dependencies": {
+    "es-toolkit": "1.51.0",
+    "tsx": "4.21.0",
+    "valibot": "1.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.0",
+    "typescript": "5.9.3"
+  }
+}

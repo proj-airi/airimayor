@@ -103,7 +103,7 @@ public sealed class HarnessSessionTests
         Assert.True(turn.Failed);
         Assert.Equal("connection failed", turn.Error);
         await session.CloseAsync();
-        Assert.NotNull(JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, "session.json")))["ended"]);
+        Assert.Equal("source.stopped", (string)JsonNode.Parse(File.ReadLines(Path.Combine(session.Record.Directory, SessionRecord.RecordsFile)).Last())["type"]);
     }
 
     [Fact]
@@ -134,15 +134,19 @@ public sealed class HarnessSessionTests
         Assert.Equal(1, tools.MaxActive);
         Assert.True(client.Catalog.All(name => name == "city_read" || name.StartsWith("background_agents_") || name.StartsWith("todos_")), "unexpected tools");
         await session.CloseAsync();
-        var calls = File.ReadLines(Path.Combine(session.Record.Directory, "timeline.jsonl")).Select(line => JsonNode.Parse(line)).Where(line => (string)line["type"] == "function").ToList();
+        var calls = File.ReadLines(Path.Combine(session.Record.Directory, SessionRecord.RecordsFile))
+            .Select(line => JsonNode.Parse(line))
+            .Where(line => (string)line["name"] == "city.tool.result")
+            .Select(line => JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)line["attrs"]["airimayor.data"]["$asset"]))))
+            .ToList();
         Assert.Equal(2, calls.Count);
         Assert.All(calls, call =>
         {
-            Assert.True((bool)call["data"]["evidence"]["probe"]);
-            Assert.Equal(1L, (long)call["data"]["queuedMs"]);
-            Assert.Equal(1L, (long)call["data"]["timeline"]["applied"]["frame"]);
+            Assert.True((bool)call["evidence"]["probe"]);
+            Assert.Equal(1L, (long)call["queuedMs"]);
+            Assert.Equal(1L, (long)call["timeline"]["applied"]["frame"]);
         });
-        Assert.Equal(2, Directory.GetFiles(session.Record.Directory, "probe.txt", SearchOption.AllDirectories).Length);
+        Assert.All(calls, call => Assert.NotEmpty(call["files"].AsArray()));
         var results = client.LastInput.SelectMany(item => item.Contents).OfType<FunctionResultContent>().ToList();
         Assert.Equal(2, results.Count);
         Assert.All(results, result => Assert.Equal("{}", result.Result));

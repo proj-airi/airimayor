@@ -16,4 +16,9 @@
     <PackageReference Include="Anthropic" Version="13.4.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="TraceProfile.json" LogicalName="airimayor.Agent.TraceProfile.json" />
+    <InternalsVisibleTo Include="airimayor.Tests" />
+  </ItemGroup>
+
 </Project>

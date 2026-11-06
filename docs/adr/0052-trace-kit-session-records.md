@@ -1,0 +1,9 @@
+# Trace-kit is the session record format
+
+Status: accepted
+
+Use trace-kit records as the only persisted event contract. The C# session record writes `records.jsonl` and content-addressed `assets/` inside the game's process. Source lifecycle records delimit the recording, and `session.fact` records carry its facts; absent source completion means an interrupted recording. The old session manifest and timeline envelope are removed without migration. The actual TypeScript trace-kit schema, reader and projections power the offline checker; they are not reimplemented in C#. Until trace-kit is published independently, the checker's installation pins an upstream source revision.
+
+Harness and MEAI native activities supply agent, model and function evidence. An in-process adapter converts them once, with a narrow model-client observer checkpointing native request attributes before transmission and recording the first content chunk. Native final capture preserves output received before orderly cancellation or failure. Per-chunk durable output, a live diagnostics panel and a separate collector process are omitted: their lifecycle and storage costs do not justify this integration. Abrupt process termination can therefore lose an in-progress response, which the record declares. Native agent sessions and runs have immutable scoped identities; background work retains its originating relation after the root ends. City-tool outcomes, simulation anchors, before/after write evidence and returned files enrich the same trace. External ACP model internals remain explicitly unobservable.
+
+This supersedes the disk layout and capture omissions in [0046](0046-session-record.md) and [0048](0048-native-maf-harness.md). The write-evidence judgment in [0047](0047-write-evidence.md) remains. Rebuilding model serialization would duplicate SDK knowledge; a mandatory TypeScript host would add transport recovery and another process without exposing additional evidence.

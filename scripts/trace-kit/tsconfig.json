@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@proj-airi/trace-kit": [".upstream/packages/trace-kit/src/index.ts"],
+      "@proj-airi/trace-kit/agent": [".upstream/packages/trace-kit/src/profiles/agent.ts"],
+      "@proj-airi/trace-kit/views": [".upstream/packages/trace-kit/src/views/index.ts"],
+      "@proj-airi/stream-kit": [".upstream/packages/stream-kit/src/index.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}
