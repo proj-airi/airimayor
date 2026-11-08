@@ -88,6 +88,7 @@ namespace airimayor.Agent
                 CompactionStrategy = new RecordedCompaction(compaction, Record, "model"),
                 MaxContextWindowTokens = window,
                 MaxOutputTokens = outputTokens,
+                MaximumIterationsPerRequest = int.MaxValue,
                 ChatOptions = new ChatOptions { Instructions = instructions, Tools = m_Functions.List(vision), MaxOutputTokens = outputTokens },
                 BackgroundAgents = children,
             }, logger);

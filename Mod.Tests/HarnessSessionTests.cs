@@ -184,6 +184,46 @@ public sealed class HarnessSessionTests
         Assert.Contains(nameof(City_tool_failure_keeps_its_error_row_and_arguments), (string)failure["exception"]["stackTrace"]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Long_city_work_keeps_tools_and_stop_past_forty_model_calls(bool cancel)
+    {
+        var tools = new Tools();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        tools.Run = async ct =>
+        {
+            if (cancel && tools.Count == 45)
+            {
+                entered.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            return "{}";
+        };
+        var client = new Client((n, _, options, _) =>
+        {
+            Assert.True(options.Tools?.Any(tool => tool.Name == "city_read") == true, "City tools missing on model call " + n);
+            return Task.FromResult(n <= 45 ? Calls(("read-" + n, "city_read", Empty())) : Text("done"));
+        });
+        using var session = Open(client, tools);
+        Task turn = Prompt(session, "build a large city");
+        if (cancel)
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            session.Cancel();
+        }
+        await turn;
+        Assert.Equal(cancel ? 45 : 46, client.Calls);
+        Assert.Equal(45, tools.Count);
+        Assert.Equal(cancel, tools.Cancelled);
+        Assert.Equal(AgentStatus.Idle, session.Status);
+        await session.CloseAsync();
+        var records = Recorded(session);
+        string span = (string)Assert.Single(records, line => (string)line["name"] == "chat-turn")["spanId"];
+        JsonObject end = Assert.Single(records, line => (string)line["type"] == "span.end" && (string)line["spanId"] == span);
+        Assert.Equal(cancel ? "cancelled" : "ok", (string)end["status"]);
+    }
+
     [Fact]
     public async Task City_tools_run_sequentially_and_keep_host_evidence_out_of_model_results()
     {
@@ -632,7 +672,7 @@ public sealed class HarnessSessionTests
             Assert.True(pending.Count == 0, "unpaired function calls: " + string.Join(",", pending));
             Assert.True((options.Instructions ?? "").Contains("City mayor instructions") || input.Any(message => message.Role == ChatRole.System && (message.Text ?? "").Contains("City mayor instructions")), "system prompt missing");
             LastInput = input;
-            Catalog = options.Tools.Select(tool => tool.Name).ToList();
+            Catalog = options.Tools?.Select(tool => tool.Name).ToList() ?? new();
             var response = await Handler(Interlocked.Increment(ref Calls), input, options, cancellationToken);
             foreach (var update in response)
             {
