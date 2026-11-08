@@ -42,7 +42,7 @@ namespace airimayor.Agent
                 if (IsEnabled(level))
                 {
                     string message = SessionRecord.RedactSecrets(formatter(state, exception));
-                    m_Record.Log(m_Category, message, level >= LogLevel.Error ? "error" : "warn");
+                    m_Record.Log(m_Category, message, level >= LogLevel.Error ? "error" : "warn", exception);
                     m_Warn?.Invoke(message);
                 }
             }

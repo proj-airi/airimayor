@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
+using Microsoft.Extensions.AI;
 
 namespace airimayor.Agent
 {
@@ -55,6 +57,16 @@ namespace airimayor.Agent
                 foreach (JsonObject definition in (JsonArray)JsonNode.Parse(reader.ReadToEnd())) EmitTrace(definition);
             DefineTrack(EventsTrack, "City evidence", 0);
             DefineTrack(LogTrack, "Diagnostics", 10);
+            EmitTrace(new JsonObject
+            {
+                ["type"] = "definition", ["kind"] = "link", ["key"] = "linked",
+                ["data"] = new JsonObject { ["rel"] = "linked", ["label"] = "Linked" },
+            });
+            EmitTrace(new JsonObject
+            {
+                ["type"] = "definition", ["kind"] = "id-key", ["key"] = "otel.span",
+                ["data"] = new JsonObject { ["key"] = "otel.span", ["label"] = "External span" },
+            });
             EmitTrace(new JsonObject
             {
                 ["type"] = "clock.snapshot", ["uncertaintyMs"] = 1,
@@ -132,6 +144,26 @@ namespace airimayor.Agent
             if (Directory == null || m_Disposed) return null;
             return KeepAsset(Encoding.UTF8.GetBytes(value?.ToJsonString() ?? "null"), "application/json");
         }
+
+        internal JsonObject KeepMessages(IEnumerable<ChatMessage> messages, int? tokenCount = null)
+        {
+            if (Directory == null || m_Disposed) return null;
+            var snapshot = messages.ToList();
+            var data = new JsonObject
+            {
+                ["messages"] = JsonSerializer.SerializeToNode(snapshot, AIJsonUtilities.DefaultOptions),
+                ["messageIds"] = JsonSerializer.SerializeToNode(snapshot.Where(message => message.MessageId != null).Select(message => message.MessageId)),
+                ["messageCount"] = snapshot.Count,
+            };
+            if (tokenCount.HasValue) data["tokenCount"] = tokenCount.Value;
+            return KeepAsset(data);
+        }
+
+        internal static JsonObject ExceptionData(Exception error) => error == null ? null : new JsonObject
+        {
+            ["type"] = error.GetType().FullName, ["message"] = error.Message, ["stackTrace"] = error.StackTrace,
+            ["inner"] = ExceptionData(error.InnerException),
+        };
 
         public JsonObject KeepAsset(byte[] value, string mediaType)
         {
@@ -268,11 +300,13 @@ namespace airimayor.Agent
 
         public void System(string source, string message) => Log(source, message, "info");
         public void Error(string source, string message) => Log(source, message, "error");
-        public void Log(string source, string message, string level) => EmitTrace(new JsonObject
+        public void Log(string source, string message, string level, Exception exception = null)
         {
-            ["type"] = "log", ["track"] = LogTrack, ["level"] = level, ["message"] = message,
-            ["attrs"] = new JsonObject { ["log.source"] = source },
-        });
+            var attrs = new JsonObject { ["log.source"] = source };
+            JsonObject evidence = exception == null ? null : KeepAsset(ExceptionData(exception));
+            if (evidence != null) attrs["airimayor.exception"] = evidence;
+            EmitTrace(new JsonObject { ["type"] = "log", ["track"] = LogTrack, ["level"] = level, ["message"] = message, ["attrs"] = attrs });
+        }
 
         public static string Truncate(string value, int maxChars) => value == null || value.Length <= maxChars ? value : value.Substring(0, maxChars) + "…[truncated]";
         public static string RedactSecrets(string value) => JsonlFile.RedactSecrets(value);

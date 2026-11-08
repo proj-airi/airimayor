@@ -24,8 +24,8 @@ namespace airimayor.Host
     /// </summary>
     internal sealed class AcpSession : IAgentSession, IAcpClient
     {
-        private readonly Channel<string> m_Pending = Channel.CreateUnbounded<string>();
-        private readonly Channel<string> m_Reports = Channel.CreateUnbounded<string>();
+        private readonly Channel<Input> m_Pending = Channel.CreateUnbounded<Input>();
+        private readonly Channel<Input> m_Reports = Channel.CreateUnbounded<Input>();
         private readonly object m_Lock = new object();
         private readonly List<SnapshotMessage> m_Messages = new List<SnapshotMessage>();
         private readonly Dictionary<string, AcpToolState> m_ToolRows =
@@ -39,6 +39,7 @@ namespace airimayor.Host
         private readonly Dictionary<string, string> m_ChildText =
             new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly HashSet<string> m_OwnedSessions = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> m_StreamIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
         private ConversationBook m_Conversations;
         private readonly ToolPreviewLatch m_Previews;
         private ToolBridge m_Bridge;
@@ -93,6 +94,12 @@ namespace airimayor.Host
             }
             string safe = modelText ?? "";
             string shown = displayText ?? safe;
+            var input = new Input(safe, "player");
+            m_Record.Record("input.received", new JsonObject
+            {
+                ["messageId"] = input.Id, ["origin"] = input.Origin, ["text"] = safe,
+                ["displayText"] = shown, ["places"] = placesJson == null ? null : JsonNode.Parse(placesJson),
+            });
             lock (m_Lock)
             {
                 m_Messages.Add(new SnapshotMessage
@@ -102,7 +109,8 @@ namespace airimayor.Host
                     Places = placesJson,
                 });
             }
-            m_Pending.Writer.TryWrite(safe);
+            m_Record.Record("input.queued", input.Data());
+            m_Pending.Writer.TryWrite(input);
             if (Status == AgentStatus.Thinking || Status == AgentStatus.Working)
             {
                 CancelTurn();
@@ -116,7 +124,11 @@ namespace airimayor.Host
             {
                 return;
             }
+            string requestId = Guid.NewGuid().ToString("N");
+            m_Record.Record("stop.requested", new JsonObject { ["requestId"] = requestId, ["reason"] = "player" });
+            bool active = m_Turn != null;
             CancelTurn();
+            m_Record.Record("stop.applied", new JsonObject { ["requestId"] = requestId, ["reason"] = "player", ["active"] = active });
             Status = AgentStatus.Interrupted;
             Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Interrupted, Text = "Current turn interrupted" });
         }
@@ -165,6 +177,7 @@ namespace airimayor.Host
                     return;
                 m_Disposed = true;
             }
+            m_Record.Record("session.closing", new JsonObject { ["reason"] = "disposed" });
             m_Conversations?.CancelAll();
             m_Life.Cancel();
             CancelTurn();
@@ -238,47 +251,36 @@ namespace airimayor.Host
                     string.Equals(sessionId, m_AcpSessionId.ToString(), StringComparison.Ordinal) ||
                     m_OwnedSessions.Contains(sessionId);
             }
-            if (!known || cancellationToken.IsCancellationRequested || m_Life.IsCancellationRequested)
-            {
-                return Task.FromResult(new RequestPermissionResponse
-                {
-                    Outcome = new RequestPermissionOutcomeCancelled(),
-                });
-            }
-            if (request?.Options == null)
-            {
-                return Task.FromResult(new RequestPermissionResponse
-                {
-                    Outcome = new RequestPermissionOutcomeCancelled(),
-                });
-            }
             PermissionOption allow = null;
-            foreach (PermissionOption option in request.Options)
+            if (known && !cancellationToken.IsCancellationRequested && !m_Life.IsCancellationRequested && request?.Options != null)
             {
-                if (option.Kind == PermissionOptionKind.AllowOnce)
+                foreach (PermissionOption option in request.Options)
                 {
-                    allow = option;
-                    break;
+                    if (option.Kind == PermissionOptionKind.AllowOnce)
+                    {
+                        allow = option;
+                        break;
+                    }
+                    if (option.Kind == PermissionOptionKind.AllowAlways)
+                        allow = option;
                 }
-                if (option.Kind == PermissionOptionKind.AllowAlways)
-                    allow = option;
             }
-            if (allow == null)
+            var response = new RequestPermissionResponse { Outcome = new RequestPermissionOutcomeCancelled() };
+            if (allow != null)
+                response.Outcome = new SelectedPermissionOutcome { OptionId = allow.OptionId };
+            m_Record.Record("acp.permission", new JsonObject
             {
-                return Task.FromResult(new RequestPermissionResponse
-                {
-                    Outcome = new RequestPermissionOutcomeCancelled(),
-                });
-            }
-            return Task.FromResult(new RequestPermissionResponse
-            {
-                Outcome = new SelectedPermissionOutcome { OptionId = allow.OptionId },
+                ["agentSession"] = sessionId,
+                ["request"] = request == null ? null : JsonNode.Parse(JsonText(request)),
+                ["response"] = JsonNode.Parse(JsonText(response)),
             });
+            return Task.FromResult(response);
         }
 
         public Task SessionUpdateAsync(SessionNotification notification, CancellationToken cancellationToken = default)
         {
             string sessionId = notification == null ? "" : notification.SessionId.ToString();
+            RecordUpdate(sessionId, notification?.Update);
             if (!string.IsNullOrEmpty(sessionId) && m_OwnedSessions.Contains(sessionId))
             {
                 ApplyChildUpdate(sessionId, notification.Update);
@@ -369,12 +371,14 @@ namespace airimayor.Host
                     McpServers = CityServers(true),
                 }, m_Life.Token).ConfigureAwait(false);
                 m_AcpSessionId = created.SessionId;
+                m_Record.Describe("externalAgentSession", JsonValue.Create(created.SessionId.ToString()));
                 await PumpAsync().ConfigureAwait(false);
             }
             catch (Exception e)
             {
                 if (!m_Disposed)
                 {
+                    m_Record.Record("acp.error", new JsonObject { ["exception"] = e.ToString() });
                     Fail(FailureText(e));
                 }
             }
@@ -410,10 +414,10 @@ namespace airimayor.Host
         {
             while (!m_Life.IsCancellationRequested)
             {
-                string text;
+                Input input;
                 try
                 {
-                    text = await ReadNextAsync().ConfigureAwait(false);
+                    input = await ReadNextAsync().ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -422,14 +426,15 @@ namespace airimayor.Host
                 m_Turn = new CancellationTokenSource();
                 Status = AgentStatus.Thinking;
                 Emit(new ChatUpdate { Kind = "status", Status = AgentStatus.Thinking });
-                Stopwatch turnTimer = BeginTurn(text);
+                Stopwatch turnTimer = BeginTurn(input.Text);
                 PromptResponse response;
                 try
                 {
+                    m_Record.Record("input.applied", input.Data());
                     response = await m_Connection.PromptAsync(new PromptRequest
                     {
                         SessionId = m_AcpSessionId,
-                        Prompt = new ContentBlock[] { new TextContent { Text = text } },
+                        Prompt = new ContentBlock[] { new TextContent { Text = input.Text } },
                     }, m_Turn.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -439,6 +444,7 @@ namespace airimayor.Host
                 catch (Exception e)
                 {
                     FinishTurn("failed", turnTimer);
+                    m_Record.Record("acp.error", new JsonObject { ["exception"] = e.ToString() });
                     Fail(FailureText(e));
                     return;
                 }
@@ -496,18 +502,23 @@ namespace airimayor.Host
             {
                 return;
             }
-            m_Reports.Writer.TryWrite(text ?? "");
+            var input = new Input(text ?? "", "background");
+            var data = input.Data();
+            data["text"] = input.Text;
+            m_Record.Record("input.received", data);
+            m_Record.Record("input.queued", input.Data());
+            m_Reports.Writer.TryWrite(input);
         }
 
-        private async Task<string> ReadNextAsync()
+        private async Task<Input> ReadNextAsync()
         {
             while (!m_Life.IsCancellationRequested)
             {
-                if (m_Pending.Reader.TryRead(out string player))
+                if (m_Pending.Reader.TryRead(out Input player))
                 {
                     return player;
                 }
-                if (m_Reports.Reader.TryRead(out string report))
+                if (m_Reports.Reader.TryRead(out Input report))
                 {
                     return report;
                 }
@@ -563,11 +574,37 @@ namespace airimayor.Host
                     }
                 }
                 string json = AcpChatMap.PlanJson(steps);
+                m_Record.Record("plan.changed", new JsonObject { ["agentSession"] = m_AcpSessionId.ToString(), ["entries"] = JsonNode.Parse(json) });
                 lock (m_Lock)
                 {
                     m_PlanJson = json;
                 }
                 Emit(AcpChatMap.Plan(json));
+            }
+        }
+
+        private void RecordUpdate(string sessionId, AcpUpdate update)
+        {
+            if (update == null) return;
+            JsonNode payload = JsonNode.Parse(JsonText(update));
+            var data = new JsonObject { ["agentSession"] = sessionId, ["update"] = payload };
+            TextContent text = (update as SessionUpdateAgentMessageChunk)?.Content as TextContent;
+            TextContent thought = (update as SessionUpdateAgentThoughtChunk)?.Content as TextContent;
+            if (text != null || thought != null)
+            {
+                lock (m_Lock)
+                {
+                    m_StreamIndexes.TryGetValue(sessionId, out int index);
+                    data["index"] = index;
+                    m_StreamIndexes[sessionId] = index + 1;
+                    data["text"] = text?.Text ?? "";
+                    data["reasoning"] = thought?.Text ?? "";
+                    m_Record.Record("acp.output.delta", data);
+                }
+            }
+            else
+            {
+                m_Record.Record("acp.update", data);
             }
         }
 
@@ -662,6 +699,7 @@ namespace airimayor.Host
                 ["status"] = state.Failed ? "failed" : "completed",
                 ["input"] = state.RawInput,
                 ["content"] = state.Content,
+                ["output"] = state.RawOutput,
             };
             if (conversation != null)
             {
@@ -797,27 +835,45 @@ namespace airimayor.Host
                 McpServers = CityServers(false),
             }, cancellationToken).ConfigureAwait(false);
             string acpId = created.SessionId.ToString();
+            m_Record.Record("acp.child.started", new JsonObject { ["taskId"] = id, ["agentSession"] = acpId, ["input"] = message });
             lock (m_Lock)
             {
                 m_OwnedSessions.Add(acpId);
                 m_ChildText[acpId] = "";
             }
-            using (cancellationToken.Register(() =>
+            try
             {
-                try
+                using (cancellationToken.Register(() =>
                 {
-                    _ = m_Connection.CancelAsync(new CancelNotification { SessionId = created.SessionId });
-                }
-                catch (Exception)
+                    try
+                    {
+                        _ = m_Connection.CancelAsync(new CancelNotification { SessionId = created.SessionId });
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }))
                 {
+                    PromptResponse response = await m_Connection.PromptAsync(new PromptRequest
+                    {
+                        SessionId = created.SessionId,
+                        Prompt = new ContentBlock[] { new TextContent { Text = message } },
+                    }, cancellationToken).ConfigureAwait(false);
+                    m_Record.Record("acp.child.finished", new JsonObject
+                    {
+                        ["taskId"] = id, ["agentSession"] = acpId, ["stopReason"] = StopReasonText(response.StopReason),
+                    });
                 }
-            }))
+            }
+            catch (Exception error)
             {
-                await m_Connection.PromptAsync(new PromptRequest
+                m_Record.Record("acp.child.finished", new JsonObject
                 {
-                    SessionId = created.SessionId,
-                    Prompt = new ContentBlock[] { new TextContent { Text = message } },
-                }, cancellationToken).ConfigureAwait(false);
+                    ["taskId"] = id, ["agentSession"] = acpId,
+                    ["stopReason"] = error is OperationCanceledException ? "cancelled" : "failed",
+                    ["error"] = error.ToString(),
+                });
+                throw;
             }
             lock (m_Lock)
             {
@@ -925,6 +981,15 @@ namespace airimayor.Host
             public string Tool;
             public string CallId;
             public string Places;
+        }
+
+        private sealed class Input
+        {
+            public Input(string text, string origin) { Text = text; Origin = origin; }
+            public string Id { get; } = Guid.NewGuid().ToString("N");
+            public string Text { get; }
+            public string Origin { get; }
+            public JsonObject Data() => new JsonObject { ["messageId"] = Id, ["origin"] = Origin };
         }
     }
 }

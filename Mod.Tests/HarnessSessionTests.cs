@@ -41,6 +41,14 @@ public sealed class HarnessSessionTests
 
     private static Task Prompt(ClientSession session, string text) => FinishTurn(session, () => session.Prompt(text));
     private static Task Stop(ClientSession session) => FinishTurn(session, session.Cancel);
+    private static JsonObject[] Recorded(ClientSession session)
+    {
+        using var stream = new FileStream(Path.Combine(session.Record.Directory, SessionRecord.RecordsFile), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonNode.Parse(line).AsObject()).ToArray();
+    }
+    private static JsonObject ReadAsset(ClientSession session, JsonNode asset) => JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)asset["$asset"]))).AsObject();
+    private static JsonObject Data(ClientSession session, JsonNode line) => ReadAsset(session, line["attrs"]["airimayor.data"]);
 
     private static async Task FinishTurn(ClientSession session, Action action)
     {
@@ -61,6 +69,34 @@ public sealed class HarnessSessionTests
         {
             session.Updated -= Observe;
         }
+    }
+
+    [Theory]
+    [InlineData(false, "error")]
+    [InlineData(true, "cancelled")]
+    public async Task Recorded_turn_outcome_matches_failure_or_stop(bool cancel, string expected)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new Client(async (_, _, _, ct) =>
+        {
+            entered.TrySetResult();
+            if (cancel) await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("provider failure");
+        });
+        using var session = Open(client);
+        Task turn = Prompt(session, "work");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (cancel) session.Cancel();
+        await turn;
+        await session.CloseAsync();
+        var lines = File.ReadAllLines(Path.Combine(session.Record.Directory, SessionRecord.RecordsFile))
+            .Select(line => JsonNode.Parse(line)).ToArray();
+        string span = (string)Assert.Single(lines, line => (string)line["name"] == "chat-turn")["spanId"];
+        JsonNode end = Assert.Single(lines, line => (string)line["type"] == "span.end" && (string)line["spanId"] == span);
+        Assert.Equal(expected, (string)end["status"]);
+        JsonObject outcome = Data(session, end);
+        Assert.Equal(cancel ? "cancelled" : "failed", (string)outcome["stopReason"]);
+        Assert.NotEmpty((string)outcome["exception"]["stackTrace"]);
     }
 
     [Fact]
@@ -84,6 +120,13 @@ public sealed class HarnessSessionTests
         await Stop(session);
         await Task.Delay(100);
         Assert.True(client.Calls == 1, "pending steering restarted the stopped run");
+        var stopped = Recorded(session);
+        string steering = (string)Data(session, Assert.Single(stopped, line => (string)line["name"] == "input.received" && (string)Data(session, line)["text"] == "steer"))["messageId"];
+        Assert.Single(stopped, line => (string)line["name"] == "input.queued" && (string)Data(session, line)["messageId"] == steering);
+        Assert.DoesNotContain(stopped, line => (string)line["name"] == "input.applied" && (string)Data(session, line)["messageId"] == steering);
+        JsonObject stop = Data(session, Assert.Single(stopped, line => (string)line["name"] == "stop.applied"));
+        Assert.True((bool)stop["active"]);
+        Assert.Contains(steering, stop["pendingMessageIds"].AsArray().Select(id => (string)id));
         await Prompt(session, "next");
         var sent = new[]
         {
@@ -93,6 +136,15 @@ public sealed class HarnessSessionTests
         };
         Assert.Equal(sent, client.LastInput.Where(item => item.Role == ChatRole.User && sent.Contains(item.Text)).Select(item => item.Text));
         await session.CloseAsync();
+        var finished = Recorded(session);
+        foreach (JsonObject received in finished.Where(line => (string)line["name"] == "input.received"))
+        {
+            string id = (string)Data(session, received)["messageId"];
+            JsonObject queued = Assert.Single(finished, line => (string)line["name"] == "input.queued" && (string)Data(session, line)["messageId"] == id);
+            JsonObject applied = Assert.Single(finished, line => (string)line["name"] == "input.applied" && (string)Data(session, line)["messageId"] == id);
+            Assert.True((long)received["seq"] < (long)queued["seq"] && (long)queued["seq"] < (long)applied["seq"]);
+            Assert.Contains(client.LastInput, message => message.MessageId == id);
+        }
     }
 
     [Fact]
@@ -104,6 +156,12 @@ public sealed class HarnessSessionTests
         Assert.Equal("connection failed", turn.Error);
         await session.CloseAsync();
         Assert.Equal("source.stopped", (string)JsonNode.Parse(File.ReadLines(Path.Combine(session.Record.Directory, SessionRecord.RecordsFile)).Last())["type"]);
+        JsonObject[] records = Recorded(session);
+        Assert.Equal("hello", (string)Data(session, Assert.Single(records, line => (string)line["name"] == "input.received"))["text"]);
+        Assert.DoesNotContain(records, line => (string)line["name"] == "input.queued" || (string)line["name"] == "input.applied");
+        JsonObject exception = ReadAsset(session, Assert.Single(records, line => (string)line["type"] == "log")["attrs"]["airimayor.exception"]);
+        Assert.Equal(typeof(InvalidOperationException).FullName, (string)exception["type"]);
+        Assert.Contains(nameof(ClientSession), (string)exception["stackTrace"]);
     }
 
     [Fact]
@@ -121,6 +179,9 @@ public sealed class HarnessSessionTests
         Assert.Contains("river", (string)row["arguments"]);
         Assert.Contains("city tool failure", (string)row["text"]);
         await session.CloseAsync();
+        JsonObject failure = Data(session, Assert.Single(Recorded(session), line => (string)line["name"] == "city.tool.error"));
+        Assert.Equal(typeof(InvalidOperationException).FullName, (string)failure["exception"]["type"]);
+        Assert.Contains(nameof(City_tool_failure_keeps_its_error_row_and_arguments), (string)failure["exception"]["stackTrace"]);
     }
 
     [Fact]
@@ -302,6 +363,11 @@ public sealed class HarnessSessionTests
         Assert.True(client.LastInput.Any(item => item.Text == "original commitment"), "first prompt lost: " +
             string.Join("\n", client.LastInput.Select(item => item.Role + ":" + item.Text)));
         await session.CloseAsync();
+        JsonObject[] records = Recorded(session);
+        string original = (string)Data(session, Assert.Single(records, line => (string)line["name"] == "input.received" && (string)Data(session, line)["text"] == "original commitment"))["messageId"];
+        JsonObject repair = Data(session, Assert.Single(records, line => (string)line["name"] == "history.repaired" && (string)Data(session, line)["path"] == "player-input"));
+        Assert.Contains(original, repair["restoredMessageIds"].AsArray().Select(id => (string)id));
+        Assert.Contains("original commitment", ReadAsset(session, repair["after"]).ToJsonString());
     }
 
     [Fact]
@@ -309,13 +375,7 @@ public sealed class HarnessSessionTests
     {
         var tools = new Tools
         {
-            Image = new byte[]
-            {
-                137,
-                80,
-                78,
-                71
-            }
+            Image = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
         };
         var client = new Client((n, _, _, _) => Task.FromResult(n == 1 ? Calls(("image-1", "city_read", Empty()), ("image-2", "city_read", Empty())) : Text("seen")));
         using var session = Open(client, tools);
@@ -342,6 +402,18 @@ public sealed class HarnessSessionTests
         Assert.True(results.Sum(item => JsonSerializer.Serialize(item.Result).Length) < 10 * 18000, "model still received all ten full tool results");
         Assert.Contains(results, result => result.CallId == "read-10");
         await session.CloseAsync();
+        JsonObject[] records = Recorded(session);
+        var compactions = records.Where(line => (string)line["name"] == "compaction.finished").Select(line => Data(session, line)).Where(data => (bool)data["changed"]).ToArray();
+        Assert.NotEmpty(compactions);
+        Assert.All(compactions, compacted =>
+        {
+            Assert.Equal(15000, (int)compacted["inputBudgetTokens"]);
+            Assert.Equal("ok", (string)compacted["status"]);
+            JsonObject before = ReadAsset(session, compacted["before"]);
+            JsonObject after = ReadAsset(session, compacted["after"]);
+            Assert.NotEqual(before["messages"].ToJsonString(), after["messages"].ToJsonString());
+            Assert.Contains(new string('x', 18000), before.ToJsonString());
+        });
     }
 
     [Fact]
@@ -511,6 +583,12 @@ public sealed class HarnessSessionTests
         var result = resumed.SelectMany(item => item.Contents).OfType<FunctionResultContent>().Single(item => item.CallId == "child-city");
         Assert.True(result.Result as string == "{}", "child completed city result lost");
         await session.CloseAsync();
+        JsonObject repairLine = Assert.Single(Recorded(session), line => (string)line["name"] == "history.repaired" && (string)line["ids"]["agent"] == "inspector" && Data(session, line)["restoredToolCallIds"].AsArray().Any(id => (string)id == "child-city"));
+        JsonObject repair = Data(session, repairLine);
+        Assert.Equal("cancelled-run", (string)repair["path"]);
+        Assert.Equal("failed", (string)repair["reason"]);
+        Assert.Contains("child-city", ReadAsset(session, repair["after"]).ToJsonString());
+        Assert.Equal(typeof(InvalidOperationException).FullName, (string)repair["exception"]["type"]);
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Agents.AI;
@@ -67,6 +68,10 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
+                m_Record.Record("city.tool.error", new JsonObject
+                {
+                    ["tool"] = name, ["exception"] = SessionRecord.ExceptionData(error),
+                }, call);
                 result = new AgentToolResult
                 {
                     Success = false,

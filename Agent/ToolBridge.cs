@@ -371,6 +371,10 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
+                m_Record.Record("city.tool.error", new JsonObject
+                {
+                    ["tool"] = name, ["exception"] = SessionRecord.ExceptionData(error),
+                }, callId);
                 result = new AgentToolResult
                 {
                     Success = false,

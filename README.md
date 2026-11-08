@@ -51,7 +51,16 @@ dotnet build
 
 Enable **AIRI Mayor**, load a save; chat is bottom-right. UI-only: `cd Mod/UI && npm run build`. Offline POCs: [archive/](./archive/README.md).
 
-Session evidence uses trace-kit records and assets under `ModsData/airimayor/sessions/`. Install the offline checker once with `npm --prefix scripts/trace-kit ci`, then run `npm --prefix scripts/trace-kit run check -- "<session directory>"` (omit the directory for the latest recording). It validates the actual trace-kit format and attachments, projects the timeline, and judges city writes. Installation downloads a pinned upstream source snapshot; later checks work offline. See [ADR 0052](docs/adr/0052-trace-kit-session-records.md).
+Session evidence uses trace-kit records and assets under `ModsData/airimayor/sessions/`. Prepare the offline tools:
+
+```bash
+npm --prefix scripts/trace-kit ci
+npm --prefix scripts/trace-kit run build
+```
+
+Open `scripts/trace-kit/viewer.html` in a browser and select one session folder containing `records.jsonl` and `assets/`. Inspect the execution timeline, root/background branches, model requests, city-tool evidence and images; use playback, step and seek to follow the recorded output. The page is self-contained and reads the selected local files. Interrupted recordings stay inspectable and are marked incomplete.
+
+For automated validation, run `npm --prefix scripts/trace-kit run check -- "<session directory>"` (omit the directory for the latest recording). It validates the actual trace-kit format and attachments, projects the timeline, and judges city writes. Installation downloads a pinned upstream source snapshot; later viewing and checks work offline. See [ADR 0052](docs/adr/0052-trace-kit-session-records.md).
 
 ## License
 

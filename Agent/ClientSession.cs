@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -48,7 +49,7 @@ namespace airimayor.Agent
             int windowTokens, int outputTokens, bool vision, SessionRecordOptions recordOptions, Action<string> warn = null)
         {
             Record = new SessionRecord(Guid.NewGuid().ToString("N"), recordOptions, warn);
-            Record.DeclareGap("An abrupt process exit can lose unfinished model output; each request is recorded before the model starts");
+            Record.DeclareGap("Output not delivered by the model and records interrupted by storage failure are unavailable");
             Record.DeclareGap("Model records use SDK semantic content; raw transport payloads and provider-private fields are unavailable");
             m_Trace = new HarnessTrace(Record);
             m_View = new ChatProjection { SessionId = Record.SessionId };
@@ -69,7 +70,7 @@ namespace airimayor.Agent
             ILoggerFactory logger, IEnumerable<AIAgent> children, out InMemoryChatHistoryProvider history)
         {
             var compaction = new ContextWindowCompactionStrategy(window, outputTokens);
-            history = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions { ChatReducer = compaction.AsChatReducer() });
+            history = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions { ChatReducer = new RecordedCompaction(compaction, Record, "history").AsChatReducer() });
             var agent = new HarnessAgent(m_Client, new HarnessAgentOptions
             {
                 Name = name,
@@ -84,13 +85,13 @@ namespace airimayor.Agent
                 DisableOpenTelemetry = false,
                 OpenTelemetrySourceName = HarnessTrace.SourceName,
                 ChatHistoryProvider = history,
-                CompactionStrategy = compaction,
+                CompactionStrategy = new RecordedCompaction(compaction, Record, "model"),
                 MaxContextWindowTokens = window,
                 MaxOutputTokens = outputTokens,
                 ChatOptions = new ChatOptions { Instructions = instructions, Tools = m_Functions.List(vision), MaxOutputTokens = outputTokens },
                 BackgroundAgents = children,
             }, logger);
-            return m_Trace.Observe(CancelledRunRecovery.Wrap(agent, history));
+            return m_Trace.Observe(CancelledRunRecovery.Wrap(agent, history, Record));
         }
 
         public void Prompt(string text) => Prompt(text, text, null);
@@ -98,11 +99,14 @@ namespace airimayor.Agent
         public void Prompt(string modelText, string displayText, string placesJson)
         {
             if (m_Lifetime.IsCancellationRequested) throw new ObjectDisposedException(nameof(ClientSession));
-            m_View.Apply(new SessionUpdate { Kind = "user", Text = displayText ?? modelText, Places = placesJson });
-            Observe(AcceptAsync(new ChatMessage(ChatRole.User, modelText)
+            var input = new ChatMessage(ChatRole.User, modelText) { MessageId = Guid.NewGuid().ToString("N") };
+            Record.Record("input.received", new JsonObject
             {
-                MessageId = Guid.NewGuid().ToString("N"),
-            }));
+                ["messageId"] = input.MessageId, ["origin"] = "player", ["text"] = modelText, ["displayText"] = displayText ?? modelText,
+                ["places"] = string.IsNullOrEmpty(placesJson) ? null : JsonNode.Parse(placesJson),
+            });
+            m_View.Apply(new SessionUpdate { Kind = "user", Text = displayText ?? modelText, Places = placesJson });
+            Observe(AcceptAsync(input));
         }
 
         private async Task AcceptAsync(ChatMessage input)
@@ -112,7 +116,13 @@ namespace airimayor.Agent
             {
                 if (m_Ready == null) m_Ready = m_Open();
                 await m_Ready.ConfigureAwait(false);
-                await m_Injection.EnqueueMessagesAsync(m_Session, new[] { input }, m_Lifetime.Token).ConfigureAwait(false);
+                Record.Record("input.queued", new JsonObject { ["messageId"] = input.MessageId, ["origin"] = "player" });
+                try { await m_Injection.EnqueueMessagesAsync(m_Session, new[] { input }, m_Lifetime.Token).ConfigureAwait(false); }
+                catch (Exception error)
+                {
+                    Record.Record("input.queue.failed", new JsonObject { ["messageId"] = input.MessageId, ["exception"] = SessionRecord.ExceptionData(error) });
+                    throw;
+                }
                 if (m_Active != null && !m_Active.IsCompleted && !m_RunCancellation.IsCancellationRequested)
                     m_CurrentInput.Add(input);
                 else
@@ -121,14 +131,27 @@ namespace airimayor.Agent
             finally { m_Gate.Release(); }
         }
 
-        public void Cancel() => Observe(CancelAsync());
+        public void Cancel()
+        {
+            string request = Guid.NewGuid().ToString("N");
+            Record.Record("stop.requested", new JsonObject { ["requestId"] = request, ["reason"] = "player" });
+            Observe(CancelAsync(request));
+        }
 
-        private async Task CancelAsync()
+        private async Task CancelAsync(string request)
         {
             await m_Gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 while (m_Wake.Reader.TryRead(out _)) { }
+                var pendingIds = m_Session == null ? Array.Empty<string>() :
+                    (await m_Injection.GetPendingMessagesAsync(m_Session).ConfigureAwait(false)).Select(message => message.MessageId).ToArray();
+                Record.Record("stop.applied", new JsonObject
+                {
+                    ["requestId"] = request, ["reason"] = "player", ["active"] = m_Active != null && !m_Active.IsCompleted,
+                    ["messageIds"] = JsonSerializer.SerializeToNode(m_CurrentInput.Select(message => message.MessageId)),
+                    ["pendingMessageIds"] = JsonSerializer.SerializeToNode(pendingIds),
+                });
                 m_RunCancellation?.Cancel();
                 if (m_Active == null)
                     m_View.Apply(new SessionUpdate { Kind = "status", Status = AgentStatus.Interrupted });
@@ -194,6 +217,8 @@ namespace airimayor.Agent
             Record.TurnStart(Guid.NewGuid().ToString("N"), string.Join("\n", input.Select(item => item.Text)));
             m_View.Apply(new SessionUpdate { Kind = "status", Status = AgentStatus.Thinking });
             var calls = new Dictionary<string, FunctionCallContent>();
+            string stopReason = "completed";
+            Exception failure = null;
             try
             {
                 await foreach (var update in m_Agent.RunStreamingAsync(Array.Empty<ChatMessage>(), m_Session, cancellationToken: cancellationToken).ConfigureAwait(false))
@@ -227,7 +252,9 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
-                await PreserveInputsAsync().ConfigureAwait(false);
+                stopReason = error is OperationCanceledException ? "cancelled" : "failed";
+                failure = error;
+                await PreserveInputsAsync(error).ConfigureAwait(false);
                 if (error is OperationCanceledException)
                     m_View.Apply(new SessionUpdate { Kind = "status", Status = AgentStatus.Interrupted });
                 else
@@ -241,24 +268,37 @@ namespace airimayor.Agent
                     Kind = "plan", Text = SessionPlan.Format(todos.Select(todo =>
                         (todo.Title, "medium", todo.IsComplete ? "completed" : "pending"))),
                 });
-                Record.TurnFinish(null);
+                Record.TurnFinish(new JsonObject { ["stopReason"] = stopReason, ["exception"] = SessionRecord.ExceptionData(failure) });
                 m_View.Apply(new SessionUpdate { Kind = "status", Status = AgentStatus.Idle });
                 m_View.Apply(new SessionUpdate { Kind = "turn" });
             }
         }
 
-        private async Task PreserveInputsAsync()
+        private async Task PreserveInputsAsync(Exception error)
         {
             await m_Gate.WaitAsync().ConfigureAwait(false);
             try
             {
                 var history = m_History.GetMessages(m_Session).ToList();
+                JsonObject before = Record.KeepMessages(history);
                 var pending = await m_Injection.GetPendingMessagesAsync(m_Session).ConfigureAwait(false);
+                var restored = new List<string>();
                 foreach (var input in m_CurrentInput)
                     if (!history.Any(item => item.MessageId == input.MessageId) && !pending.Any(item => item.MessageId == input.MessageId))
+                    {
                         history.Add(input);
+                        restored.Add(input.MessageId);
+                    }
                 m_History.SetMessages(m_Session, history);
-                m_Session.StateBag.TryRemoveValue(nameof(ContextWindowCompactionStrategy));
+                m_Session.StateBag.TryRemoveValue(nameof(RecordedCompaction));
+                Record.Record("history.repaired", new JsonObject
+                {
+                    ["path"] = "player-input", ["reason"] = error is OperationCanceledException ? "cancelled" : "failed",
+                    ["before"] = before, ["after"] = Record.KeepMessages(history),
+                    ["pendingMessageIds"] = JsonSerializer.SerializeToNode(pending.Where(message => message.MessageId != null).Select(message => message.MessageId)),
+                    ["restoredMessageIds"] = JsonSerializer.SerializeToNode(restored), ["restoredToolCallIds"] = new JsonArray(),
+                    ["exception"] = SessionRecord.ExceptionData(error),
+                });
             }
             finally { m_Gate.Release(); }
         }
@@ -270,7 +310,7 @@ namespace airimayor.Agent
         private void ReportError(string source, Exception error)
         {
             string text = SessionRecord.RedactSecrets(error.Message);
-            Record.Error(source, text);
+            Record.Log(source, text, "error", error);
             m_View.Apply(new SessionUpdate { Kind = "error", Text = text });
         }
 
