@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -81,7 +82,7 @@ public sealed class HarnessSessionTests
         {
             entered.TrySetResult();
             if (cancel) await Task.Delay(Timeout.Infinite, ct);
-            throw new InvalidOperationException("provider failure");
+            throw new WebException("provider failure", WebExceptionStatus.RequestCanceled);
         });
         using var session = Open(client);
         Task turn = Prompt(session, "work");
@@ -97,6 +98,64 @@ public sealed class HarnessSessionTests
         JsonObject outcome = Data(session, end);
         Assert.Equal(cancel ? "cancelled" : "failed", (string)outcome["stopReason"]);
         Assert.NotEmpty((string)outcome["exception"]["stackTrace"]);
+    }
+
+    [Fact]
+    public async Task An_unrequested_provider_cancellation_remains_a_failure()
+    {
+        var client = new Client((_, _, _, _) => throw new OperationCanceledException("provider timeout"));
+        using var session = Open(client);
+        var turn = await SessionTurn.RunAsync(session, "work").WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(turn.Failed);
+        var records = Recorded(session);
+        string span = (string)Assert.Single(records, line => (string)line["name"] == "chat-turn")["spanId"];
+        JsonObject end = Assert.Single(records, line => (string)line["type"] == "span.end" && (string)line["spanId"] == span);
+        Assert.Equal("error", (string)end["status"]);
+        Assert.Equal("failed", (string)Data(session, end)["stopReason"]);
+        Assert.All(records.Where(line => (string)line["type"] == "span.end"), line => Assert.NotEqual("cancelled", (string)line["status"]));
+        Assert.All(records.Where(line => (string)line["type"] == "span.end" && (string)line["reason"] == typeof(OperationCanceledException).FullName),
+            line => Assert.False((bool)line["attrs"]["airimayor.cancellation_requested"]));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task Stop_preserves_a_transport_abort_as_a_cancelled_turn()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new Client(async (n, _, _, ct) =>
+        {
+            if (n == 1) return Calls(("before-stop", "city_read", Empty()));
+            if (n == 2)
+            {
+                entered.TrySetResult();
+                try { await Task.Delay(Timeout.Infinite, ct); }
+                catch (OperationCanceledException) { throw new WebException("request aborted", WebExceptionStatus.RequestCanceled); }
+            }
+            return Text("resumed");
+        });
+        using var session = Open(client);
+        session.Prompt("work");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Stop(session);
+        var records = Recorded(session);
+        string span = (string)Assert.Single(records, line => (string)line["name"] == "chat-turn")["spanId"];
+        JsonObject end = Assert.Single(records, line => (string)line["type"] == "span.end" && (string)line["spanId"] == span);
+        Assert.Equal("cancelled", (string)end["status"]);
+        Assert.Equal(typeof(WebException).FullName, (string)Data(session, end)["exception"]["type"]);
+        Assert.DoesNotContain(JsonNode.Parse(session.ChatStateJson())["messages"].AsArray(), message => (string)message["role"] == "error");
+        Assert.All(records.Where(line => (string)line["name"] == "history.repaired"), line => Assert.Equal("cancelled", (string)Data(session, line)["reason"]));
+        var native = records.Where(line => (string)line["type"] == "span.end" && (string)line["reason"] == typeof(WebException).FullName).ToArray();
+        Assert.NotEmpty(native);
+        Assert.All(native, line =>
+        {
+            Assert.Equal("cancelled", (string)line["status"]);
+            Assert.Equal("Error", (string)line["attrs"]["otel.status_code"]);
+            Assert.True((bool)line["attrs"]["airimayor.cancellation_requested"]);
+        });
+        await Prompt(session, "continue");
+        Assert.Contains(client.LastInput, message => message.Role == ChatRole.User && message.Text == "work");
+        Assert.Contains(client.LastInput.SelectMany(message => message.Contents).OfType<FunctionResultContent>(), result => result.CallId == "before-stop");
+        await session.CloseAsync();
     }
 
     [Fact]

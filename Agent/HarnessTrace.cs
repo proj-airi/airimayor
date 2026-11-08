@@ -57,6 +57,7 @@ namespace airimayor.Agent
         {
             public string Agent;
             public Activity Activity;
+            public CancellationToken Cancellation;
         }
 
         private sealed class Span
@@ -106,7 +107,7 @@ namespace airimayor.Agent
             AgentRunOptions options, AIAgent next, CancellationToken cancellationToken)
         {
             Run previous = m_Run.Value;
-            m_Run.Value = new Run { Agent = next.Name };
+            m_Run.Value = new Run { Agent = next.Name, Cancellation = cancellationToken };
             using (m_Record.BindRun(m_Sessions.GetOrCreateValue(session).Id, Guid.NewGuid().ToString("N"), next.Name))
             {
                 try { return await next.RunAsync(input, session, options, cancellationToken).ConfigureAwait(false); }
@@ -118,7 +119,7 @@ namespace airimayor.Agent
             AgentSession session, AgentRunOptions options, AIAgent next, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             Run previous = m_Run.Value;
-            m_Run.Value = new Run { Agent = next.Name };
+            m_Run.Value = new Run { Agent = next.Name, Cancellation = cancellationToken };
             using (m_Record.BindRun(m_Sessions.GetOrCreateValue(session).Id, Guid.NewGuid().ToString("N"), next.Name))
             {
                 try
@@ -216,11 +217,15 @@ namespace airimayor.Agent
                 m_Record.EmitTrace(instant);
             }
             JsonObject record = Event(activity, span, "span.end");
-            record["attrs"] = Attributes(activity);
+            JsonObject endAttributes = Attributes(activity);
+            endAttributes["otel.status_code"] = activity.Status.ToString();
+            bool cancellationRequested = span.Run.Cancellation.IsCancellationRequested;
+            endAttributes["airimayor.cancellation_requested"] = cancellationRequested;
+            record["attrs"] = endAttributes;
             NativeLinks(activity, span, record);
             string error = activity.GetTagItem("error.type") as string;
-            record["status"] = error == typeof(OperationCanceledException).FullName || error == typeof(TaskCanceledException).FullName
-                ? "cancelled" : activity.Status == ActivityStatusCode.Error ? "error" : "ok";
+            bool cancelled = cancellationRequested && activity.Status == ActivityStatusCode.Error;
+            record["status"] = cancelled ? "cancelled" : activity.Status == ActivityStatusCode.Error ? "error" : "ok";
             if (activity.StatusDescription != null) record["message"] = activity.StatusDescription;
             if (error != null) record["reason"] = error;
             m_Record.EmitTrace(record);

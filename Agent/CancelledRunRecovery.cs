@@ -49,7 +49,7 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
-                await RepairAsync(messages, session, error).ConfigureAwait(false);
+                await RepairAsync(messages, session, error, cancellationToken.IsCancellationRequested).ConfigureAwait(false);
                 throw;
             }
             finally
@@ -75,7 +75,7 @@ namespace airimayor.Agent
                     }
                     catch (Exception error)
                     {
-                        await RepairAsync(messages, session, error).ConfigureAwait(false);
+                        await RepairAsync(messages, session, error, cancellationToken.IsCancellationRequested).ConfigureAwait(false);
                         throw;
                     }
                     if (!more) break;
@@ -88,7 +88,7 @@ namespace airimayor.Agent
             }
         }
 
-        private async Task RepairAsync(IReadOnlyList<ChatMessage> messages, AgentSession session, Exception error)
+        private async Task RepairAsync(IReadOnlyList<ChatMessage> messages, AgentSession session, Exception error, bool cancellationRequested)
         {
             var history = m_History.GetMessages(session).ToList();
             JsonObject before = m_Record.KeepMessages(history);
@@ -116,7 +116,7 @@ namespace airimayor.Agent
             session.StateBag.TryRemoveValue(nameof(RecordedCompaction));
             m_Record.Record("history.repaired", new JsonObject
             {
-                ["path"] = "cancelled-run", ["reason"] = error is OperationCanceledException ? "cancelled" : "failed",
+                ["path"] = "cancelled-run", ["reason"] = cancellationRequested ? "cancelled" : "failed",
                 ["before"] = before, ["after"] = m_Record.KeepMessages(history),
                 ["pendingMessageIds"] = JsonSerializer.SerializeToNode(pending.Where(message => message.MessageId != null).Select(message => message.MessageId)),
                 ["restoredMessageIds"] = JsonSerializer.SerializeToNode(restored), ["restoredToolCallIds"] = JsonSerializer.SerializeToNode(restoredCalls),

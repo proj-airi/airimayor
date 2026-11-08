@@ -253,10 +253,11 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
-                stopReason = error is OperationCanceledException ? "cancelled" : "failed";
+                bool cancelled = cancellationToken.IsCancellationRequested;
+                stopReason = cancelled ? "cancelled" : "failed";
                 failure = error;
-                await PreserveInputsAsync(error).ConfigureAwait(false);
-                if (error is OperationCanceledException)
+                await PreserveInputsAsync(error, stopReason).ConfigureAwait(false);
+                if (cancelled)
                     m_View.Apply(new SessionUpdate { Kind = "status", Status = AgentStatus.Interrupted });
                 else
                     ReportError("agent", error);
@@ -275,7 +276,7 @@ namespace airimayor.Agent
             }
         }
 
-        private async Task PreserveInputsAsync(Exception error)
+        private async Task PreserveInputsAsync(Exception error, string reason)
         {
             await m_Gate.WaitAsync().ConfigureAwait(false);
             try
@@ -294,7 +295,7 @@ namespace airimayor.Agent
                 m_Session.StateBag.TryRemoveValue(nameof(RecordedCompaction));
                 Record.Record("history.repaired", new JsonObject
                 {
-                    ["path"] = "player-input", ["reason"] = error is OperationCanceledException ? "cancelled" : "failed",
+                    ["path"] = "player-input", ["reason"] = reason,
                     ["before"] = before, ["after"] = Record.KeepMessages(history),
                     ["pendingMessageIds"] = JsonSerializer.SerializeToNode(pending.Where(message => message.MessageId != null).Select(message => message.MessageId)),
                     ["restoredMessageIds"] = JsonSerializer.SerializeToNode(restored), ["restoredToolCallIds"] = new JsonArray(),
