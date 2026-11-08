@@ -267,7 +267,7 @@ namespace airimayor.Agent
             data["files"] = files;
             lock (m_Lock)
             {
-                string span = NativeTool()?.SpanId.ToHexString();
+                string span = HarnessTrace.SpanId(NativeTool());
                 bool owned = span == null && m_Calls.TryGetValue(callId, out span);
                 var instant = new JsonObject
                 {

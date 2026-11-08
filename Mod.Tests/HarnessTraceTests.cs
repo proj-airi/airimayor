@@ -8,6 +8,38 @@ using Xunit;
 public sealed class HarnessTraceTests
 {
     [Fact]
+    public async Task Hierarchical_host_activities_keep_distinct_native_turns_and_tool_parents()
+    {
+        using var host = new Activity("Unity host").SetIdFormat(ActivityIdFormat.Hierarchical).Start();
+        int step = 0;
+        async IAsyncEnumerable<ChatResponseUpdate> Respond(List<ChatMessage> input, ChatOptions options,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return ++step % 2 == 1 ? Call("read-" + step, "city_read", new Dictionary<string, object>())
+                : new ChatResponseUpdate(ChatRole.Assistant, "City inspected");
+        }
+
+        using var session = Open(new Client(Respond), "hierarchical");
+        await SessionTurn.RunAsync(session, "inspect first").WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionTurn.RunAsync(session, "inspect again").WaitAsync(TimeSpan.FromSeconds(10));
+        await session.CloseAsync();
+        var records = Read(session);
+        var spans = records.Where(record => (string)record["type"] == "span.begin").ToList();
+        var roots = spans.Where(record => (string)record["name"] == "invoke_agent mayor").ToList();
+        Assert.Equal(2, roots.Count);
+        Assert.All(roots, root => Assert.StartsWith(host.Id, (string)root["spanId"]));
+        Assert.DoesNotContain(spans, span => (string)span["spanId"] == "0000000000000000");
+        Assert.Equal(spans.Count, spans.Select(span => (string)span["spanId"]).Distinct().Count());
+        foreach (var span in spans.Where(span => ((string)span["track"]).StartsWith("agents/")))
+            Assert.Single(records, record => (string)record["type"] == "span.end" && (string)record["spanId"] == (string)span["spanId"]);
+        foreach (var model in spans.Where(span => (string)span["track"] == "agents/mayor/llm"))
+            Assert.Contains(roots, root => (string)root["spanId"] == (string)model["parentSpanId"]);
+        foreach (var result in records.Where(record => (string)record["name"] == "city.tool.result"))
+            Assert.Single(spans, span => (string)span["spanId"] == (string)result["spanId"] && (string)span["track"] == "agents/mayor/tools");
+    }
+
+    [Fact]
     public async Task Native_request_is_recorded_before_model_start_and_keeps_output_catalog_and_usage()
     {
         ClientSession session = null;

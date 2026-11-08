@@ -149,16 +149,18 @@ namespace airimayor.Agent
             activity.SetCustomProperty(m_Key, span);
             JsonObject record = Event(activity, span, "span.begin");
             record["name"] = span.Name;
-            if (activity.ParentSpanId != default)
+            string parentId = activity.Parent != null ? SpanId(activity.Parent)
+                : activity.ParentSpanId != default ? activity.ParentSpanId.ToHexString() : activity.ParentId;
+            if (parentId != null)
             {
                 if (agent && span.Ids["originRun"] != null)
                     record["links"] = new JsonArray(new JsonObject
                     {
                         ["rel"] = "caused-by",
-                        ["to"] = new JsonObject { ["spanId"] = activity.ParentSpanId.ToHexString() },
+                        ["to"] = new JsonObject { ["spanId"] = parentId },
                     });
                 else
-                    record["parentSpanId"] = activity.ParentSpanId.ToHexString();
+                    record["parentSpanId"] = parentId;
             }
             record["attrs"] = Attributes(activity);
             NativeLinks(activity, span, record);
@@ -209,7 +211,7 @@ namespace airimayor.Agent
                 JsonObject attributes = Attributes(native.Tags);
                 attributes["otel.event.timestamp"] = native.Timestamp.ToString("o", CultureInfo.InvariantCulture);
                 attributes["otel.event.offset_ms"] = offset;
-                attributes["otel.trace_id"] = activity.TraceId.ToHexString();
+                IdentityAttributes(activity, attributes);
                 instant["attrs"] = attributes;
                 m_Record.EmitTrace(instant);
             }
@@ -280,15 +282,25 @@ namespace airimayor.Agent
             ["type"] = type,
             ["ts"] = type == "span.begin" ? span.StartedAt : m_Record.TraceNow,
             ["track"] = span.Track,
-            ["spanId"] = activity.SpanId.ToHexString(),
+            ["spanId"] = SpanId(activity),
             ["ids"] = span.Ids.DeepClone(),
         };
 
         private JsonObject Attributes(Activity activity)
         {
             JsonObject attributes = Attributes(activity.TagObjects);
-            attributes["otel.trace_id"] = activity.TraceId.ToHexString();
+            IdentityAttributes(activity, attributes);
             return attributes;
+        }
+
+        internal static string SpanId(Activity activity) => activity == null ? null
+            : activity.SpanId != default ? activity.SpanId.ToHexString() : activity.Id;
+
+        private static void IdentityAttributes(Activity activity, JsonObject attributes)
+        {
+            attributes["otel.activity_id"] = activity.Id;
+            attributes["otel.id_format"] = activity.IdFormat.ToString();
+            if (activity.TraceId != default) attributes["otel.trace_id"] = activity.TraceId.ToHexString();
         }
 
         private JsonObject Attributes(IEnumerable<KeyValuePair<string, object>> tags)
