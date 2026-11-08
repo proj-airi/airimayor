@@ -11,6 +11,7 @@
     "paths": {
       "@proj-airi/trace-kit": [".upstream/packages/trace-kit/src/index.ts"],
       "@proj-airi/trace-kit/agent": [".upstream/packages/trace-kit/src/profiles/agent.ts"],
+      "@proj-airi/trace-kit/projections": [".upstream/packages/trace-kit/src/projections/index.ts"],
       "@proj-airi/trace-kit/views": [".upstream/packages/trace-kit/src/views/index.ts"],
       "@proj-airi/stream-kit": [".upstream/packages/stream-kit/src/index.ts"]
     }

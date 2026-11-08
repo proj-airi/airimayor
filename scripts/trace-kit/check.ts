@@ -3,8 +3,8 @@ import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
-import { createTraceViewReader } from '@proj-airi/trace-kit/views'
 import { safeParse } from 'valibot'
+import { createSessionViewReader } from './session-view'
 
 const LEDGER_FIELDS = ['money', 'developmentPoints', 'buildings', 'networkEdges', 'transitLines']
 const WITNESS_FIELDS: Record<string, string[]> = {
@@ -237,7 +237,7 @@ export async function checkRecord(directory: string, report: Report, label = bas
   for (const [key, span] of spans)
     if (span.open) report.fail(label, `span ${key} started and never ended`)
 
-  const view = createTraceViewReader(records[0]?.clock ?? 'mono:record', { seriesRetention: false })
+  const view = createSessionViewReader(records[0]?.clock ?? 'mono:record')
   view.reader.handleRecords(records)
   const timeline = view.timelineView()
   const modelSpans = [...timeline.spans.values()].filter(span => span.track.endsWith('/llm'))

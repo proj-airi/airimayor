@@ -544,6 +544,14 @@ input[type="checkbox"] {
   color: #dce4f1;
   font-size: 11px;
 }
+.event-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
 .event-list {
   overflow: auto;
   flex: 1;

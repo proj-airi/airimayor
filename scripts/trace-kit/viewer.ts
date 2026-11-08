@@ -19,6 +19,9 @@ let playing = false
 let timer: ReturnType<typeof setTimeout> | undefined
 let urls: string[] = []
 let detailGeneration = 0
+const eventPageSize = 200
+let eventMatches: number[] = []
+let eventPage = 0
 
 function originTime() { return recording ? recording.full.reader.timeOf(recording.records[0]).time : 0 }
 function timeOf(index: number) { return recording!.full.reader.timeOf(recording!.records[index]).time - originTime() }
@@ -87,6 +90,13 @@ function seek(position: number, follow = true) {
   }
   $<HTMLInputElement>('seek').value = String(eventPosition)
   $('cursor-label').textContent = `${seconds(timeOf(replay.cursor))}  /  event ${eventPosition + 1} of ${recording.events.length}`
+  if (follow && $<HTMLInputElement>('follow').checked) {
+    const match = eventMatches.indexOf(eventPosition)
+    if (match >= 0 && Math.floor(match / eventPageSize) !== eventPage) {
+      eventPage = Math.floor(match / eventPageSize)
+      renderEvents()
+    }
+  }
   for (const row of $('event-list').querySelectorAll<HTMLElement>('[data-event]')) {
     const index = Number(row.dataset.event)
     row.classList.toggle('current', index === eventPosition)
@@ -131,16 +141,30 @@ function selectEvent(position: number) {
 
 function renderEvents() {
   if (!recording) return
-  const query = $<HTMLInputElement>('event-search').value.toLowerCase()
-  const rows = recording.events.flatMap((index, position) => {
+  const start = eventPage * eventPageSize
+  const rows = eventMatches.slice(start, start + eventPageSize).map(position => {
+    const index = recording!.events[position]
     const record = recording!.records[index]
     const name = recordTitle(record)
     const agent = agentOf(record)
-    if (!`${name} ${agent} ${record.type} ${record.ids?.agentSession ?? ''}`.toLowerCase().includes(query)) return []
-    return [`<button class="event-row${position === eventPosition ? ' current' : ''}${position > eventPosition ? ' future' : ''}" role="listitem" data-event="${position}" aria-label="Event ${position + 1}: ${escape(name)}"><span class="event-time">${seconds(timeOf(index))}</span><span><span class="event-name"><i class="event-kind ${classOf('track' in record ? record.track : '')}" aria-hidden="true"></i>${escape(name)}</span><span class="event-agent">${escape(agent)} · ${escape(record.type)} · #${record.seq}</span></span></button>`]
+    return `<button class="event-row${position === eventPosition ? ' current' : ''}${position > eventPosition ? ' future' : ''}" role="listitem" data-event="${position}" aria-label="Event ${position + 1}: ${escape(name)}"><span class="event-time">${seconds(timeOf(index))}</span><span><span class="event-name"><i class="event-kind ${classOf('track' in record ? record.track : '')}" aria-hidden="true"></i>${escape(name)}</span><span class="event-agent">${escape(agent)} · ${escape(record.type)} · #${record.seq}</span></span></button>`
   })
   $('event-list').innerHTML = rows.join('') || '<p class="event-empty">No events match this filter.</p>'
-  $('event-count').textContent = `(${rows.length})`
+  $('event-count').textContent = `(${eventMatches.length})`
+  $('event-page').textContent = eventMatches.length ? `${start + 1}–${start + rows.length} of ${eventMatches.length}` : '0 events'
+  $('events-earlier').toggleAttribute('disabled', eventPage === 0)
+  $('events-later').toggleAttribute('disabled', start + eventPageSize >= eventMatches.length)
+}
+
+function filterEvents() {
+  if (!recording) return
+  const query = $<HTMLInputElement>('event-search').value.toLowerCase()
+  eventMatches = recording.events.flatMap((index, position) => {
+    const record = recording!.records[index]
+    return !query || `${recordTitle(record)} ${agentOf(record)} ${record.type} ${record.ids?.agentSession ?? ''}`.toLowerCase().includes(query) ? [position] : []
+  })
+  eventPage = Math.floor(Math.max(0, eventMatches.indexOf(eventPosition)) / eventPageSize)
+  renderEvents()
 }
 
 function renderTimeline() {
@@ -390,7 +414,7 @@ export async function openRecording(files: readonly LocalFile[]) {
     $<HTMLInputElement>('event-search').value = ''
     renderSummary()
     eventPosition = loaded.events.length - 1
-    renderEvents()
+    filterEvents()
     seek(eventPosition, false)
   }
   catch (error) {
@@ -415,7 +439,9 @@ $('last').addEventListener('click', () => { stop(); seek(recording!.events.lengt
 $('previous').addEventListener('click', () => { stop(); seek(eventPosition - 1) })
 $('next').addEventListener('click', () => { stop(); seek(eventPosition + 1) })
 $('seek').addEventListener('input', event => { stop(); seek(Number((event.target as HTMLInputElement).value)) })
-$('event-search').addEventListener('input', renderEvents)
+$('event-search').addEventListener('input', filterEvents)
+$('events-earlier').addEventListener('click', () => { eventPage--; renderEvents() })
+$('events-later').addEventListener('click', () => { eventPage++; renderEvents() })
 $('event-list').addEventListener('click', event => {
   const row = (event.target as Element).closest<HTMLElement>('[data-event]')
   if (row) selectEvent(Number(row.dataset.event))

@@ -1,7 +1,7 @@
 import type { TraceAssetRef, TraceRecord } from '@proj-airi/trace-kit'
 import { TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
-import { createTraceViewReader } from '@proj-airi/trace-kit/views'
 import { safeParse } from 'valibot'
+import { createSessionViewReader } from './session-view'
 
 export interface LocalFile {
   path: string
@@ -10,7 +10,7 @@ export interface LocalFile {
 }
 
 export interface Issue { message: string; index?: number }
-export type ViewReader = ReturnType<typeof createTraceViewReader>
+export type ViewReader = ReturnType<typeof createSessionViewReader>
 export type Timeline = ReturnType<ViewReader['timelineView']>
 export type Span = Timeline['spans'] extends Map<string, infer Value> ? Value : never
 
@@ -167,7 +167,7 @@ export async function loadRecording(selected: readonly LocalFile[]): Promise<Rec
   validateLifecycle(records, issues)
   const assets = new AssetStore(files, issues)
   for (const [index, record] of records.entries()) await assets.visit(record, index)
-  const full = createTraceViewReader(records[0].clock, { seriesRetention: false })
+  const full = createSessionViewReader(records[0].clock)
   full.reader.handleRecords(records)
   const events = records.flatMap((record, index) => record.type === 'definition' || record.type === 'clock.snapshot' ? [] : [index])
   return { name: prefix.split('/').filter(Boolean).at(-1) ?? recordFile.path, records, issues, assets, full, events }
@@ -186,7 +186,7 @@ export class Replay {
   cursor = -1
 
   constructor(readonly recording: Recording) {
-    this.view = createTraceViewReader(recording.records[0].clock, { seriesRetention: false })
+    this.view = createSessionViewReader(recording.records[0].clock)
   }
 
   seek(index: number) {

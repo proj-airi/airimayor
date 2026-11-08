@@ -72,6 +72,29 @@ test('non-streaming final content becomes available only at its end, without inv
   assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'child' }).chunks, 0)
 })
 
+test('long streamed sessions remain indexed and replayable without quadratic projection work', async () => {
+  const trace = fixture()
+  const deltas = Array.from({ length: 200 }, (_, index) => trace.asset({ index, text: 'x' }))
+  for (let call = 0; call < 200; call++) {
+    const spanId = `model-${call}`
+    trace.add({ type: 'span.begin', spanId, name: 'chat', track: 'agents/mayor/llm' })
+    for (let index = 0; index < 200; index++)
+      trace.add({ type: 'instant', spanId, track: 'agents/mayor/llm', name: 'model.output.delta', attrs: { 'airimayor.data': deltas[index] } })
+    trace.add({ type: 'span.end', spanId, track: 'agents/mayor/llm', status: 'ok' })
+  }
+  trace.add({ type: 'source.stopped' })
+  const files = trace.files()
+  const started = performance.now()
+  const recording = await loadRecording(files)
+  const replay = new Replay(recording)
+  replay.seek(recording.records.length - 1)
+  assert.equal(recording.full.reader.indexes.byKey.size, trace.records.length)
+  assert.equal(replay.view.reader.indexes.byKey.size, trace.records.length)
+  assert.equal(replay.view.timelineView().spans.size, 200)
+  assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' }).chunks, 200)
+  assert.ok(performance.now() - started < 2000, '40,000 updates must load and seek within two seconds')
+})
+
 test('reconstructs ACP output separately for root and owned conversations', async () => {
   const trace = fixture()
   for (const [agentSession, index, text, reasoning] of [['root', 0, 'Mayor ', ''], ['child', 0, 'Report', 'Inspect'], ['root', 1, 'reply', '']] as const)
