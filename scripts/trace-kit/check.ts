@@ -7,7 +7,7 @@ import { createTraceViewReader } from '@proj-airi/trace-kit/views'
 import { safeParse } from 'valibot'
 
 const LEDGER_FIELDS = ['money', 'developmentPoints', 'buildings', 'networkEdges', 'transitLines']
-const EXPECTED: Record<string, string[]> = {
+const WITNESS_FIELDS: Record<string, string[]> = {
   place_building: ['buildings', 'money'],
   build_network: ['networkEdges', 'money'],
   replace_road_type: ['networkEdges', 'money'],
@@ -123,10 +123,10 @@ function judgeWrite(where: string, tool: string, data: Record<string, unknown>, 
     report.verdict(where, 'undetermined', `${claim}; simulation ran (frames ${before.frame}->${after.frame}); ${change}`)
   }
   else if (success) {
-    if (EXPECTED[tool].some(field => moved.includes(field)))
+    if (WITNESS_FIELDS[tool].some(field => moved.includes(field)))
       report.verdict(where, 'confirmed', `succeeded; ${change}`)
     else
-      report.verdict(where, 'diverged', `reported success but none of ${EXPECTED[tool].join(', ')} moved; ${change}`)
+      report.verdict(where, 'undetermined', `reported success; ledger cannot confirm the requested change; ${change}`)
   }
   else if (moved.length) {
     report.verdict(where, 'diverged', `reported failure but the city changed; ${change}`)
@@ -152,7 +152,7 @@ async function checkCityResult(record: Extract<TraceRecord, { type: 'instant' }>
   if (data.files !== undefined && (!Array.isArray(data.files) || data.files.some(file =>
     !object(file) || typeof file.name !== 'string' || !object(file.asset) || !('$asset' in file.asset))))
     report.fail(label, 'files must contain names and native asset references')
-  if (data.tool in EXPECTED || UNSEEN.has(data.tool))
+  if (data.tool in WITNESS_FIELDS || UNSEEN.has(data.tool))
     judgeWrite(label, data.tool, data, report)
 }
 

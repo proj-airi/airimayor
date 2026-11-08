@@ -86,6 +86,25 @@ test('preserves diverged and undetermined write verdicts', async (t) => {
   assert.equal(result.report.verdicts.undetermined, 1)
 })
 
+test('unchanged counters cannot disprove area expansion or road changes with a stable edge count', async (t) => {
+  const trace = await fixture(t)
+  const before = { paused: true, frame: 12, buildings: 533, networkEdges: 427, money: 100 }
+  for (const [tool, after] of [
+    ['expand_operational_area', { ...before }],
+    ['build_network', { ...before, buildings: 532 }],
+  ] as const) {
+    trace.add({ type: 'instant', name: 'city.tool.result', track: 'agents/mayor/tools', attrs: {
+      'airimayor.data': await trace.asset({ tool, success: true, evidence: { before, after } }),
+    } })
+  }
+  trace.add({ type: 'source.stopped' })
+  const result = await trace.check()
+  assert.equal(result.report.failures, 0, result.messages)
+  assert.equal(result.report.verdicts.confirmed, 0)
+  assert.equal(result.report.verdicts.undetermined, 2)
+  assert.match(result.messages, /ledger cannot confirm/)
+})
+
 test('rejects assets with wrong byte counts and paths outside the archive', async (t) => {
   const trace = await fixture(t)
   const ref = await trace.asset({ text: 'kept' })
