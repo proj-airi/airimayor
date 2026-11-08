@@ -211,6 +211,54 @@ namespace airimayor.Tests
             Assert.NotNull(first.Messages[0].RawRepresentation);
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task Chat_completions_sends_city_tool_images_as_images_after_all_tool_results(bool streaming, bool separateResults)
+        {
+            var protocol = ModelProtocol.ChatCompletions;
+            var handler = new ReplyHandler(streaming ? StreamResponse(protocol) : Response(protocol)) { Streaming = streaming };
+            var connection = new ProviderConnections().Read(ModelProviders.Go)
+                .With(endpoint: "https://provider.test/v1", model: "test-model", apiKey: "test-key", protocol: protocol);
+            using IChatClient client = ModelProviders.CreateChatClient(ModelCatalogSnapshot.Empty.Resolve(connection), "image-chat", handler);
+            var image = new DataContent(new byte[] { 1, 2, 3, 4 }, "image/png");
+            var result = new FunctionResultContent("image-call", new AIContent[] { new TextContent("City map"), image });
+            var tools = new ChatMessage(ChatRole.Tool, new AIContent[] { result, new FunctionResultContent("read-call", "Population 98") });
+            var messages = new List<ChatMessage>
+            {
+                new ChatMessage(ChatRole.Assistant, new AIContent[]
+                {
+                    new FunctionCallContent("image-call", "map_image", new Dictionary<string, object>()),
+                    new FunctionCallContent("read-call", "get_statistics", new Dictionary<string, object>()),
+                }),
+                tools,
+            };
+            if (separateResults)
+            {
+                messages[1] = new ChatMessage(ChatRole.Tool, new AIContent[] { result });
+                messages.Add(new ChatMessage(ChatRole.Tool, new AIContent[] { tools.Contents[1] }));
+            }
+            if (streaming)
+                await client.GetStreamingResponseAsync(messages, Options()).ToChatResponseAsync();
+            else
+                await client.GetResponseAsync(messages, Options());
+            var sent = JsonNode.Parse(Assert.Single(handler.Requests).Body)["messages"].AsArray();
+            Assert.Equal(4, sent.Count);
+            Assert.Equal("tool", (string)sent[1]["role"]);
+            Assert.Equal("City map", (string)sent[1]["content"]);
+            Assert.Equal("image-call", (string)sent[1]["tool_call_id"]);
+            Assert.Equal("Population 98", (string)sent[2]["content"]);
+            Assert.Equal("user", (string)sent[3]["role"]);
+            var parts = sent[3]["content"].AsArray();
+            Assert.Contains("image-call", (string)parts[0]["text"]);
+            Assert.Equal("image_url", (string)parts[1]["type"]);
+            Assert.Equal("data:image/png;base64,AQIDBA==", (string)parts[1]["image_url"]["url"]);
+            Assert.Same(result, tools.Contents[0]);
+            Assert.Same(image, Assert.IsType<AIContent[]>(result.Result)[1]);
+        }
+
         private static ChatOptions Options() => new ChatOptions
         {
             MaxOutputTokens = 128,

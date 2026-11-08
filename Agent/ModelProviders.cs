@@ -132,7 +132,7 @@ namespace airimayor.Agent
                     ? openai.GetResponsesClient().AsIChatClient(connection.Model)
                     : openai.GetChatClient(connection.Model).AsIChatClient();
                 if (route.Protocol == ModelProtocol.ChatCompletions)
-                    client = new ChatReasoningClient(client, route.ReasoningField ?? "reasoning_content");
+                    client = new ChatCompletionsClient(client, route.ReasoningField ?? "reasoning_content");
                 return new OwnedChatClient(client, http);
             }
             catch
@@ -201,19 +201,47 @@ namespace airimayor.Agent
             }
         }
 
-        private sealed class ChatReasoningClient : DelegatingChatClient
+        private sealed class ChatCompletionsClient : DelegatingChatClient
         {
             private readonly byte[] m_Field;
-            public ChatReasoningClient(IChatClient inner, string field) : base(inner) => m_Field = Encoding.UTF8.GetBytes("$." + field);
+            public ChatCompletionsClient(IChatClient inner, string field) : base(inner) => m_Field = Encoding.UTF8.GetBytes("$." + field);
             public override Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) =>
-                InnerClient.GetResponseAsync(WithReasoning(messages), options, cancellationToken);
+                InnerClient.GetResponseAsync(WithProtocolContent(messages), options, cancellationToken);
             public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) =>
-                InnerClient.GetStreamingResponseAsync(WithReasoning(messages), options, cancellationToken);
+                InnerClient.GetStreamingResponseAsync(WithProtocolContent(messages), options, cancellationToken);
 
-            private IEnumerable<ChatMessage> WithReasoning(IEnumerable<ChatMessage> messages)
+            private IEnumerable<ChatMessage> WithProtocolContent(IEnumerable<ChatMessage> messages)
             {
+                var images = new List<AIContent>();
                 foreach (ChatMessage message in messages)
                 {
+                    if (message.Role != ChatRole.Tool && images.Count > 0)
+                    {
+                        yield return new ChatMessage(ChatRole.User, images);
+                        images = new List<AIContent>();
+                    }
+                    if (message.Role == ChatRole.Tool)
+                    {
+                        ChatMessage projected = null;
+                        for (int index = 0; index < message.Contents.Count; index++)
+                        {
+                            if (message.Contents[index] is not FunctionResultContent result || result.Result is not IEnumerable<AIContent> content) continue;
+                            AIContent[] visual = content.Where(item => item is DataContent data && data.HasTopLevelMediaType("image") ||
+                                item is UriContent uri && uri.HasTopLevelMediaType("image")).ToArray();
+                            if (visual.Length == 0) continue;
+                            if (projected == null)
+                            {
+                                projected = message.Clone();
+                                projected.Contents = message.Contents.ToList();
+                                projected.RawRepresentation = null;
+                            }
+                            projected.Contents[index] = new FunctionResultContent(result.CallId, string.Join("\n", content.OfType<TextContent>().Select(item => item.Text)));
+                            images.Add(new TextContent("Images returned by city tool call " + result.CallId + ":"));
+                            images.AddRange(visual);
+                        }
+                        yield return projected ?? message;
+                        continue;
+                    }
                     TextReasoningContent[] reasoning = message.Contents.OfType<TextReasoningContent>().ToArray();
                     if (message.Role != ChatRole.Assistant || reasoning.Length == 0)
                     {
@@ -227,6 +255,7 @@ namespace airimayor.Agent
                     raw.Patch.Set(m_Field, string.Concat(reasoning.Select(content => content.Text)));
                     yield return new ChatMessage(message.Role, message.Contents) { RawRepresentation = raw };
                 }
+                if (images.Count > 0) yield return new ChatMessage(ChatRole.User, images);
             }
         }
 
