@@ -16,6 +16,8 @@ import { Playback } from './playback'
 import { ViewerClient } from './viewer-client'
 import Evidence from './viewer-evidence.vue'
 import Json from './viewer-json.vue'
+import Analysis from './viewer-analysis.vue'
+import Search from './viewer-search.vue'
 
 type PickerWindow = Window & {
   showDirectoryPicker?: (options: { mode: 'read' }) => Promise<Parameters<ViewerClient['remote']['openDirectory']>[0]>
@@ -49,7 +51,7 @@ const loading = ref(false),
   follow = ref(true),
   speed = ref(1)
 const tab = ref<'replay' | 'detail' | 'evidence' | 'raw'>('replay')
-const view = ref<'timeline' | 'events' | 'metrics'>('timeline')
+const view = ref<'timeline' | 'events' | 'metrics' | 'search'>('timeline')
 const workspace = ref<'trace' | 'call'>('trace')
 const log = shallowRef<EventLogState>(),
   logLoading = ref(false)
@@ -167,6 +169,15 @@ function seekTime(time: number | undefined) {
   if (time === undefined || !summary.value) return
   const position = Math.max(0, sortedLastIndex(summary.value.seekTimes, time - summary.value.origin) - 1)
   void seek(summary.value.seekPositions[position])
+}
+
+async function inspectRecord(index: number) {
+  if (!summary.value) return
+  const position = summary.value.events.findIndex(event => event.index === index)
+  if (position < 0) return
+  workspace.value = 'call'
+  tab.value = 'evidence'
+  await seek(position)
 }
 
 async function open(
@@ -487,6 +498,7 @@ watch(view, async (value) => {
                   ['timeline', 'Timeline'],
                   ['events', 'Event log'],
                   ['metrics', 'Metrics'],
+                  ['search', 'Search'],
                 ] as const"
                 :id="`view-tab-${value}`"
                 :key="value"
@@ -566,10 +578,9 @@ watch(view, async (value) => {
                 :version="version"
                 :locale="locale"
               />
-              <p v-if="!Object.values(overview.metricSamples()).some((samples) => samples.length)" class="viewer-empty">
-                No metric samples recorded.
-              </p>
+              <Analysis :client="client" @select="select" @seek="seekTime(summary.origin + $event)" />
             </div>
+            <Search v-if="view === 'search'" :client="client" @record="inspectRecord" />
           </div>
         </section>
         <section

@@ -5,23 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
 import { safeParse } from 'valibot'
 import { createSessionViewReader } from './session-view'
-
-const LEDGER_FIELDS = ['money', 'developmentPoints', 'buildings', 'networkEdges', 'transitLines']
-const WITNESS_FIELDS: Record<string, string[]> = {
-  place_building: ['buildings', 'money'],
-  build_network: ['networkEdges', 'money'],
-  replace_road_type: ['networkEdges', 'money'],
-  set_road_features: ['money', 'networkEdges'],
-  demolish: ['buildings', 'networkEdges'],
-  set_facility_upgrade: ['buildings', 'money'],
-  add_transit_line: ['transitLines'],
-  remove_transit_line: ['transitLines'],
-  expand_operational_area: ['money'],
-  buy_tiles: ['money'],
-  purchase_development_node: ['developmentPoints'],
-}
-const UNSEEN = new Set(['zone', 'set_budget', 'set_policy'])
-type Verdict = 'confirmed' | 'diverged' | 'undetermined'
+import { judgeWrite, type Verdict } from './write-evidence'
 
 export class Report {
   failures = 0
@@ -100,42 +84,6 @@ class Assets {
   }
 }
 
-function judgeWrite(where: string, tool: string, data: Record<string, unknown>, report: Report) {
-  const success = Boolean(data.success)
-  const claim = success ? 'succeeded' : 'failed'
-  if (UNSEEN.has(tool)) {
-    report.verdict(where, 'undetermined', `${claim}; the ledger does not see this write`)
-    return
-  }
-  if (!data.evidence) {
-    report.verdict(where, 'undetermined', `${claim}; the record holds no ledger evidence`)
-    return
-  }
-  const { before, after } = object(data.evidence) ? data.evidence : {}
-  if (!object(before) || !object(after)) {
-    report.fail(where, 'ledger evidence needs before and after objects')
-    return
-  }
-  const moved = LEDGER_FIELDS.filter(field => before[field] !== after[field])
-  const change = moved.map(field => `${field} ${before[field]}->${after[field]}`).join(', ') || 'nothing moved'
-  const clean = before.paused && after.paused && before.frame === after.frame
-  if (!clean) {
-    report.verdict(where, 'undetermined', `${claim}; simulation ran (frames ${before.frame}->${after.frame}); ${change}`)
-  }
-  else if (success) {
-    if (WITNESS_FIELDS[tool].some(field => moved.includes(field)))
-      report.verdict(where, 'confirmed', `succeeded; ${change}`)
-    else
-      report.verdict(where, 'undetermined', `reported success; ledger cannot confirm the requested change; ${change}`)
-  }
-  else if (moved.length) {
-    report.verdict(where, 'diverged', `reported failure but the city changed; ${change}`)
-  }
-  else {
-    report.verdict(where, 'confirmed', 'failed; nothing moved')
-  }
-}
-
 async function checkCityResult(record: Extract<TraceRecord, { type: 'instant' }>, assets: Assets, report: Report, where: string) {
   const data = await assets.read(record.attrs?.['airimayor.data'], where)
   if (!object(data) || typeof data.tool !== 'string' || typeof data.success !== 'boolean') {
@@ -152,8 +100,9 @@ async function checkCityResult(record: Extract<TraceRecord, { type: 'instant' }>
   if (data.files !== undefined && (!Array.isArray(data.files) || data.files.some(file =>
     !object(file) || typeof file.name !== 'string' || !object(file.asset) || !('$asset' in file.asset))))
     report.fail(label, 'files must contain names and native asset references')
-  if (data.tool in WITNESS_FIELDS || UNSEEN.has(data.tool))
-    judgeWrite(label, data.tool, data, report)
+  const judgment = judgeWrite(data.tool, data)
+  if (judgment.invalid) report.fail(label, judgment.message)
+  else if (judgment.verdict) report.verdict(label, judgment.verdict, judgment.message)
 }
 
 export async function checkRecord(directory: string, report: Report, label = basename(directory)) {

@@ -67,6 +67,8 @@ namespace airimayor.Agent
             public JsonObject Ids;
             public Run Run;
             public double StartedAt;
+            public double? FirstContentAt;
+            public double? FirstAnswerAt;
             public int NativeLinks;
         }
 
@@ -192,12 +194,33 @@ namespace airimayor.Agent
                 }
         }
 
-        private void FirstChunk(Activity activity)
+        private void Content(Activity activity, IEnumerable<AIContent> contents)
         {
             if (activity?.GetCustomProperty(m_Key) is not Span span) return;
-            JsonObject record = Event(activity, span, "instant");
-            record["name"] = "llm.first_chunk";
-            m_Record.EmitTrace(record);
+            bool content = false, answer = false;
+            foreach (var item in contents)
+            {
+                if (item is UsageContent || item is TextContent text && string.IsNullOrEmpty(text.Text) ||
+                    item is TextReasoningContent reasoning && string.IsNullOrEmpty(reasoning.Text)) continue;
+                content = true;
+                if (!(item is TextReasoningContent)) answer = true;
+            }
+            void First(string name)
+            {
+                JsonObject record = Event(activity, span, "instant");
+                record["name"] = name;
+                m_Record.EmitTrace(record);
+            }
+            if (content && !span.FirstContentAt.HasValue)
+            {
+                span.FirstContentAt = m_Record.TraceNow;
+                First("llm.first_chunk");
+            }
+            if (answer && !span.FirstAnswerAt.HasValue)
+            {
+                span.FirstAnswerAt = m_Record.TraceNow;
+                First("llm.first_answer");
+            }
         }
 
         private void Stopped(Activity activity)
@@ -218,6 +241,9 @@ namespace airimayor.Agent
             }
             JsonObject record = Event(activity, span, "span.end");
             JsonObject endAttributes = Attributes(activity);
+            endAttributes["airimayor.duration_ms"] = m_Record.TraceNow - span.StartedAt;
+            if (span.FirstContentAt.HasValue) endAttributes["llm.ttft_ms"] = span.FirstContentAt.Value - span.StartedAt;
+            if (span.FirstAnswerAt.HasValue) endAttributes["llm.ttfat_ms"] = span.FirstAnswerAt.Value - span.StartedAt;
             endAttributes["otel.status_code"] = activity.Status.ToString();
             bool cancellationRequested = span.Run.Cancellation.IsCancellationRequested;
             endAttributes["airimayor.cancellation_requested"] = cancellationRequested;
@@ -356,11 +382,14 @@ namespace airimayor.Agent
             private readonly HarnessTrace m_Trace;
             public CheckpointClient(IChatClient inner, HarnessTrace trace) : base(inner) => m_Trace = trace;
 
-            public override Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null,
+            public override async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null,
                 CancellationToken cancellationToken = default)
             {
-                m_Trace.Checkpoint(Activity.Current, messages);
-                return base.GetResponseAsync(messages, options, cancellationToken);
+                Activity activity = Activity.Current;
+                m_Trace.Checkpoint(activity, messages);
+                var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+                m_Trace.Content(activity, response.Messages.SelectMany(message => message.Contents));
+                return response;
             }
 
             public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages,
@@ -371,7 +400,7 @@ namespace airimayor.Agent
                 int index = 0;
                 await foreach (var update in base.GetStreamingResponseAsync(messages, options, cancellationToken).ConfigureAwait(false))
                 {
-                    if (index == 0) m_Trace.FirstChunk(activity);
+                    m_Trace.Content(activity, update.Contents);
                     m_Trace.Delta(activity, update, index++);
                     yield return update;
                 }

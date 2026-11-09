@@ -59,6 +59,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0051-models-dev-catalog-routing.md](./adr/0051-models-dev-catalog-routing.md) | Models.dev v2 provider/model directory, cached immutable routes and local connection overrides |
 | [0052-trace-kit-session-records.md](./adr/0052-trace-kit-session-records.md) | Native SDK evidence and durable output deltas; trace-kit offline checking, graphical inspection and replay |
 | [0053-native-summary-checkpoints.md](./adr/0053-native-summary-checkpoints.md) | Persist native MAF summaries once; keep request prefixes stable between summary checkpoints |
+| [0054-offline-recording-analysis.md](./adr/0054-offline-recording-analysis.md) | Worker-owned metrics, context/cache analysis, shared write judgments and paged content search |
 
 ## Guide
 

@@ -80,6 +80,13 @@ test('the production recording worker imports cloned files, reports progress, an
     assert.equal(log.entries.length, 5)
     assert.equal(log.dropped, 0)
     assert.deepEqual((await remote.locate({ kind: 'instant', key: log.entries[2].key })).selection, selection)
+    const analysis = await remote.analyze()
+    assert.equal(analysis.calls, 1)
+    assert.equal(analysis.models[0].ttft, 10)
+    assert.equal(analysis.usage.input.total, undefined)
+    const search = await remote.search({ text: 'Recorded output', status: 'ok', limit: 1 })
+    assert.equal(search.total, 1)
+    assert.equal(search.hits[0].index, 2)
   } finally {
     remote[releaseProxy]()
     await worker.terminate()

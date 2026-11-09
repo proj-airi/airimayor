@@ -324,7 +324,7 @@ namespace airimayor.Agent
                         ["imagePngBase64"] = null,
                     }.ToJsonString();
                 }
-                AgentToolResult session = await RecordedAsync(callId, name, arguments, isRoot,
+                AgentToolResult session = await RecordedAsync(callId, name, arguments, isRoot, cancellationToken,
                     () => m_Conversations.InvokeAsync(name, arguments, cancellationToken)).ConfigureAwait(false);
                 return new JsonObject
                 {
@@ -333,7 +333,7 @@ namespace airimayor.Agent
                     ["imagePngBase64"] = null,
                 }.ToJsonString();
             }
-            AgentToolResult result = await RecordedAsync(callId, name, arguments, isRoot,
+            AgentToolResult result = await RecordedAsync(callId, name, arguments, isRoot, cancellationToken,
                 () => m_Tools.InvokeAsync(name, arguments, cancellationToken)).ConfigureAwait(false);
             m_Previews?.Offer(name, arguments, result.PreviewJpeg);
             string image = result.ImagePng == null || result.ImagePng.Length == 0
@@ -353,7 +353,7 @@ namespace airimayor.Agent
         /// tool server's, not the agent's tool row id.
         /// </summary>
         private async Task<AgentToolResult> RecordedAsync(
-            string callId, string name, string arguments, bool isRoot, Func<Task<AgentToolResult>> invoke)
+            string callId, string name, string arguments, bool isRoot, CancellationToken cancellationToken, Func<Task<AgentToolResult>> invoke)
         {
             if (m_Record == null)
             {
@@ -364,6 +364,7 @@ namespace airimayor.Agent
             callId = string.IsNullOrEmpty(callId) ? Guid.NewGuid().ToString("N") : callId;
             m_Record.FunctionStart(callId, name);
             AgentToolResult result = null;
+            bool cancelled = false;
             try
             {
                 result = await invoke().ConfigureAwait(false);
@@ -371,6 +372,7 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
+                cancelled = cancellationToken.IsCancellationRequested;
                 m_Record.Record("city.tool.error", new JsonObject
                 {
                     ["tool"] = name, ["exception"] = SessionRecord.ExceptionData(error),
@@ -393,7 +395,7 @@ namespace airimayor.Agent
                         QueuedMs = result.QueuedMs,
                     },
                     result.Success ? null : result.Text,
-                    isRoot ? "mayor" : "conversation");
+                    isRoot ? "mayor" : "conversation", cancelled);
             }
         }
 

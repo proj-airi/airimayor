@@ -8,6 +8,7 @@ import { itemOfRecord } from '@proj-airi/trace-kit/views'
 import { recordingDirectory } from './recording-files'
 import { isOverviewRecord } from './session-view'
 import { isAsset, isObject, loadDirectory, loadRecording, payload, Replay } from './viewer-model'
+import { RecordingAnalysis, type AnalysisFilter, type SearchQuery } from './recording-analysis'
 
 export type Selection =
   | { kind: 'span'; key: string }
@@ -71,6 +72,7 @@ export class ViewerSession {
   private positions = new Map<number, number>()
   private recordKeys = new Map<string, number>()
   private structural: number[] = []
+  private analysis?: RecordingAnalysis
 
   async openFiles(files: SelectedFile[], progress: Progress) {
     return this.loaded(
@@ -93,6 +95,7 @@ export class ViewerSession {
 
   private loaded(recording: Recording): SessionSummary {
     this.recording = recording
+    this.analysis = new RecordingAnalysis(recording)
     this.replay = new Replay(recording)
     this.positions = new Map(recording.events.map((index, position) => [index, position]))
     this.recordKeys = new Map(recording.records.map((record, index) => [recordKey(record), index]))
@@ -152,6 +155,14 @@ export class ViewerSession {
     const reader = new TraceReader([projection], this.summary!.clock)
     reader.handleRecords(this.recording!.records)
     return reader.view(projection)
+  }
+
+  analyze(filter: AnalysisFilter = {}, offset = 0) {
+    return this.analysis!.analyze(filter, offset)
+  }
+
+  search(query: SearchQuery) {
+    return this.analysis!.search(query)
   }
 
   private selectionAt(index: number): Selection | undefined {

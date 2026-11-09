@@ -54,6 +54,7 @@ namespace airimayor.Agent
             m_Record.FunctionStart(call, name);
             m_Update(new SessionUpdate { Kind = "tool", CallId = call, Tool = name, Text = arguments, Status = AgentStatus.Working });
             AgentToolResult result = null;
+            bool cancelled = false;
             try
             {
                 result = await m_Tools.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
@@ -68,6 +69,7 @@ namespace airimayor.Agent
             }
             catch (Exception error)
             {
+                cancelled = cancellationToken.IsCancellationRequested;
                 m_Record.Record("city.tool.error", new JsonObject
                 {
                     ["tool"] = name, ["exception"] = SessionRecord.ExceptionData(error),
@@ -81,7 +83,7 @@ namespace airimayor.Agent
             }
             finally
             {
-                m_Record.Function(call, name, arguments, result, watch.ElapsedMilliseconds, new ToolAnchors { Submitted = submitted, Applied = result.Applied, Completed = m_Record.Clock(), QueuedMs = result.QueuedMs }, result.Success ? null : result.Text, AIAgent.CurrentRunContext.Agent.Name);
+                m_Record.Function(call, name, arguments, result, watch.ElapsedMilliseconds, new ToolAnchors { Submitted = submitted, Applied = result.Applied, Completed = m_Record.Clock(), QueuedMs = result.QueuedMs }, result.Success ? null : result.Text, AIAgent.CurrentRunContext.Agent.Name, cancelled);
                 m_Update(new SessionUpdate { Kind = "tool", CallId = call, Tool = name, Text = arguments, Result = result.Text, Status = result.Success ? AgentStatus.Idle : AgentStatus.Error, Image = ToolPreview.DataUri(result.PreviewJpeg) });
             }
         }

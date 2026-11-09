@@ -439,5 +439,114 @@
         "background/memory"
       ]
     }
+  },
+  {
+    "type": "definition",
+    "kind": "profile",
+    "key": "mayor",
+    "data": {
+      "key": "mayor",
+      "version": "1"
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "model.duration_ms",
+    "data": {
+      "key": "model.duration_ms",
+      "label": "Model duration",
+      "unit": "ms",
+      "scope": "session",
+      "dimensions": [
+        "agent"
+      ],
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "airimayor.duration_ms"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "model.input_tokens",
+    "data": {
+      "key": "model.input_tokens",
+      "label": "Input tokens",
+      "unit": "tokens",
+      "scope": "session",
+      "dimensions": [
+        "agent"
+      ],
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "gen_ai.usage.input_tokens"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "model.output_tokens",
+    "data": {
+      "key": "model.output_tokens",
+      "label": "Output tokens",
+      "unit": "tokens",
+      "scope": "session",
+      "dimensions": [
+        "agent"
+      ],
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "gen_ai.usage.output_tokens"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "model.cache_tokens",
+    "data": {
+      "key": "model.cache_tokens",
+      "label": "Cache-read tokens",
+      "unit": "tokens",
+      "scope": "session",
+      "dimensions": [
+        "agent"
+      ],
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "gen_ai.usage.cache_read.input_tokens"
+      }
+    }
+  },
+  {
+    "type": "definition",
+    "kind": "metric",
+    "key": "model.reasoning_tokens",
+    "data": {
+      "key": "model.reasoning_tokens",
+      "label": "Reasoning tokens",
+      "unit": "tokens",
+      "scope": "session",
+      "dimensions": [
+        "agent"
+      ],
+      "value": {
+        "kind": "attribute",
+        "track": "agents/{agent}/llm",
+        "record": "span.end",
+        "attribute": "gen_ai.usage.reasoning.output_tokens"
+      }
+    }
   }
 ]

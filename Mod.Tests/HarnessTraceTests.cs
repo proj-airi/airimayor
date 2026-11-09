@@ -87,6 +87,54 @@ public sealed class HarnessTraceTests
     }
 
     [Fact]
+    public async Task Latency_ignores_metadata_and_usage_and_separates_reasoning_from_answer()
+    {
+        async IAsyncEnumerable<ChatResponseUpdate> Respond(List<ChatMessage> _, ChatOptions options,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "");
+            yield return new ChatResponseUpdate(ChatRole.Assistant, new List<AIContent> { new UsageContent(new UsageDetails()) });
+            await Task.Yield();
+            yield return new ChatResponseUpdate(ChatRole.Assistant, new List<AIContent> { new TextReasoningContent("Inspect the river") });
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "The river is clear");
+        }
+        using var session = Open(new Client(Respond));
+        await SessionTurn.RunAsync(session, "inspect").WaitAsync(TimeSpan.FromSeconds(10));
+        await session.CloseAsync();
+        var records = Read(session);
+        int content = records.FindIndex(record => (string)record["name"] == "llm.first_chunk");
+        int answer = records.FindIndex(record => (string)record["name"] == "llm.first_answer");
+        Assert.Equal(2, records.Take(content).Count(record => (string)record["name"] == "model.output.delta"));
+        Assert.Equal(3, records.Take(answer).Count(record => (string)record["name"] == "model.output.delta"));
+        var end = Assert.Single(records, record => (string)record["type"] == "span.end" && (string)record["track"] == "agents/mayor/llm");
+        double ttft = (double)end["attrs"]["llm.ttft_ms"], ttfat = (double)end["attrs"]["llm.ttfat_ms"];
+        Assert.True(ttft >= 0 && ttfat >= ttft);
+        Assert.True((double)end["attrs"]["airimayor.duration_ms"] >= ttfat);
+    }
+
+    [Fact]
+    public async Task Usage_only_response_has_no_invented_first_content_latency()
+    {
+        async IAsyncEnumerable<ChatResponseUpdate> Respond(List<ChatMessage> _, ChatOptions options,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return new ChatResponseUpdate(ChatRole.Assistant, new List<AIContent>
+            {
+                new UsageContent(new UsageDetails { InputTokenCount = 7, OutputTokenCount = 0 }),
+            });
+        }
+        using var session = Open(new Client(Respond));
+        await SessionTurn.RunAsync(session, "inspect").WaitAsync(TimeSpan.FromSeconds(10));
+        await session.CloseAsync();
+        var records = Read(session);
+        Assert.DoesNotContain(records, record => (string)record["name"] == "llm.first_chunk" || (string)record["name"] == "llm.first_answer");
+        var end = Assert.Single(records, record => (string)record["type"] == "span.end" && (string)record["track"] == "agents/mayor/llm");
+        Assert.Null(end["attrs"]["llm.ttft_ms"]);
+        Assert.Null(end["attrs"]["llm.ttfat_ms"]);
+    }
+
+    [Fact]
     public async Task Cancellation_keeps_native_partial_output_and_marks_the_model_span_cancelled()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

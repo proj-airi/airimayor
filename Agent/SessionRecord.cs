@@ -50,7 +50,7 @@ namespace airimayor.Agent
             EmitTrace(new JsonObject
             {
                 ["type"] = "source.started", ["format"] = 1, ["runtime"] = "dotnet",
-                ["profiles"] = new JsonArray(new JsonObject { ["key"] = "agent", ["version"] = "1" }),
+                ["profiles"] = new JsonArray(new JsonObject { ["key"] = "agent", ["version"] = "1" }, new JsonObject { ["key"] = "mayor", ["version"] = "1" }),
             });
             using (var stream = typeof(SessionRecord).Assembly.GetManifestResourceStream("airimayor.Agent.TraceProfile.json"))
             using (var reader = new StreamReader(stream ?? throw new InvalidOperationException("The trace profile is missing.")))
@@ -247,12 +247,13 @@ namespace airimayor.Agent
             }
         }
 
-        public void Function(string callId, string toolName, string arguments, AgentToolResult result, long elapsedMs, ToolAnchors anchors, string error = null, string caller = null)
+        public void Function(string callId, string toolName, string arguments, AgentToolResult result, long elapsedMs, ToolAnchors anchors, string error = null, string caller = null, bool cancelled = false)
         {
             var data = new JsonObject
             {
                 ["tool"] = toolName, ["arguments"] = arguments, ["result"] = result.Text, ["success"] = result.Success,
                 ["elapsedMs"] = elapsedMs, ["error"] = error, ["caller"] = caller, ["evidence"] = result.Evidence?.DeepClone(),
+                ["status"] = result.Success ? "ok" : cancelled ? "cancelled" : "error",
             };
             if (anchors.QueuedMs.HasValue) data["queuedMs"] = anchors.QueuedMs.Value;
             var timeline = new JsonObject();
@@ -278,7 +279,7 @@ namespace airimayor.Agent
                 EmitTrace(instant);
                 if (owned)
                 {
-                    EmitTrace(new JsonObject { ["type"] = "span.end", ["spanId"] = span, ["track"] = ToolTrack, ["status"] = result.Success ? "ok" : "error", ["ids"] = CallIds(callId) });
+                    EmitTrace(new JsonObject { ["type"] = "span.end", ["spanId"] = span, ["track"] = ToolTrack, ["status"] = result.Success ? "ok" : cancelled ? "cancelled" : "error", ["ids"] = CallIds(callId) });
                     m_Calls.Remove(callId);
                 }
             }

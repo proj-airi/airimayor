@@ -129,6 +129,18 @@ namespace airimayor.Tests
         }
 
         [Fact]
+        public void Requested_tool_cancellation_is_recorded_separately_from_failure()
+        {
+            using var record = Open();
+            record.FunctionStart("cancelled", "map_text");
+            record.Function("cancelled", "map_text", "{}", new AgentToolResult { Success = false, Text = "interrupted" },
+                10, default, cancelled: true);
+            var lines = Lines(record);
+            Assert.Equal("cancelled", (string)Assert.Single(lines, line => (string)line["type"] == "span.end")["status"]);
+            Assert.Equal("cancelled", (string)Data(record, Assert.Single(lines, line => (string)line["name"] == "city.tool.result"))["status"]);
+        }
+
+        [Fact]
         public void An_unapplied_tool_has_no_invented_simulation_anchor()
         {
             using var record = Open();

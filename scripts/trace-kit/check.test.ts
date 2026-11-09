@@ -7,13 +7,13 @@ import { test } from 'node:test'
 import { definitionRecordsOf } from '@proj-airi/trace-kit'
 import { agentProfile } from '@proj-airi/trace-kit/agent'
 import { checkRecord, Report } from './check'
+import { profileDefinitions } from './profile'
 
 const base = { source: 'cs2:game', epoch: 'session', clock: 'mono:session' }
 
-test('embedded profile matches the pinned native agent profile', async () => {
+test('embedded profile matches the pinned agent and mayor metric definitions', async () => {
   const embedded = JSON.parse(await readFile(new URL('../../Agent/TraceProfile.json', import.meta.url), 'utf8'))
-  const native = definitionRecordsOf(agentProfile, 0).map(({ ts, ...definition }) => definition)
-  assert.deepEqual(embedded, native)
+  assert.deepEqual(embedded, profileDefinitions)
 })
 
 async function fixture(t: { after: (cleanup: () => Promise<void>) => void }) {
