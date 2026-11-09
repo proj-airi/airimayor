@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import type { CityCategory, CityMetric, CityQuery, CityStamp, CityView } from './city-view'
+import type { CityCategory, CityMetric, CityQuery, CityView } from './city-view'
 import type { ViewerClient } from './viewer-client'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import {
+  cityDate,
+  cityMetricLabel,
+  cityNumber,
+  cityRoads,
+  cityValue,
+  defaultCityMetric,
+  trafficMeasures,
+} from './city-chart'
+import Trend from './viewer-city-chart.vue'
+import Picker from './viewer-city-picker.vue'
 
 const props = defineProps<{ client: ViewerClient; position: number }>()
 const emit = defineEmits<{ record: [index: number] }>()
 const result = shallowRef<CityView>(),
   category = ref<CityCategory>('Population'),
   metric = ref(''),
+  road = ref(''),
+  trafficField = ref('flowPercent'),
   frame = ref<number>(),
   offset = ref(0),
   eventOffset = ref(0),
+  panel = ref(''),
+  chartLimit = ref<number>(),
   error = ref(''),
   loading = ref(false),
   imageIndex = ref<number>(),
@@ -20,7 +35,7 @@ let desired: { client: ViewerClient; position: number; query: CityQuery; serial:
   serial = 0,
   disposed = false
 watch(
-  [category, metric],
+  metric,
   () => {
     offset.value = 0
   },
@@ -39,17 +54,25 @@ watch(
     if (next < previous) {
       offset.value = 0
       eventOffset.value = 0
-      frame.value = undefined
     }
   },
 )
 watch(
-  () => [props.client, props.position, metric.value, frame.value, offset.value, eventOffset.value] as const,
-  async ([client, position, key, at, start, eventStart]) => {
+  () =>
+    [
+      props.client,
+      props.position,
+      metric.value,
+      frame.value,
+      offset.value,
+      eventOffset.value,
+      chartLimit.value,
+    ] as const,
+  async ([client, position, key, at, start, eventStart, chartLimit]) => {
     desired = {
       client,
       position,
-      query: { metric: key, frame: at, offset: start, eventOffset: eventStart },
+      query: { metric: key, frame: at, offset: start, eventOffset: eventStart, chartLimit },
       serial: ++serial,
     }
     if (pending) return
@@ -78,35 +101,59 @@ onBeforeUnmount(() => {
   disposed = true
   desired = undefined
 })
-const categories = computed(() => [...new Set(result.value?.metrics.map((metric) => metric.category) ?? [])])
-const metrics = computed(() => result.value?.metrics.filter((metric) => metric.category === category.value) ?? [])
-watch(categories, (values) => {
-  if (values.length && !values.includes(category.value)) category.value = values[0]
+
+const topics: { key: CityCategory; label: string; icon: string }[] = [
+  { key: 'Population', label: 'Population', icon: 'i-mingcute:group-line' },
+  { key: 'Finance', label: 'Finances', icon: 'i-mingcute:wallet-line' },
+  { key: 'Demand', label: 'Demand', icon: 'i-mingcute:building-1-line' },
+  { key: 'Services', label: 'Services', icon: 'i-mingcute:flash-line' },
+  { key: 'Traffic', label: 'Traffic', icon: 'i-mingcute:road-line' },
+  { key: 'Notifications', label: 'Notifications', icon: 'i-mingcute:notification-line' },
+  { key: 'Construction', label: 'Construction', icon: 'i-mingcute:building-2-line' },
+  { key: 'Statistics', label: 'Statistics', icon: 'i-mingcute:chart-line-line' },
+]
+const availableTopics = computed(() =>
+  topics.filter((topic) => result.value?.metrics.some((item) => item.category === topic.key)),
+)
+const measures = computed(
+  () =>
+    result.value?.metrics
+      .filter((item) => item.category === category.value)
+      .map((item) => ({ key: item.key, label: cityMetricLabel(item) })) ?? [],
+)
+const roads = computed(() => cityRoads(result.value?.metrics ?? []))
+const preferred = new Map<CityCategory, string>()
+watch(metric, (key) => {
+  const item = result.value?.metrics.find((item) => item.key === key)
+  if (item) preferred.set(item.category, key)
 })
-watch(metrics, (values) => {
-  if (!values.some((value) => value.key === metric.value)) metric.value = values[0]?.key ?? ''
+watch([category, road, trafficField, () => result.value?.metrics], () => {
+  const metrics = result.value?.metrics ?? []
+  if (!metrics.length) return
+  if (!metrics.some((item) => item.category === category.value)) category.value = availableTopics.value[0].key
+  if (category.value === 'Traffic') {
+    if (!roads.value.some((item) => item.key === road.value)) road.value = roads.value[0]?.key ?? ''
+    metric.value = defaultCityMetric(metrics, 'Traffic', `road.${road.value}.${trafficField.value}`)?.key ?? ''
+  } else
+    metric.value = defaultCityMetric(metrics, category.value, preferred.get(category.value) ?? metric.value)?.key ?? ''
 })
 const cards = computed(() =>
   [
-    ['population', 'Population', 'Population', 'citizens'],
-    ['treasury', 'Treasury', 'Finance', 'currency'],
-    ['budget.balance', 'Monthly balance', 'Finance', 'currency / month'],
-    ['labor.unemploymentRate', 'Unemployment rate', 'Population', 'native rate'],
-    ['labor.homelessCitizens', 'Homeless citizens', 'Population', 'citizens'],
-    ['notifications.total', 'City notifications', 'Notifications', 'notifications'],
-    ['services.powerMargin', 'Power production + imports − consumption', 'Services', 'game units'],
-    ['services.waterMargin', 'Fresh water capacity − consumption', 'Services', 'game units'],
-    ['services.sewageMargin', 'Sewage capacity − consumption', 'Services', 'game units'],
-  ].map(
-    ([key, label, category, unit]): CityMetric =>
-      result.value?.metrics.find((metric) => metric.key === key) ?? {
-        key,
-        label,
-        category: category as CityCategory,
-        unit,
-        samples: 0,
-      },
-  ),
+    ['population', 'Population', 'Population', 'citizens', 'i-mingcute:group-line'],
+    ['treasury', 'Treasury', 'Finance', 'currency', 'i-mingcute:wallet-line'],
+    ['budget.balance', 'Monthly balance', 'Finance', 'currency / month', 'i-mingcute:bank-line'],
+    ['notifications.total', 'Notifications', 'Notifications', 'notifications', 'i-mingcute:notification-line'],
+  ].map(([key, label, category, unit, icon]) => ({
+    ...(result.value?.metrics.find((item) => item.key === key) ?? {
+      key,
+      label,
+      category: category as CityCategory,
+      unit,
+      samples: 0,
+    }),
+    label,
+    icon,
+  })),
 )
 const selectedFramePosition = computed(() => {
   const frames = result.value?.frames ?? [],
@@ -114,31 +161,40 @@ const selectedFramePosition = computed(() => {
   const found = frames.findIndex((stamp) => stamp.frame === current)
   return found < 0 ? Math.max(0, frames.length - 1) : found
 })
-const number = (value?: number) =>
-  value === undefined ? 'No observation' : value.toLocaleString(undefined, { maximumFractionDigits: 2 })
-const date = (stamp?: CityStamp) =>
-  stamp ? `${stamp.gameTime ?? 'Game date unavailable'} · frame ${number(stamp.frame)}` : 'Game time unavailable'
-const chart = computed(() => {
-  const points = result.value?.chart ?? []
-  const frames = result.value?.frames ?? []
-  const minFrame = frames[0]?.frame ?? 0,
-    maxFrame = frames.at(-1)?.frame ?? 1
-  const values = points.map((point) => point.value),
-    min = Math.min(...values),
-    max = Math.max(...values)
-  const y = (value: number) => 170 - ((value - min) / Math.max(1, max - min)) * 140
-  const x = (frame: number) => 40 + ((frame - minFrame) / Math.max(1, maxFrame - minFrame)) * 720
-  return {
-    points: points.map((point) => ({ ...point, x: x(point.frame), y: y(point.value) })),
-    min,
-    max,
-    cursor: result.value?.cursor ? x(result.value.cursor.frame) : undefined,
-    events:
-      result.value?.markers
-        .filter((event) => event.frame !== undefined)
-        .map((event) => ({ ...event, x: x(event.frame!) })) ?? [],
-  }
-})
+const sourceNames = {
+  read: 'City reading',
+  history: 'Game history',
+  before: 'Before action',
+  after: 'After action',
+}
+const panels = computed(() =>
+  [
+    {
+      key: 'readings',
+      label: 'Readings',
+      icon: 'i-mingcute:table-2-line',
+      available: !!result.value?.selected,
+    },
+    {
+      key: 'actions',
+      label: `Actions · ${cityNumber(result.value?.eventTotal)}`,
+      icon: 'i-mingcute:building-2-line',
+      available: !!result.value?.eventTotal,
+    },
+    {
+      key: 'notifications',
+      label: 'Notification details',
+      icon: 'i-mingcute:notification-line',
+      available: !!result.value?.notifications,
+    },
+    {
+      key: 'images',
+      label: 'City images',
+      icon: 'i-mingcute:pic-line',
+      available: !!result.value?.media.length,
+    },
+  ].filter((item) => item.available),
+)
 watch(
   () => result.value?.media,
   (media) => {
@@ -146,8 +202,8 @@ watch(
   },
 )
 watch(
-  () => [props.client, imageIndex.value] as const,
-  async ([client, index], _old, onCleanup) => {
+  () => [props.client, panel.value, imageIndex.value] as const,
+  async ([client, active, index], _old, onCleanup) => {
     let current = true,
       url = ''
     imageUrl.value = ''
@@ -155,7 +211,7 @@ watch(
       current = false
       if (url) URL.revokeObjectURL(url)
     })
-    if (index === undefined) return
+    if (active !== 'images' || index === undefined) return
     try {
       const attachment = await client.remote.cityImage(index)
       if (attachment && current) {
@@ -167,187 +223,157 @@ watch(
     }
   },
 )
-function chooseFrame(event: Event) {
-  const index = Number((event.target as HTMLInputElement).value)
+function chooseMetric(card: CityMetric) {
+  preferred.set(card.category, card.key)
+  category.value = card.category
+  metric.value = card.key
+}
+function chooseFrame(index: number) {
   frame.value = result.value?.frames[index]?.frame
-}
-function openPoint(index: number) {
-  emit('record', index)
-}
-function chooseMetric(key: string, group: CityCategory) {
-  category.value = group
-  metric.value = key
 }
 </script>
 
 <template>
-  <div class="space-y-5 p-3 text-sm">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h3 class="font-medium">City at the replay cursor</h3>
-        <p class="mt-1 text-xs text-neutral-400">{{ date(result?.cursor) }}</p>
-      </div>
-      <button class="viewer-button py-1 text-xs" :disabled="frame === undefined" @click="frame = undefined">
-        Follow replay city time
+  <section aria-label="City dashboard" class="space-y-3 p-3 text-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+      <h2 class="flex items-center gap-2 font-medium">
+        <span class="i-mingcute:time-line size-4 text-neutral-500" aria-hidden="true" />{{ cityDate(result?.cursor) }}
+      </h2>
+      <button
+        class="rounded px-2 py-1 text-neutral-400 hover:bg-neutral-800 disabled:text-neutral-500"
+        :disabled="frame === undefined"
+        @click="frame = undefined"
+      >
+        {{ frame === undefined ? 'Following replay' : 'Return to replay' }}
       </button>
     </div>
-    <p class="text-xs text-neutral-500">
-      Only observations acquired by the replay cursor are available. Every reading keeps its game time and source;
-      values between observations are unfilled.
-    </p>
     <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
     <p v-if="loading && !result" class="text-neutral-400" role="status">Reading city observations…</p>
-    <template v-if="result">
-      <div v-if="result.frames.length" class="space-y-2">
-        <label class="flex flex-col gap-2 text-xs text-neutral-400"
-          >City time · {{ selectedFramePosition + 1 }} / {{ result.frames.length }} observed frames
-          <input
+    <div
+      v-if="result && !result.metrics.length"
+      class="flex flex-col items-center gap-3 py-16 text-neutral-500"
+      role="status"
+    >
+      <span class="i-mingcute:building-1-line size-8" aria-hidden="true" />
+      <p>No city observations yet.</p>
+      <p class="text-xs">Move the replay forward to a recorded city reading.</p>
+    </div>
+    <template v-if="result?.metrics.length">
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <button
+          v-for="card in cards"
+          :key="card.key"
+          class="min-w-0 rounded-md border bg-neutral-900/50 px-3 py-2 text-left hover:bg-neutral-800 disabled:cursor-default disabled:opacity-50"
+          :class="metric === card.key ? 'border-pink-300/50' : 'border-neutral-800'"
+          :aria-label="card.label"
+          :aria-description="`${cityValue(card.latest?.value, card.unit)} · ${cityDate(card.latest)}`"
+          :aria-pressed="metric === card.key"
+          :disabled="card.samples === 0"
+          :title="`${card.label}: ${cityValue(card.latest?.value, card.unit)} · ${cityDate(card.latest)}`"
+          @click="chooseMetric(card)"
+        >
+          <span class="flex items-center gap-1.5 text-xs text-neutral-400"
+            ><span :class="card.icon" class="size-3.5 shrink-0" aria-hidden="true" />{{ card.label }}</span
+          ><span class="mt-1 block truncate text-lg tabular-nums sm:text-xl">{{
+            cityValue(card.latest?.value, card.unit, true)
+          }}</span
+          ><span class="mt-1 block truncate text-[10px] text-neutral-500">{{ cityDate(card.latest) }}</span>
+        </button>
+      </div>
+      <nav class="flex gap-1 overflow-x-auto border-b border-neutral-800" role="tablist" aria-label="City topics">
+        <button
+          v-for="topic in availableTopics"
+          :key="topic.key"
+          role="tab"
+          :aria-selected="category === topic.key"
+          class="flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2 text-xs"
+          :class="
+            category === topic.key
+              ? 'border-pink-300 text-pink-300'
+              : 'border-transparent text-neutral-400 hover:text-neutral-200'
+          "
+          @click="category = topic.key"
+        >
+          <span :class="topic.icon" class="size-3.5" aria-hidden="true" />{{ topic.label }}
+        </button>
+      </nav>
+      <div v-if="category === 'Traffic'" class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <Picker v-model="road" label="Road" :items="roads" />
+        <select
+          v-model="trafficField"
+          aria-label="Traffic measure"
+          class="min-w-0 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-xs"
+        >
+          <option v-for="item in trafficMeasures" :key="item.key" :value="item.key">{{ item.label }}</option>
+        </select>
+      </div>
+      <Picker v-else v-model="metric" label="City measure" :items="measures" />
+      <Trend
+        v-if="result.selected"
+        :metric="result.selected"
+        :points="result.chart"
+        :total="result.pointTotal"
+        :clocks="result.frames"
+        :frame="result.cursor?.frame"
+        :markers="result.markers"
+        @frame="frame = $event"
+        @range="chartLimit = $event"
+        @record="emit('record', $event)"
+      />
+      <div v-if="result.frames.length" class="flex items-center gap-2 border-b border-neutral-800 pb-3">
+        <button
+          class="viewer-icon-button"
+          aria-label="Previous city time"
+          :disabled="selectedFramePosition === 0"
+          @click="chooseFrame(selectedFramePosition - 1)"
+        >
+          <span class="i-mingcute:left-line size-4" aria-hidden="true" />
+        </button>
+        <label class="flex min-w-0 flex-1 items-center gap-3 text-xs text-neutral-500"
+          ><span class="shrink-0">City time</span
+          ><input
             type="range"
             aria-label="City time"
             :min="0"
             :max="result.frames.length - 1"
             :value="selectedFramePosition"
-            class="w-full accent-pink-300"
-            @input="chooseFrame"
-          />
-        </label>
-        <div class="flex justify-between gap-3 text-xs text-neutral-500">
-          <span>{{ date(result.frames[0]) }}</span
-          ><span class="text-right">{{ date(result.frames.at(-1)) }}</span>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        <div v-for="card in cards" :key="card.key" class="min-w-0 rounded bg-neutral-900 p-3">
-          <button
-            class="text-left text-xs text-neutral-400 hover:text-pink-300"
-            :disabled="card.samples === 0"
-            @click="chooseMetric(card.key, card.category)"
-          >
-            {{ card.label }}
-          </button>
-          <p class="mt-1 tabular-nums">
-            {{ number(card.latest?.value) }} <span class="text-xs text-neutral-500">{{ card.unit }}</span>
-          </p>
-          <p class="mt-1 text-xs text-neutral-500">
-            {{ card.latest ? `Last observed: ${date(card.latest)}` : 'Not observed at this city time' }}
-          </p>
-          <button
-            v-if="card.latest"
-            class="mt-2 text-xs text-pink-300 hover:underline"
-            @click="openPoint(card.latest.index)"
-          >
-            Open evidence
-          </button>
-        </div>
-      </div>
-      <p v-if="!result.metrics.length" class="rounded border border-neutral-800 p-5 text-neutral-400" role="status">
-        No timed city readings are available at this replay cursor. City data appears when the recording contains
-        successful city reads or write ledgers.
-      </p>
-      <section v-if="result.metrics.length" class="space-y-3">
-        <div class="flex flex-wrap gap-2">
-          <label class="flex min-w-0 flex-col gap-1 text-xs text-neutral-400"
-            >Category<select
-              v-model="category"
-              aria-label="City category"
-              class="rounded border border-neutral-700 bg-neutral-900 px-2 py-2"
-            >
-              <option v-for="item in categories" :key="item" :value="item">{{ item }}</option>
-            </select></label
-          >
-          <label class="flex min-w-0 flex-1 flex-col gap-1 text-xs text-neutral-400"
-            >City measure<select
-              v-model="metric"
-              aria-label="City measure"
-              class="max-w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-2"
-            >
-              <option v-for="item in metrics" :key="item.key" :value="item.key">{{ item.label }}</option>
-            </select></label
-          >
-        </div>
-        <div v-if="result.selected" class="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h3 class="font-medium">{{ result.selected.label }}</h3>
-            <p class="mt-1 text-xs text-neutral-400">
-              {{ result.selected.unit }} · {{ result.pointTotal }} recorded frames · {{ result.selected.scope }}
-            </p>
-          </div>
-          <div class="text-right tabular-nums">
-            <div>{{ number(result.selected.latest?.value) }}</div>
-            <div v-if="result.selected.latest && result.selected.previous" class="mt-1 text-xs text-neutral-400">
-              Change since previous observation:
-              {{ number(result.selected.latest.value - result.selected.previous.value) }}
-            </div>
-          </div>
-        </div>
-        <svg
-          v-if="chart.points.length"
-          viewBox="0 0 800 220"
-          class="w-full rounded bg-neutral-900"
-          role="img"
-          :aria-label="`${result.selected?.label} observations by simulation frame`"
+            class="min-w-0 flex-1 accent-pink-300"
+            @input="chooseFrame(Number(($event.target as HTMLInputElement).value))"
+        /></label>
+        <button
+          class="viewer-icon-button"
+          aria-label="Next city time"
+          :disabled="selectedFramePosition === result.frames.length - 1"
+          @click="chooseFrame(selectedFramePosition + 1)"
         >
-          <line x1="40" y1="170" x2="760" y2="170" stroke="#525252" />
-          <text x="40" y="15" fill="#a3a3a3" font-size="10">{{ number(chart.max) }}</text>
-          <text x="40" y="190" fill="#a3a3a3" font-size="10">{{ number(chart.min) }}</text>
-          <line
-            v-if="chart.cursor !== undefined"
-            :x1="chart.cursor"
-            y1="20"
-            :x2="chart.cursor"
-            y2="175"
-            stroke="#d4d4d4"
-            stroke-dasharray="4 3"
-          />
-          <g
-            v-for="point in chart.points"
-            :key="`${point.frame}:${point.index}`"
-            tabindex="0"
-            role="button"
-            class="cursor-pointer"
-            :aria-label="`${number(point.value)} at ${date(point)}`"
-            @click="frame = point.frame"
-            @keydown.enter="frame = point.frame"
-          >
-            <title>{{ number(point.value) }} · {{ date(point) }} · {{ point.kind }}</title>
-            <line :x1="point.x" y1="170" :x2="point.x" :y2="point.y" stroke="#f9a8d4" stroke-opacity="0.2" />
-            <circle :cx="point.x" :cy="point.y" r="3.5" :fill="point.kind === 'history' ? '#6ee7b7' : '#f9a8d4'" />
-          </g>
-          <g
-            v-for="event in chart.events"
-            :key="event.index"
-            tabindex="0"
-            role="button"
-            class="cursor-pointer"
-            :aria-label="event.label"
-            @click="openPoint(event.index)"
-            @keydown.enter="openPoint(event.index)"
-          >
-            <title>{{ event.label }} · {{ event.status }}</title>
-            <path :d="`M ${event.x} 199 l -4 8 h 8 z`" fill="#fbbf24" />
-          </g>
-        </svg>
-        <p class="text-xs text-neutral-500">
-          Pink: direct reading or ledger · green: native history · amber: city action · dashed line: selected city time.
-          Horizontal spacing follows simulation time; paused calls can share the same frame.
-          {{
-            result.chart.length < result.pointTotal
-              ? `Chart shows ${result.chart.length} selected points; the table retains all ${result.pointTotal}.`
-              : ''
-          }}
-        </p>
-        <p v-if="result.markers.length < result.eventTotal" class="text-xs text-neutral-500">
-          {{ result.markers.length }} action markers are shown; all {{ result.eventTotal }} actions remain in the paged
-          list.
-        </p>
-        <div class="overflow-x-auto">
+          <span class="i-mingcute:right-line size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        <button
+          v-for="item in panels"
+          :key="item.key"
+          :aria-expanded="panel === item.key"
+          class="flex items-center gap-1.5 rounded px-2 py-1.5 text-xs hover:bg-neutral-800"
+          :class="panel === item.key ? 'bg-neutral-800 text-neutral-200' : 'text-neutral-500'"
+          @click="panel = panel === item.key ? '' : item.key"
+        >
+          <span :class="item.icon" class="size-3.5" aria-hidden="true" />{{ item.label }}
+        </button>
+      </div>
+      <section
+        v-if="panel === 'readings' && result.selected"
+        aria-label="City readings"
+        class="space-y-2 rounded-md border border-neutral-800 p-3"
+      >
+        <div class="max-h-72 overflow-auto">
           <table class="w-full whitespace-nowrap text-left text-xs tabular-nums">
-            <thead class="text-neutral-400">
+            <thead class="text-neutral-500">
               <tr>
-                <th class="p-2">Game time / frame</th>
+                <th class="p-2">City time</th>
                 <th class="px-2">Value</th>
+                <th class="px-2">Reading</th>
                 <th class="px-2">Source</th>
-                <th class="px-2">Evidence</th>
               </tr>
             </thead>
             <tbody>
@@ -358,117 +384,60 @@ function chooseMetric(key: string, group: CityCategory) {
                 :class="point.frame > (result.cursor?.frame ?? Infinity) ? 'text-neutral-500' : ''"
               >
                 <td class="p-2">
-                  <button class="hover:text-pink-300" @click="frame = point.frame">{{ date(point) }}</button>
+                  <button
+                    class="hover:text-pink-300"
+                    :title="`Simulation frame ${point.frame}`"
+                    @click="frame = point.frame"
+                  >
+                    {{ cityDate(point) }}
+                    <span v-if="!point.gameTime" class="text-neutral-500"> · frame {{ cityNumber(point.frame) }}</span>
+                  </button>
                 </td>
-                <td class="px-2">{{ number(point.value) }}</td>
-                <td class="px-2">{{ point.kind }}</td>
+                <td class="px-2">{{ cityValue(point.value, result.selected.unit) }}</td>
+                <td class="px-2">{{ sourceNames[point.kind] }}</td>
                 <td class="px-2">
-                  <button class="text-pink-300 hover:underline" @click="openPoint(point.index)">Open evidence</button>
+                  <button class="text-pink-300 hover:underline" @click="emit('record', point.index)">
+                    Open source
+                  </button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="flex items-center justify-end gap-2 text-xs text-neutral-400">
+        <div class="flex items-center justify-end gap-2 text-xs text-neutral-500">
           <button class="viewer-button py-1" :disabled="offset === 0" @click="offset -= 50">Previous readings</button
-          ><span
-            >{{ result.pointTotal ? offset + 1 : 0 }}–{{ Math.min(offset + 50, result.pointTotal) }} /
-            {{ result.pointTotal }}</span
+          ><span>{{ offset + 1 }}–{{ Math.min(offset + 50, result.pointTotal) }} / {{ result.pointTotal }}</span
           ><button class="viewer-button py-1" :disabled="offset + 50 >= result.pointTotal" @click="offset += 50">
             Next readings
           </button>
         </div>
       </section>
-      <section v-if="result.notifications" class="space-y-3">
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <h3 class="font-medium">City notifications</h3>
-          <button class="text-xs text-pink-300 hover:underline" @click="openPoint(result.notifications.index)">
-            Open notification evidence
-          </button>
-        </div>
-        <p class="text-xs text-neutral-400">
-          Last observed: {{ date(result.notifications) }} · {{ number(result.notifications.total) }} citywide ·
-          {{ result.notifications.items.length }} detail rows{{ result.notifications.truncated ? ' · truncated' : '' }}.
-        </p>
-        <p class="text-xs text-neutral-500">
-          The detail list follows the original tool's filters and row limit. Counts by type in the measures above remain
-          citywide.
-        </p>
-        <div class="max-h-72 overflow-auto">
-          <table class="w-full whitespace-nowrap text-left text-xs">
-            <thead class="text-neutral-400">
-              <tr>
-                <th class="p-2">Notification</th>
-                <th class="px-2">Priority</th>
-                <th class="px-2">Place</th>
-                <th class="px-2">Position (x, z)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in result.notifications.items" :key="index" class="border-t border-neutral-800">
-                <td class="p-2">{{ item.type }}</td>
-                <td class="px-2">{{ number(item.priority) }}</td>
-                <td class="px-2">{{ item.target }}</td>
-                <td class="px-2">{{ item.location }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <section v-if="result.media.length" class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-medium">Recorded city view</h3>
-          <select
-            v-model="imageIndex"
-            aria-label="City image"
-            class="max-w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
-          >
-            <option v-for="item in result.media" :key="item.index" :value="item.index">
-              {{ item.tool === 'map_image' ? 'Map' : 'Screenshot' }} ·
-              {{ date(item.frame === undefined ? undefined : { frame: item.frame, gameTime: item.gameTime }) }}
-            </option>
-          </select>
-        </div>
-        <img
-          v-if="imageUrl"
-          :src="imageUrl"
-          alt="Recorded city view at the selected city time"
-          class="max-h-96 max-w-full rounded object-contain"
-        />
-        <p v-else class="text-xs text-neutral-500">Image unavailable or loading…</p>
-        <button
-          v-if="imageIndex !== undefined"
-          class="text-xs text-pink-300 hover:underline"
-          @click="openPoint(imageIndex)"
-        >
-          Open image evidence
-        </button>
-      </section>
-      <section class="space-y-3">
-        <h3 class="font-medium">City actions and before/after changes</h3>
-        <p class="text-xs text-neutral-500">
-          {{ result.eventTotal }} recorded actions up to this city time. Ledger changes and verdicts remain attached to
-          their original calls.
-        </p>
-        <div v-for="event in result.events" :key="event.index" class="rounded border border-neutral-800 p-3">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <button class="text-left text-pink-300 hover:underline" @click="openPoint(event.index)">
-              {{ event.label }}</button
-            ><span class="text-xs text-neutral-400"
-              >{{ event.status }}{{ event.verdict ? ` · ${event.verdict}` : '' }}</span
-            >
+      <section
+        v-if="panel === 'actions'"
+        aria-label="City actions"
+        class="space-y-2 rounded-md border border-neutral-800 p-3"
+      >
+        <div class="max-h-80 space-y-2 overflow-y-auto">
+          <div v-for="event in result.events" :key="event.index" class="rounded bg-neutral-900 p-3">
+            <div class="flex flex-wrap justify-between gap-2">
+              <button class="text-left text-xs text-pink-300 hover:underline" @click="emit('record', event.index)">
+                {{ event.label }}</button
+              ><span class="text-xs text-neutral-500"
+                >{{ event.status }}{{ event.verdict ? ` · ${event.verdict}` : '' }}</span
+              >
+            </div>
+            <p class="mt-1 text-xs text-neutral-500">
+              {{ cityDate(event.frame === undefined ? undefined : { frame: event.frame, gameTime: event.gameTime }) }}
+            </p>
+            <p v-for="change in event.changes" :key="change.field" class="mt-2 text-xs tabular-nums">
+              {{ change.field }}: {{ cityNumber(change.before) }} → {{ cityNumber(change.after) }} ({{
+                change.delta > 0 ? '+' : ''
+              }}{{ cityNumber(change.delta) }})
+            </p>
+            <p v-if="event.note" class="mt-2 text-xs text-neutral-400">{{ event.note }}</p>
           </div>
-          <p class="mt-1 text-xs text-neutral-500">
-            {{ date(event.frame === undefined ? undefined : { frame: event.frame, gameTime: event.gameTime }) }}
-          </p>
-          <p v-for="change in event.changes" :key="change.field" class="mt-2 text-xs tabular-nums">
-            {{ change.field }}: {{ number(change.before) }} → {{ number(change.after) }} ({{
-              change.delta > 0 ? '+' : ''
-            }}{{ number(change.delta) }})
-          </p>
-          <p v-if="event.note" class="mt-2 text-xs text-neutral-400">{{ event.note }}</p>
         </div>
-        <div class="flex items-center justify-end gap-2 text-xs text-neutral-400">
+        <div class="flex items-center justify-end gap-2 text-xs text-neutral-500">
           <button class="viewer-button py-1" :disabled="eventOffset === 0" @click="eventOffset -= 30">
             Previous actions</button
           ><span
@@ -483,14 +452,94 @@ function chooseMetric(key: string, group: CityCategory) {
           </button>
         </div>
       </section>
-      <p class="text-xs text-neutral-500">
-        {{ result.observations }} successful city reads acquired · {{ result.untimed }} lack a simulation-time anchor
-        and remain available in Evidence.
-      </p>
-      <details v-if="result.warnings.length" class="text-xs text-amber-300">
-        <summary class="cursor-pointer">{{ result.warnings.length }} city data issues</summary>
-        <p v-for="warning in result.warnings" :key="warning" class="mt-2">{{ warning }}</p>
+      <section
+        v-if="panel === 'notifications' && result.notifications"
+        aria-label="Notification details"
+        class="space-y-2 rounded-md border border-neutral-800 p-3"
+      >
+        <div class="flex flex-wrap justify-between gap-2 text-xs text-neutral-500">
+          <span>{{ cityDate(result.notifications) }} · {{ cityNumber(result.notifications.total) }} citywide</span
+          ><button class="text-pink-300 hover:underline" @click="emit('record', result.notifications.index)">
+            Open notification source
+          </button>
+        </div>
+        <p class="text-xs text-neutral-500">
+          {{ result.notifications.items.length }} detail rows{{ result.notifications.truncated ? ' · truncated' : '' }}.
+          Details follow the recorded filters and row limit.
+        </p>
+        <div class="max-h-72 overflow-auto">
+          <table class="w-full whitespace-nowrap text-left text-xs">
+            <thead class="text-neutral-500">
+              <tr>
+                <th class="p-2">Notification</th>
+                <th class="px-2">Priority</th>
+                <th class="px-2">Place</th>
+                <th class="px-2">Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in result.notifications.items" :key="index" class="border-t border-neutral-800">
+                <td class="p-2">{{ item.type }}</td>
+                <td class="px-2">{{ cityNumber(item.priority) }}</td>
+                <td class="px-2">{{ item.target }}</td>
+                <td class="px-2">{{ item.location }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section
+        v-if="panel === 'images' && result.media.length"
+        aria-label="City images"
+        class="space-y-2 rounded-md border border-neutral-800 p-3"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <select
+            v-model="imageIndex"
+            aria-label="City image"
+            class="max-w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
+          >
+            <option v-for="item in result.media" :key="item.index" :value="item.index">
+              {{ item.tool === 'map_image' ? 'Map' : 'Screenshot' }} ·
+              {{ cityDate(item.frame === undefined ? undefined : { frame: item.frame, gameTime: item.gameTime }) }}
+            </option></select
+          ><button
+            v-if="imageIndex !== undefined"
+            class="text-xs text-pink-300 hover:underline"
+            @click="emit('record', imageIndex)"
+          >
+            Open image source
+          </button>
+        </div>
+        <img
+          v-if="imageUrl"
+          :src="imageUrl"
+          alt="Recorded city view at the selected city time"
+          class="max-h-96 max-w-full rounded object-contain"
+        />
+        <p v-else class="text-xs text-neutral-500">Image unavailable or loading…</p>
+      </section>
+      <details class="text-xs text-neutral-500">
+        <summary class="cursor-pointer">
+          About these readings<span v-if="result.warnings.length" class="ml-2 text-amber-300"
+            >{{ result.warnings.length }} data issues</span
+          >
+        </summary>
+        <p class="mt-2">
+          Lines join recorded readings; no readings are added between them. Each measure uses its last observation at
+          the selected city time. Only data acquired by the replay is available.
+        </p>
+        <p v-if="result.selected?.scope" class="mt-2">{{ result.selected.scope }}</p>
+        <p v-if="result.chart.length < result.pointTotal" class="mt-2">
+          {{ result.chart.length }} points shown in this range. Long series retain local highs and lows. All
+          {{ result.pointTotal }} readings remain in the table.
+        </p>
+        <p class="mt-2">
+          {{ result.observations }} successful city reads. {{ result.untimed }} without city time remain available in
+          source evidence.
+        </p>
+        <p v-for="warning in result.warnings" :key="warning" class="mt-2 text-amber-300">{{ warning }}</p>
       </details>
     </template>
-  </div>
+  </section>
 </template>

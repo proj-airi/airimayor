@@ -1,4 +1,5 @@
 import type { Recording } from './viewer-model'
+import { sampleCityPoints } from './city-chart'
 import { isAsset, isObject, payload } from './viewer-model'
 import { judgeWrite, LEDGER_FIELDS, type Verdict } from './write-evidence'
 
@@ -52,6 +53,7 @@ export interface CityQuery {
   frame?: number
   offset?: number
   eventOffset?: number
+  chartLimit?: number
 }
 export interface CityNotifications extends CityStamp {
   index: number
@@ -296,9 +298,9 @@ export class CityRecording {
     if (tool === 'get_labor') {
       for (const [path, label, unit] of [
         ['employed', 'Employed citizens', 'citizens'],
-        ['unemploymentRate', 'Unemployment rate', 'native rate'],
+        ['unemploymentRate', 'Unemployment rate', '%'],
         ['homelessCitizens', 'Homeless citizens', 'citizens'],
-        ['homelessnessRate', 'Homelessness rate', 'native rate'],
+        ['homelessnessRate', 'Homelessness rate', '%'],
         ['jobs.total', 'Jobs', 'jobs'],
         ['jobs.free', 'Vacant jobs', 'jobs'],
         ['ageStructure.totalCitizens', 'Moved-in citizens', 'citizens'],
@@ -518,13 +520,17 @@ export class CityRecording {
       series.find((series) => series.key === 'population') ??
       series[0]
     const points = selected?.points ?? []
-    const chart =
-      points.length <= 600
-        ? points
-        : points.filter(
-            (_point, index) =>
-              index === 0 || index === points.length - 1 || index % Math.ceil(points.length / 598) === 0,
-          )
+    const chartPoints = query.chartLimit ? points.slice(-query.chartLimit) : points
+    const chart = sampleCityPoints(chartPoints, 599)
+    const current = selected && metric(selected).latest
+    if (
+      current &&
+      current.frame >= (chartPoints[0]?.frame ?? 0) &&
+      !chart.some((point) => point.frame === current.frame)
+    ) {
+      chart.push(current)
+      chart.sort((a, b) => a.frame - b.frame)
+    }
     const events = this.events
       .filter(
         (event) => event.index <= cursor && (frame === undefined || event.frame === undefined || event.frame <= frame),

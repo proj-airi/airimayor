@@ -62,7 +62,9 @@ Open `scripts/trace-kit/viewer.html` in a browser and select one session folder 
 
 Metrics shows token coverage, weighted cache reuse, request context changes, compaction checkpoints, and tool timing and write-evidence summaries. Search finds content in records and referenced JSON/text files, combines agent/run/turn/outcome/tool filters, and opens evidence at the matching record. Analysis covers the whole recording; missing usage remains unavailable. See [ADR 0054](docs/adr/0054-offline-recording-analysis.md).
 
-City follows the replay cursor and shows acquired observations by game time: population/history, finances, demand and factors, services, labor, notifications and individual road traffic. Scrub city time, inspect write changes, preview recorded maps/screenshots, and open each reading's evidence. Cards retain the last observed date; missing readings and unknown history dates stay explicit. See [ADR 0055](docs/adr/0055-city-observations-in-replay.md).
+City opens with key readings and a population line trend, then offers finances, demand and factors, services, labor, notifications and individual road traffic by game time. Search for a road and choose its measure; inspect trends with the pointer or arrow keys, select a city time, and expand readings, actions or recorded images when needed. Source evidence opens beside the chart and closes back to the entry replay position. Cards retain the last observed date; missing readings and unknown history dates stay explicit. See [ADR 0055](docs/adr/0055-city-observations-in-replay.md).
+
+For browser interaction checks, install Chromium once with `npx --prefix scripts/trace-kit playwright install chromium`, build the viewer, and run `npm --prefix scripts/trace-kit run test:ui`.
 
 For automated validation, run `npm --prefix scripts/trace-kit run check -- "<session directory>"` (omit the directory for the latest recording). It validates the actual trace-kit format and attachments, projects the timeline, and judges city writes. Installation downloads a pinned upstream source snapshot; later viewing and checks work offline. See [ADR 0052](docs/adr/0052-trace-kit-session-records.md).
 

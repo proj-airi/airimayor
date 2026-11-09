@@ -261,7 +261,8 @@ test('city images are selected by acquired cursor and city time and loaded as re
 test('long city series keep all readings in bounded pages while chart points and action markers remain bounded', async () => {
   const trace = fixture()
   for (let frame = 1; frame <= 1500; frame++) {
-    trace.tool('get_statistics', frame, { type: 'Population', parameter: 0, current: frame, frames: [], values: [] })
+    const current = frame === 333 ? 1000000 : frame === 777 ? -1000000 : frame
+    trace.tool('get_statistics', frame, { type: 'Population', parameter: 0, current, frames: [], values: [] })
     trace.tool('set_budget', frame, {}, { arguments: JSON.stringify({ kind: 'tax', name: 'Residential', value: 5 }) })
   }
   const { session, end } = await trace.open()
@@ -272,7 +273,28 @@ test('long city series keep all readings in bounded pages while chart points and
   assert.equal(view.chart[0].frame, 1)
   assert.equal(view.chart.at(-1)?.frame, 1500)
   assert.ok(view.chart.length <= 600)
+  assert.ok(view.chart.some((point) => point.value === 1000000))
+  assert.ok(view.chart.some((point) => point.value === -1000000))
+  const selected = session.city(end, { frame: 998 })
+  assert.equal(selected.selected?.latest?.frame, 998)
+  assert.ok(selected.chart.some((point) => point.frame === 998))
+  assert.ok(selected.chart.length <= 600)
+  const recent = session.city(end, { chartLimit: 50 })
+  assert.equal(recent.chart.length, 50)
+  assert.equal(recent.chart[0].frame, 1451)
+  assert.equal(recent.chart.at(-1)?.frame, 1500)
+  assert.equal(recent.pointTotal, 1500)
   assert.equal(view.events.length, 30)
   assert.equal(view.eventTotal, 1500)
   assert.ok(view.markers.length <= 300)
+})
+
+test('labor rates preserve the native percentage scale', async () => {
+  const trace = fixture()
+  trace.tool('get_labor', 10, { unemploymentRate: 7.5, homelessnessRate: 0.25 })
+  const { session, end } = await trace.open()
+  const view = session.city(end, { metric: 'labor.unemploymentRate' })
+  assert.equal(view.selected?.unit, '%')
+  assert.equal(view.selected?.latest?.value, 7.5)
+  assert.equal(view.metrics.find((metric) => metric.key === 'labor.homelessnessRate')?.latest?.value, 0.25)
 })

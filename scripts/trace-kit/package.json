@@ -5,8 +5,9 @@
   "scripts": {
     "postinstall": "node prepare.mjs",
     "check": "tsx check.ts",
-    "test": "tsx --test check.test.ts viewer-model.test.ts playback.test.ts viewer-session.test.ts viewer-worker.test.ts recording-analysis.test.ts city-view.test.ts build-viewer.test.ts",
+    "test": "tsx --test check.test.ts viewer-model.test.ts playback.test.ts viewer-session.test.ts viewer-worker.test.ts recording-analysis.test.ts city-view.test.ts city-chart.test.ts build-viewer.test.ts",
     "build": "node build-viewer.mjs",
+    "test:ui": "node --test city-browser.test.mjs",
     "typecheck": "vue-tsc --noEmit",
     "generate-profile": "tsx generate-profile.ts"
   },
@@ -34,6 +35,7 @@
     "@types/node": "22.19.0",
     "@unocss/reset": "66.7.5",
     "esbuild": "0.27.7",
+    "playwright": "1.62.1",
     "typescript": "5.9.3",
     "unocss": "66.7.5",
     "unplugin-vue": "8.0.1",

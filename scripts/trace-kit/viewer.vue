@@ -54,6 +54,8 @@ const loading = ref(false),
 const tab = ref<'replay' | 'detail' | 'evidence' | 'raw'>('replay')
 const view = ref<'timeline' | 'events' | 'metrics' | 'search' | 'city'>('timeline')
 const workspace = ref<'trace' | 'call'>('trace')
+const cityInspect = ref(false)
+const cityReturnPosition = ref<number>()
 const log = shallowRef<EventLogState>(),
   logLoading = ref(false)
 const folderInput = ref<HTMLInputElement>(),
@@ -174,11 +176,23 @@ function seekTime(time: number | undefined) {
 
 async function inspectRecord(index: number) {
   if (!summary.value) return
-  const position = summary.value.events.findIndex(event => event.index === index)
+  const position = summary.value.events.findIndex((event) => event.index === index)
   if (position < 0) return
+  if (view.value === 'city') {
+    if (!cityInspect.value) cityReturnPosition.value = frame.value?.position
+    cityInspect.value = true
+  }
   workspace.value = 'call'
   tab.value = 'evidence'
   await seek(position)
+}
+
+async function closeCityEvidence() {
+  cityInspect.value = false
+  workspace.value = 'trace'
+  const position = cityReturnPosition.value
+  cityReturnPosition.value = undefined
+  if (position !== undefined) await seek(position)
 }
 
 async function open(
@@ -227,6 +241,8 @@ async function open(
     tab.value = 'replay'
     view.value = 'timeline'
     workspace.value = 'trace'
+    cityInspect.value = false
+    cityReturnPosition.value = undefined
     loading.value = false
     await nextTick()
     timeline.value?.fit()
@@ -308,6 +324,7 @@ function changeSpeed() {
 }
 
 watch(view, async (value) => {
+  if (value === 'city' && !cityInspect.value) workspace.value = 'trace'
   if (value !== 'events' || log.value || !client.value) return
   const current = client.value
   logLoading.value = true
@@ -442,7 +459,10 @@ watch(view, async (value) => {
       <button class="viewer-button" @click="cancelImport">Cancel</button>
     </section>
     <template v-if="summary && frame && client">
-      <div class="relative flex shrink-0 flex-wrap items-center justify-between gap-3 py-3">
+      <div
+        class="relative shrink-0 flex-wrap items-center justify-between gap-3 py-3"
+        :class="view === 'city' ? 'hidden md:flex' : 'flex'"
+      >
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-neutral-400 tabular-nums">
           <span>{{ elapsed(summary.duration) }}</span
           ><span>{{ number(summary.models) }} model calls</span><span>{{ number(summary.tools) }} tool calls</span
@@ -468,7 +488,12 @@ watch(view, async (value) => {
           </div>
         </details>
       </div>
-      <div class="mb-2 flex shrink-0 gap-4 md:hidden" role="group" aria-label="Workspace">
+      <div
+        v-if="view !== 'city' || cityInspect"
+        class="mb-2 flex shrink-0 gap-4 md:hidden"
+        role="group"
+        aria-label="Workspace"
+      >
         <button
           class="viewer-tab"
           :aria-pressed="workspace === 'trace'"
@@ -486,7 +511,10 @@ watch(view, async (value) => {
           Selected call
         </button>
       </div>
-      <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(22rem,0.6fr)]">
+      <div
+        class="grid min-h-0 flex-1 grid-cols-1 gap-3"
+        :class="view !== 'city' || cityInspect ? 'md:grid-cols-[minmax(0,1fr)_minmax(22rem,0.6fr)]' : ''"
+      >
         <section
           class="min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-neutral-800"
           :class="workspace === 'trace' ? 'flex' : 'hidden md:flex'"
@@ -583,12 +611,20 @@ watch(view, async (value) => {
               <Analysis :client="client" @select="select" @seek="seekTime(summary.origin + $event)" />
             </div>
             <Search v-if="view === 'search'" :client="client" @record="inspectRecord" />
-            <div v-if="view === 'city'" class="h-full overflow-y-auto">
-              <City :client="client" :position="frame.position" @record="inspectRecord" />
+            <div v-show="view === 'city'" class="h-full overflow-y-auto">
+              <KeepAlive
+                ><City
+                  v-if="view === 'city'"
+                  :key="summary.name"
+                  :client="client"
+                  :position="frame.position"
+                  @record="inspectRecord"
+              /></KeepAlive>
             </div>
           </div>
         </section>
         <section
+          v-if="view !== 'city' || cityInspect"
           class="min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-neutral-800"
           :class="workspace === 'call' ? 'flex' : 'hidden md:flex'"
           aria-label="Selected call"
@@ -614,6 +650,16 @@ watch(view, async (value) => {
               </button>
             </div>
             <button
+              v-if="view === 'city'"
+              class="viewer-icon-button"
+              aria-label="Close city evidence"
+              title="Close city evidence"
+              @click="closeCityEvidence"
+            >
+              <span class="viewer-icon i-mingcute:close-line" aria-hidden="true" />
+            </button>
+            <button
+              v-else
               class="viewer-icon-button"
               :disabled="!selection"
               aria-label="Play from selection"
