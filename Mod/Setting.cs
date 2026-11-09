@@ -10,6 +10,7 @@ using Colossal.IO.AssetDatabase;
 using Colossal.Json;
 using Game.Modding;
 using Game.Settings;
+using Game.UI.Menu;
 using Game.UI.Widgets;
 
 namespace airimayor
@@ -30,6 +31,14 @@ namespace airimayor
         public static Setting Instance { get; set; }
 
         public Setting(IMod mod) : base(mod) { }
+
+        public override AutomaticSettings.SettingPageData GetPageData(string id, bool addPrefix)
+        {
+            var page = base.GetPageData(id, addPrefix);
+            var context = page.tabs.SelectMany(tab => tab.items).Single(item => item.property.name == nameof(ContextTokens));
+            ((IntSliderField)context.widget).dynamicMax = () => ModelWindow;
+            return page;
+        }
 
         private ProviderConnections m_Connections = new ProviderConnections();
         private string m_Provider = "";
@@ -157,16 +166,16 @@ namespace airimayor
         public bool AutomaticContext
         {
             get => Connection.WindowTokens == 0;
-            set { Edit(Connection.With(windowTokens: value ? 0 : Math.Min(2_000_000, ModelWindow))); }
+            set { Edit(Connection.With(windowTokens: value ? 0 : Math.Min(128_000, ModelWindow))); }
         }
 
         [Exclude]
         [SettingsUISection(kConnectionSection, kBuiltinGroup)]
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideContextBudget))]
-        [SettingsUISlider(min = 32_000, max = 2_000_000, step = 1_000)]
+        [SettingsUISlider(min = 32_000, max = 128_000, step = 1_000)]
         public int ContextTokens
         {
-            get => Connection.WindowTokens == 0 ? ModelWindow : Connection.WindowTokens;
+            get => Connection.WindowTokens == 0 ? Math.Min(128_000, ModelWindow) : Connection.WindowTokens;
             set { Edit(Connection.With(windowTokens: value)); }
         }
 
@@ -668,8 +677,8 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowPanel)), "When on, the agent can press panel buttons and fill text boxes, including city settings, the mod list, and deleting a save." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestPanel)), "Test panels" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestPanel)), "Check that panel control works." },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutomaticContext)), "Use model context window" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutomaticContext)), "Use the selected model's context window from the catalog. Custom services default to 128,000 tokens. Turn off to choose a smaller budget." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutomaticContext)), "Use default context budget" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutomaticContext)), "Use the smaller of the model's window and 128,000 tokens. Turn off to choose a budget up to the model's full window. Custom services default to 128,000 tokens." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ContextTokens)), "Context budget" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ContextTokens)), "Choose a context budget within this model's window. Each provider remembers your choice." },
 

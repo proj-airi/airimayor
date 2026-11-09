@@ -123,7 +123,7 @@ namespace airimayor.Agent
             if (!string.IsNullOrEmpty(settings.ApiKey) && !string.IsNullOrEmpty(settings.CredentialOrigin) &&
                 settings.CredentialOrigin != Origin(route.Endpoint))
                 throw new InvalidOperationException("This connection now uses another host. Re-enter its API key before applying settings.");
-            int window = settings.WindowTokens == 0 ? model?.ContextTokens ?? 128_000 : settings.WindowTokens;
+            int window = settings.WindowTokens == 0 ? Math.Min(model?.ContextTokens ?? 128_000, 128_000) : settings.WindowTokens;
             if (window < 32_000 || (model?.ContextTokens != null && window > model.ContextTokens.Value))
                 throw new InvalidOperationException("Choose a context budget within this model's window, or use 0 for automatic.");
             int output = Math.Min(16_384, model?.OutputTokens ?? 16_384);

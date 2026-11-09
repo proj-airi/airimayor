@@ -25,9 +25,9 @@ namespace airimayor.Tests
             """;
 
         [Theory]
-        [InlineData("responses-model", ModelProtocol.Responses, "https://cloud.test/openai/v1", 256000, 16384, true)]
+        [InlineData("responses-model", ModelProtocol.Responses, "https://cloud.test/openai/v1", 128000, 16384, true)]
         [InlineData("chat-model", ModelProtocol.ChatCompletions, "https://cloud.test/chat/v1", 128000, 8000, false)]
-        [InlineData("messages-model", ModelProtocol.AnthropicMessages, "https://cloud.test/anthropic/v1", 200000, 16000, true)]
+        [InlineData("messages-model", ModelProtocol.AnthropicMessages, "https://cloud.test/anthropic/v1", 128000, 16000, true)]
         public void A_cloud_provider_routes_each_model_without_a_provider_preset(string model, ModelProtocol protocol,
             string address, int context, int output, bool images)
         {
@@ -59,6 +59,21 @@ namespace airimayor.Tests
             Assert.Throws<InvalidOperationException>(() => catalog.Resolve(draft.With(credentialOrigin: "https://old-host.test")));
             Assert.Throws<InvalidOperationException>(() => catalog.Resolve(draft.With(windowTokens: 256000)));
             Assert.Throws<InvalidOperationException>(() => catalog.Resolve(draft.With(protocol: ModelProtocol.Responses, endpoint: "")));
+        }
+
+        [Theory]
+        [InlineData(64000, 64000)]
+        [InlineData(128000, 128000)]
+        [InlineData(1000000, 128000)]
+        public void Default_context_is_capped_at_128k_but_manual_budgets_can_use_the_full_model_window(int maximum, int defaultBudget)
+        {
+            JsonNode root = JsonNode.Parse(Catalog);
+            root["new-cloud-provider"]["models"]["responses-model"]["limit"]["context"] = maximum;
+            ModelCatalogSnapshot catalog = ModelCatalogSnapshot.Parse(root.ToJsonString());
+            ProviderConnection draft = new ProviderConnections().Read("new-cloud-provider").With(model: "responses-model");
+            Assert.Equal(defaultBudget, catalog.Resolve(draft).WindowTokens);
+            Assert.Equal(maximum, catalog.Resolve(draft.With(windowTokens: maximum)).WindowTokens);
+            Assert.Throws<InvalidOperationException>(() => catalog.Resolve(draft.With(windowTokens: maximum + 1)));
         }
 
         [Fact]

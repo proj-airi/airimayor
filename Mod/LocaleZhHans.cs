@@ -72,8 +72,8 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowPanel)), "勾选后，代理可以按面板上的按钮、填文本框，包括城市设置、模组列表和删除存档。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.TestPanel)), "测试界面" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestPanel)), "检查界面操控是否可用。" },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutomaticContext)), "使用模型上下文窗口" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutomaticContext)), "使用目录中所选模型的上下文窗口，自定义服务默认 128,000 token。关闭后可自行选择较小预算。" },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutomaticContext)), "使用默认上下文预算" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutomaticContext)), "默认取模型窗口与 128,000 token 中的较小值。关闭后可自行调整，最大为模型的完整窗口。自定义服务默认 128,000 token。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.ContextTokens)), "上下文预算" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.ContextTokens)), "在模型窗口范围内选择上下文预算，每个供应商会记住你的选择。" },
 
