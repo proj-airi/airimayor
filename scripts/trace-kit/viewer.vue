@@ -48,8 +48,9 @@ const loading = ref(false),
   playing = ref(false),
   follow = ref(true),
   speed = ref(1)
-const tab = ref<'replay' | 'detail' | 'raw'>('replay')
+const tab = ref<'replay' | 'detail' | 'evidence' | 'raw'>('replay')
 const view = ref<'timeline' | 'events' | 'metrics'>('timeline')
+const workspace = ref<'trace' | 'call'>('trace')
 const log = shallowRef<EventLogState>(),
   logLoading = ref(false)
 const folderInput = ref<HTMLInputElement>(),
@@ -154,6 +155,7 @@ async function select(item: TraceItemRef | undefined) {
       const position = item.kind === 'span' ? Math.max(frame.value?.position ?? 0, target.position) : target.position
       const span = item.kind === 'span' ? state.value.spans.get(item.key) : undefined
       tab.value = span?.track.endsWith('/llm') || target.selection?.kind === 'acp' ? 'replay' : 'detail'
+      workspace.value = 'call'
       await seek(position, target.selection)
     }
   } catch (value) {
@@ -212,6 +214,7 @@ async function open(
     follow.value = false
     tab.value = 'replay'
     view.value = 'timeline'
+    workspace.value = 'trace'
     loading.value = false
     await nextTick()
     timeline.value?.fit()
@@ -308,23 +311,37 @@ watch(view, async (value) => {
 </script>
 
 <template>
-  <header class="app-header">
-    <a class="brand" href="https://github.com/proj-airi/airimayor" target="_blank" rel="noreferrer">AIRI Mayor</a>
-    <span class="header-divider" aria-hidden="true">/</span>
-    <h1>Trace</h1>
-    <span v-if="summary" class="session-name" :title="summary.name">{{ summary.name }}</span>
-    <span v-else class="offline-label">Offline viewer</span>
-    <div v-if="summary || loading || error" class="import-actions">
+  <header class="flex shrink-0 flex-wrap items-center gap-3 border-b border-neutral-800 px-4 py-3">
+    <a class="text-sm font-medium" href="https://github.com/proj-airi/airimayor" target="_blank" rel="noreferrer"
+      >AIRI Mayor</a
+    >
+    <span class="text-neutral-600" aria-hidden="true">/</span>
+    <h1 class="text-sm font-medium text-pink-300">Trace</h1>
+    <span
+      v-if="summary"
+      class="order-last w-full truncate text-neutral-400 md:order-none md:w-auto md:min-w-0 md:flex-1"
+      :title="summary.name"
+      >{{ summary.name }}</span
+    >
+    <span v-else class="ml-auto text-neutral-400">Offline viewer</span>
+    <div v-if="summary || loading || error" class="ml-auto flex items-center gap-1">
       <button
-        class="button subtle"
+        class="viewer-button"
         title="Open records.jsonl without attachments"
+        aria-label="Open file"
         :disabled="loading"
         @click="recordInput?.click()"
       >
-        <span class="i-mingcute:file-import-line" aria-hidden="true" />Open file
+        <span class="viewer-icon i-mingcute:file-import-line" aria-hidden="true" /><span class="hidden sm:inline"
+          >Open file</span
+        >
       </button>
-      <button class="button primary" :disabled="loading" @click="chooseFolder">
-        <span class="i-mingcute:folder-open-line" aria-hidden="true" />Open session
+      <button
+        class="viewer-button bg-pink-300 text-neutral-950 hover:bg-pink-200"
+        :disabled="loading"
+        @click="chooseFolder"
+      >
+        <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />Open session
       </button>
     </div>
     <input
@@ -345,113 +362,132 @@ watch(view, async (value) => {
       @change="filesSelected"
     />
   </header>
-  <main :class="{ 'has-session': summary }">
-    <section v-if="!summary && !loading && !error" class="empty-state">
-      <div class="trace-motif" aria-hidden="true">
-        <div class="motif-axis"><span>0</span><span>5</span><span>10</span><span>15s</span></div>
-        <div class="motif-grid">
-          <span class="motif-bar motif-root" /><span class="motif-link" /> <span class="motif-bar motif-model" /><span
-            class="motif-bar motif-tool"
-          />
-          <span class="motif-bar motif-reply" /><span class="motif-cursor" />
-        </div>
-      </div>
-      <h2>Trace</h2>
-      <p>Open a session record.</p>
-      <div class="empty-actions">
-        <button class="button primary" @click="chooseFolder">
-          <span class="i-mingcute:folder-open-line" aria-hidden="true" />Open session folder
+  <main class="flex min-h-0 flex-1 flex-col px-3 [&_.font-semibold]:font-medium">
+    <section v-if="!summary && !loading && !error" class="viewer-empty">
+      <span class="i-mingcute:timeline-line mb-2 size-8 text-pink-300" aria-hidden="true" />
+      <h2 class="text-sm font-medium text-neutral-200">Open a session record</h2>
+      <div class="flex flex-wrap justify-center gap-2">
+        <button class="viewer-button bg-pink-300 text-neutral-950 hover:bg-pink-200" @click="chooseFolder">
+          <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />Open session folder
         </button>
-        <button class="button subtle" title="Open records.jsonl without attachments" @click="recordInput?.click()">
-          <span class="i-mingcute:file-import-line" aria-hidden="true" />Open file
+        <button class="viewer-button" title="Open records.jsonl without attachments" @click="recordInput?.click()">
+          Open file
         </button>
       </div>
-      <span class="file-hint"><code>records.jsonl</code><span aria-hidden="true"> + </span><code>assets/</code></span>
+      <p class="text-neutral-500"><code>records.jsonl</code> + <code>assets/</code></p>
     </section>
-    <div v-if="error" id="import-status" class="error-message" role="alert">
-      <span class="i-mingcute:alert-line" aria-hidden="true" />
-      <p>{{ error }}</p>
-    </div>
-    <section v-if="loading" class="import-loading" role="status">
-      <span class="i-mingcute:loading-line loading-icon" aria-hidden="true" />
-      <h2>{{ progress ? phases[progress.phase] : 'Opening session…' }}</h2>
-      <progress id="import-progress" :max="progress?.total || 1" :value="progress?.completed ?? 0" />
-      <span v-if="progress" class="mono">{{ number(progress.completed) }} / {{ number(progress.total) }}</span>
-      <button class="button subtle" @click="cancelImport">Cancel</button>
+    <p v-if="error" id="import-status" class="shrink-0 break-words py-3 text-red-400" role="alert">{{ error }}</p>
+    <section v-if="loading" class="viewer-empty" role="status">
+      <span
+        class="i-mingcute:loading-line size-6 animate-spin text-pink-300 motion-reduce:animate-none"
+        aria-hidden="true"
+      />
+      <h2 class="text-sm font-medium">{{ progress ? phases[progress.phase] : 'Opening session…' }}</h2>
+      <progress
+        id="import-progress"
+        class="h-1 w-64 max-w-full accent-pink-300"
+        :max="progress?.total || 1"
+        :value="progress?.completed ?? 0"
+      />
+      <span v-if="progress" class="tabular-nums">{{ number(progress.completed) }} / {{ number(progress.total) }}</span>
+      <button class="viewer-button" @click="cancelImport">Cancel</button>
     </section>
     <template v-if="summary && frame && client">
-      <div class="session-summary">
-        <div class="stats">
-          <span
-            ><span class="i-mingcute:time-line" aria-hidden="true" /><b>{{ elapsed(summary.duration) }}</b></span
-          >
-          <span
-            ><b>{{ number(summary.models) }}</b> model calls</span
-          >
-          <span
-            ><b>{{ number(summary.tools) }}</b> tool calls</span
-          >
-          <span
-            ><b>{{ number(summary.records) }}</b> records</span
-          >
+      <div class="relative flex shrink-0 flex-wrap items-center justify-between gap-3 py-3">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-neutral-400 tabular-nums">
+          <span>{{ elapsed(summary.duration) }}</span
+          ><span>{{ number(summary.models) }} model calls</span><span>{{ number(summary.tools) }} tool calls</span
+          ><span>{{ number(summary.records) }} records</span>
         </div>
         <span
           v-if="!summary.issues.length"
-          class="validation-status"
+          class="inline-flex items-center gap-2 text-neutral-400"
           title="Records and referenced files passed validation."
-          ><span class="i-mingcute:check-circle-line" aria-hidden="true" />Files checked</span
+          ><span class="viewer-icon i-mingcute:check-circle-line text-emerald-400" aria-hidden="true" />Files
+          checked</span
         >
-        <details v-else class="issues">
-          <summary>{{ number(summary.issues.length) }} validation issues</summary>
-          <div class="issue-list">
-            <VList :data="summary.issues" class="issue-items"
+        <details v-else class="text-amber-300">
+          <summary class="cursor-pointer">{{ number(summary.issues.length) }} validation issues</summary>
+          <div
+            class="absolute right-0 top-full z-20 h-64 w-full overflow-hidden rounded-md border border-neutral-700 bg-neutral-900 shadow-lg md:w-96"
+          >
+            <VList :data="summary.issues" class="[scrollbar-gutter:stable]"
               ><template #default="{ item }"
-                ><p>{{ item }}</p></template
+                ><p class="break-words px-3 py-2">{{ item }}</p></template
               ></VList
             >
           </div>
         </details>
       </div>
-      <div class="trace-workbench">
-        <section class="explorer panel" aria-label="Session trace">
-          <div class="panel-toolbar">
-            <div class="panel-tabs" role="tablist" aria-label="Trace views">
+      <div class="mb-2 flex shrink-0 gap-4 md:hidden" role="group" aria-label="Workspace">
+        <button
+          class="viewer-tab"
+          :aria-pressed="workspace === 'trace'"
+          :class="workspace === 'trace' ? 'border-pink-300 text-pink-300' : ''"
+          @click="workspace = 'trace'"
+        >
+          Trace
+        </button>
+        <button
+          class="viewer-tab"
+          :aria-pressed="workspace === 'call'"
+          :class="workspace === 'call' ? 'border-pink-300 text-pink-300' : ''"
+          @click="workspace = 'call'"
+        >
+          Selected call
+        </button>
+      </div>
+      <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(22rem,0.6fr)]">
+        <section
+          class="min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-neutral-800"
+          :class="workspace === 'trace' ? 'flex' : 'hidden md:flex'"
+          aria-label="Session trace"
+        >
+          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 px-3">
+            <div class="flex gap-4" role="tablist" aria-label="Trace views">
               <button
-                v-for="[value, label, icon] in [
-                  ['timeline', 'Timeline', 'i-mingcute:timeline-line'],
-                  ['events', 'Event log', 'i-mingcute:list-ordered-line'],
-                  ['metrics', 'Metrics', 'i-mingcute:chart-bar-line'],
+                v-for="[value, label] in [
+                  ['timeline', 'Timeline'],
+                  ['events', 'Event log'],
+                  ['metrics', 'Metrics'],
                 ] as const"
                 :id="`view-tab-${value}`"
                 :key="value"
+                class="viewer-tab"
                 role="tab"
                 :aria-selected="view === value"
                 aria-controls="trace-view"
                 @click="view = value"
               >
-                <span :class="icon" aria-hidden="true" />{{ label }}
+                {{ label }}
               </button>
             </div>
-            <div v-if="view === 'timeline'" class="timeline-actions">
+            <div v-if="view === 'timeline'" class="flex items-center">
               <button
-                class="icon-button"
-                :class="{ active: follow }"
+                class="viewer-icon-button"
+                :class="follow ? 'text-pink-300' : ''"
                 :aria-pressed="follow"
                 aria-label="Follow playback"
                 title="Follow playback"
                 @click="follow = !follow"
               >
-                <span class="i-mingcute:aiming-2-line" aria-hidden="true" />
+                <span class="viewer-icon i-mingcute:aiming-2-line" aria-hidden="true" />
               </button>
-              <button class="icon-button" aria-label="Fit timeline" title="Fit timeline" @click="fitTimeline">
-                <span class="i-mingcute:fullscreen-2-line" aria-hidden="true" />
+              <button class="viewer-icon-button" aria-label="Fit timeline" title="Fit timeline" @click="fitTimeline">
+                <span class="viewer-icon i-mingcute:fullscreen-2-line" aria-hidden="true" />
               </button>
             </div>
           </div>
-          <div id="trace-view" class="explorer-body" role="tabpanel" :aria-labelledby="`view-tab-${view}`">
-            <div v-show="view === 'timeline'" class="airi-timeline">
+          <div
+            id="trace-view"
+            class="min-h-0 flex-1 overflow-hidden"
+            role="tabpanel"
+            :aria-labelledby="`view-tab-${view}`"
+          >
+            <div v-show="view === 'timeline'" class="flex h-full min-h-0 flex-col">
               <TraceTimeline
                 ref="timeline"
+                class="!text-sm"
                 :state="state"
                 :indexes="overview.reader.indexes"
                 :version="version"
@@ -470,38 +506,52 @@ watch(view, async (value) => {
                 @visibility="setVisibility"
               >
                 <template #corner><ViewPresetMenu v-model="presetKey" :presets="presets" :locale="locale" /></template>
-                <template #status
-                  ><span class="timeline-status"
-                    ><span class="status-dot" :class="{ playing }" />{{ playing ? 'Playing' : 'Paused' }}</span
-                  ></template
-                >
+                <template #status>{{ playing ? 'Playing' : 'Paused' }}</template>
               </TraceTimeline>
             </div>
-            <div v-if="view === 'events'" class="airi-event-log">
-              <TraceEventLog v-if="log" :log="log" :version="1" :origin="summary.origin" :late="0" @select="select" />
-              <p v-else class="empty-detail" role="status">
-                {{ logLoading ? 'Loading events…' : 'No events.' }}
-              </p>
+            <div v-if="view === 'events'" class="h-full min-h-0">
+              <TraceEventLog
+                v-if="log"
+                class="!text-sm [&_.grid]:grid-cols-[4.5rem_6.5rem_minmax(0,1fr)_minmax(0,2fr)_minmax(0,0.6fr)] lt-md:[&_.grid]:grid-cols-[4.5rem_minmax(0,1fr)] lt-md:[&_.grid>span:nth-child(2)]:hidden lt-md:[&_.grid>span:nth-child(3)]:hidden lt-md:[&_.grid>span:nth-child(5)]:hidden"
+                :log="log"
+                :version="1"
+                :origin="summary.origin"
+                :late="0"
+                @select="select"
+              />
+              <p v-else class="viewer-empty" role="status">{{ logLoading ? 'Loading events…' : 'No events.' }}</p>
             </div>
-            <div v-if="view === 'metrics'" class="metrics-view">
-              <TraceMetrics :state="state" :samples="overview.metricSamples()" :version="version" :locale="locale" />
-              <p v-if="!Object.values(overview.metricSamples()).some((samples) => samples.length)" class="empty-detail">
+            <div v-if="view === 'metrics'" class="h-full overflow-y-auto">
+              <TraceMetrics
+                class="!text-sm"
+                :state="state"
+                :samples="overview.metricSamples()"
+                :version="version"
+                :locale="locale"
+              />
+              <p v-if="!Object.values(overview.metricSamples()).some((samples) => samples.length)" class="viewer-empty">
                 No metric samples recorded.
               </p>
             </div>
           </div>
         </section>
-        <section class="inspector panel" aria-label="Selected call">
-          <div class="panel-toolbar">
-            <div class="panel-tabs" role="tablist" aria-label="Call views">
+        <section
+          class="min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-neutral-800"
+          :class="workspace === 'call' ? 'flex' : 'hidden md:flex'"
+          aria-label="Selected call"
+        >
+          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 px-3">
+            <div class="flex gap-3" role="tablist" aria-label="Call views">
               <button
                 v-for="[value, label] in [
                   ['replay', 'Output'],
                   ['detail', 'Details'],
+                  ['evidence', 'Evidence'],
                   ['raw', 'Records'],
                 ] as const"
                 :id="`inspector-tab-${value}`"
                 :key="value"
+                class="viewer-tab"
                 role="tab"
                 :aria-selected="tab === value"
                 aria-controls="call-view"
@@ -511,119 +561,125 @@ watch(view, async (value) => {
               </button>
             </div>
             <button
-              class="icon-button"
+              class="viewer-icon-button"
               :disabled="!selection"
               aria-label="Play from selection"
               title="Play from selection"
               @click="replaySelection"
             >
-              <span class="i-mingcute:back-2-line" aria-hidden="true" />
+              <span class="viewer-icon i-mingcute:back-2-line" aria-hidden="true" />
             </button>
           </div>
-          <div v-if="tab !== 'detail' || !frame.item" class="inspector-header">
-            <h2>{{ frame.selection ? frame.heading : 'No selection' }}</h2>
-            <span
-              v-if="frame.selection"
-              class="call-status"
-              :class="{
-                completed: frame.state === 'ok' || frame.state === 'Completed',
-                failed: frame.state === 'error',
-                pending: ['Not reached', 'Incomplete', 'In progress'].includes(frame.state),
-              }"
-              ><span class="status-dot" />{{ statusLabels[frame.state] ?? frame.state }}</span
-            >
+          <div v-if="tab === 'replay'" class="shrink-0 border-b border-neutral-800 p-3">
+            <h2 class="text-sm font-medium">{{ frame.selection ? frame.heading : 'No selection' }}</h2>
+            <p v-if="frame.selection" class="mt-1 text-neutral-400">{{ statusLabels[frame.state] ?? frame.state }}</p>
           </div>
           <div
             id="call-view"
-            class="inspector-body"
-            :class="{ 'show-details': tab === 'detail' }"
+            class="flex min-h-0 flex-1 flex-col overflow-hidden"
             role="tabpanel"
             :aria-labelledby="`inspector-tab-${tab}`"
           >
             <template v-if="tab === 'replay'">
-              <details v-if="frame.reasoning" class="reasoning">
-                <summary>Reasoning</summary>
-                <pre>{{ frame.reasoning }}</pre>
-              </details>
-              <pre v-if="frame.text" class="output-text">{{ frame.text }}</pre>
               <Json v-if="frame.completedOutput !== undefined" :data="frame.completedOutput" />
-              <div v-if="!frame.text && !frame.reasoning && frame.completedOutput === undefined" class="empty-detail">
-                <span class="i-mingcute:chat-3-line empty-icon" aria-hidden="true" />
-                <p>
-                  {{
-                    !frame.selection
-                      ? 'Select a call in the timeline.'
-                      : frame.channel
-                        ? 'No output at this point.'
-                        : 'No text output for this call.'
-                  }}
-                </p>
-                <button v-if="frame.selection && !frame.channel" class="button subtle" @click="inspect('detail')">
-                  View details<span class="i-mingcute:arrow-right-line" aria-hidden="true" />
-                </button>
+              <div v-else class="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]">
+                <details v-if="frame.reasoning" class="mb-3 text-neutral-400">
+                  <summary class="cursor-pointer">Reasoning</summary>
+                  <pre class="mt-3 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{{
+                    frame.reasoning
+                  }}</pre>
+                </details>
+                <pre v-if="frame.text" class="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{{
+                  frame.text
+                }}</pre>
+                <div v-if="!frame.text && !frame.reasoning" class="viewer-empty">
+                  <p>
+                    {{
+                      !frame.selection
+                        ? 'Select a call in the timeline.'
+                        : frame.channel
+                          ? 'No output at this point.'
+                          : 'No text output for this call.'
+                    }}
+                  </p>
+                  <button v-if="frame.selection && !frame.channel" class="viewer-button" @click="inspect('detail')">
+                    View details
+                  </button>
+                </div>
               </div>
             </template>
-            <Evidence
-              v-else
-              :client="client"
-              :frame="frame"
-              :clock="summary.clock"
-              :raw="tab === 'raw'"
-              @select="select"
-            />
+            <Evidence v-else :client="client" :frame="frame" :clock="summary.clock" :mode="tab" @select="select" />
           </div>
         </section>
       </div>
-      <section class="playback" aria-label="Replay controls">
-        <div class="transport-buttons">
+      <section class="flex shrink-0 flex-wrap items-center gap-3 py-3 tabular-nums" aria-label="Replay controls">
+        <div class="flex items-center">
           <button
-            class="icon-button"
+            class="viewer-icon-button"
             aria-label="First event"
             title="First event"
             :disabled="frame.position === 0"
             @click="seek(0)"
           >
-            <span class="i-mingcute:skip-previous-line" aria-hidden="true" />
+            <span class="viewer-icon i-mingcute:skip-previous-line" aria-hidden="true" />
           </button>
           <button
-            class="icon-button"
+            class="viewer-icon-button"
             aria-label="Previous event"
             title="Previous event"
             :disabled="frame.position === 0"
             @click="seek(frame.position - 1)"
           >
-            <span class="i-mingcute:left-line" aria-hidden="true" />
+            <span class="viewer-icon i-mingcute:left-line" aria-hidden="true" />
           </button>
           <button
-            class="icon-button play-button"
+            class="viewer-icon-button mx-1 bg-pink-300 text-neutral-950 hover:bg-pink-200"
             :aria-label="playing ? 'Pause' : 'Play'"
             :title="playing ? 'Pause' : 'Play'"
             @click="togglePlay"
           >
-            <span :class="playing ? 'i-mingcute:pause-fill' : 'i-mingcute:play-fill'" aria-hidden="true" />
+            <span
+              class="viewer-icon"
+              :class="playing ? 'i-mingcute:pause-fill' : 'i-mingcute:play-fill'"
+              aria-hidden="true"
+            />
           </button>
           <button
-            class="icon-button"
+            class="viewer-icon-button"
             aria-label="Next event"
             title="Next event"
             :disabled="frame.position === summary.events.length - 1"
             @click="seek(frame.position + 1)"
           >
-            <span class="i-mingcute:right-line" aria-hidden="true" />
+            <span class="viewer-icon i-mingcute:right-line" aria-hidden="true" />
           </button>
           <button
-            class="icon-button"
+            class="viewer-icon-button"
             aria-label="Last event"
             title="Last event"
             :disabled="frame.position === summary.events.length - 1"
             @click="seek(summary.events.length - 1)"
           >
-            <span class="i-mingcute:skip-forward-line" aria-hidden="true" />
+            <span class="viewer-icon i-mingcute:skip-forward-line" aria-hidden="true" />
           </button>
         </div>
-        <span class="cursor-time mono">{{ elapsed(frame.time) }}</span>
-        <div class="seek-control">
-          <input
+        <select
+          v-model="speed"
+          class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1"
+          aria-label="Playback speed"
+          @change="changeSpeed"
+        >
+          <option v-for="value in [0.5, 1, 2, 4, 8]" :key="value" :value="value">{{ value }}×</option>
+        </select>
+        <span
+          class="ml-auto text-neutral-400 md:order-last"
+          :title="`Event ${number(frame.position + 1)} of ${number(summary.events.length)}`"
+          >{{ number(frame.position + 1) }} / {{ number(summary.events.length) }}</span
+        >
+        <div class="flex w-full items-center gap-3 md:w-auto md:min-w-0 md:flex-1">
+          <span>{{ elapsed(frame.time) }}</span
+          ><input
+            class="min-w-0 flex-1 cursor-pointer accent-pink-300"
             type="range"
             min="0"
             :max="summary.events.length - 1"
@@ -631,17 +687,8 @@ watch(view, async (value) => {
             aria-label="Replay event position"
             title="Replay in recorded order; gaps longer than 1.5 seconds are shortened."
             @input="seek(Number(($event.target as HTMLInputElement).value))"
-          />
+          /><span class="text-neutral-400">{{ elapsed(summary.duration) }}</span>
         </div>
-        <span class="duration mono">{{ elapsed(summary.duration) }}</span>
-        <select v-model="speed" aria-label="Playback speed" @change="changeSpeed">
-          <option v-for="value in [0.5, 1, 2, 4, 8]" :key="value" :value="value">{{ value }}×</option>
-        </select>
-        <span
-          class="event-position mono"
-          :title="`Event ${number(frame.position + 1)} of ${number(summary.events.length)}`"
-          >{{ number(frame.position + 1) }} / {{ number(summary.events.length) }}</span
-        >
       </section>
     </template>
   </main>

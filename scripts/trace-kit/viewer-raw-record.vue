@@ -25,10 +25,10 @@ watch(
 )
 </script>
 <template>
-  <div class="raw-record">
-    <h3>Record #{{ index + 1 }}</h3>
-    <p v-if="error" class="error">{{ error }}</p>
+  <div class="flex h-full min-h-0 flex-col overflow-hidden">
+    <h3 class="shrink-0 px-3 pt-3 text-sm font-medium">Record #{{ index + 1 }}</h3>
+    <p v-if="error" class="p-3 text-red-400">{{ error }}</p>
     <Json v-else-if="record" :data="record" />
-    <p v-else>Reading record…</p>
+    <p v-else class="viewer-empty" role="status">Reading record…</p>
   </div>
 </template>

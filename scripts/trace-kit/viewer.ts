@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createI18n } from 'vue-i18n'
 import Viewer from './viewer.vue'
+import '@unocss/reset/tailwind.css'
 import '@proj-airi/ui/src/main.css'
 import 'vue-json-pretty/lib/styles.css'
 

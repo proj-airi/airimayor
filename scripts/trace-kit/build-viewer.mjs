@@ -61,23 +61,30 @@ const uno = await createGenerator({
     }),
   ],
   theme: { colors: { primary: wind.theme.colors.pink } },
+  shortcuts: {
+    'viewer-button':
+      'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal text-neutral-300 hover:bg-neutral-800 disabled:cursor-default disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-pink-300',
+    'viewer-icon-button': 'viewer-button size-8 p-0',
+    'viewer-icon': 'inline-block size-4 shrink-0',
+    'viewer-tab':
+      'viewer-button rounded-none border-b-2 border-transparent px-1 aria-selected:border-pink-300 aria-selected:text-pink-300',
+    'viewer-empty':
+      'flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-neutral-400',
+  },
 })
 const sourceFiles = (await readdir(root, { recursive: true })).filter(
   (file) => !file.startsWith('node_modules') && /\.(?:vue|ts)$/.test(file),
 )
 const utilities = await uno.generate(
-  (await Promise.all(sourceFiles.map((file) => readFile(join(root, file), 'utf8')))).join('\n'),
+  [template, ...(await Promise.all(sourceFiles.map((file) => readFile(join(root, file), 'utf8'))))].join('\n'),
 )
 const css =
-  `@font-face { font-family: Comfortaa; font-style: normal; font-weight: 300 700; font-display: swap; src: url(data:font/ttf;base64,${(await readFile(join(root, 'fonts/Comfortaa.ttf'))).toString('base64')}) format('truetype'); }\n` +
   utilities.css +
   '\n' +
   result.outputFiles
     .filter((file) => file.path.endsWith('.css'))
     .map((file) => file.text)
-    .join('\n') +
-  '\n' +
-  (await readFile(join(root, 'viewer.css'), 'utf8'))
+    .join('\n')
 const license = await readFile(join(root, 'LICENSE.upstream'), 'utf8')
 const upstream = JSON.parse(await readFile(join(root, 'upstream.json'), 'utf8'))
 const script = result.outputFiles.find((file) => file.path.endsWith('.js')).text.replaceAll('</script', '<\\/script')
@@ -107,11 +114,7 @@ const licenses = await Promise.all(
   }),
 )
 const notices = `<!-- Bundled dependency licenses\n${licenses.join('\n\n').replaceAll('-->', '-- >')}\n-->\n`
-const fontNotice = `<!-- Comfortaa\n${(await readFile(join(root, 'fonts/OFL.txt'), 'utf8')).replaceAll('-->', '-- >')}\n-->\n`
 const html =
-  attribution +
-  notices +
-  fontNotice +
-  template.replace('/* VIEWER_STYLE */', () => css).replace('/* VIEWER_SCRIPT */', () => script)
+  attribution + notices + template.replace('/* VIEWER_STYLE */', () => css).replace('/* VIEWER_SCRIPT */', () => script)
 await writeFile(join(root, 'viewer.html'), html)
 console.log(`Built offline viewer: ${join(root, 'viewer.html')} (${Buffer.byteLength(html).toLocaleString()} bytes)`)

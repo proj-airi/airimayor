@@ -1,20 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark h-full bg-neutral-950 text-neutral-200 [color-scheme:dark]">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src blob: data:; media-src blob:; connect-src 'none'; worker-src blob:"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob:; connect-src 'none'; worker-src blob:"
     />
     <title>Trace · AIRI Mayor</title>
     <style>
       /* VIEWER_STYLE */
     </style>
   </head>
-  <body>
-    <pre id="runtime-error" class="error" role="alert" hidden></pre>
-    <div id="app"></div>
+  <body class="flex h-dvh flex-col overflow-hidden font-sans text-sm">
+    <pre
+      id="runtime-error"
+      class="shrink-0 whitespace-pre-wrap break-words p-3 text-sm text-red-400"
+      role="alert"
+      hidden
+    ></pre>
+    <div id="app" class="flex min-h-0 flex-1 flex-col"></div>
     <script>
       /* VIEWER_SCRIPT */
     </script>
