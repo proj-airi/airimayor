@@ -4,18 +4,24 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
-    "jsx": "react-jsx",
     "skipLibCheck": true,
     "types": ["node"],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
       "@proj-airi/trace-kit": [".upstream/packages/trace-kit/src/index.ts"],
       "@proj-airi/trace-kit/agent": [".upstream/packages/trace-kit/src/profiles/agent.ts"],
       "@proj-airi/trace-kit/projections": [".upstream/packages/trace-kit/src/projections/index.ts"],
       "@proj-airi/trace-kit/views": [".upstream/packages/trace-kit/src/views/index.ts"],
+      "@proj-airi/trace-kit/voice": [".upstream/packages/trace-kit/src/profiles/voice.ts"],
+      "@proj-airi/ui-trace": [".upstream/packages/ui-trace/src/index.ts"],
+      "@proj-airi/ui-timeline": [".upstream/packages/ui-timeline/src/index.ts"],
+      "@proj-airi/ui-timeline/headless": [".upstream/packages/ui-timeline/src/headless/index.ts"],
+      "@proj-airi/timeline-canvas": [".upstream/packages/timeline-canvas/src/index.ts"],
+      "@proj-airi/ui": [".upstream/packages/ui/src/index.ts"],
+      "@proj-airi/ui/*": [".upstream/packages/ui/*"],
       "@proj-airi/stream-kit": [".upstream/packages/stream-kit/src/index.ts"]
     }
   },
-  "include": ["*.ts", "*.tsx"]
+  "include": ["*.ts", "*.vue"]
 }

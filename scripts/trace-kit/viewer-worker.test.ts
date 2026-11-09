@@ -66,17 +66,20 @@ test('the production recording worker imports cloned files, reports progress, an
     assert.deepEqual(summary.issues, [])
     assert.equal(summary.models, 1)
     assert.equal(
-      summary.groups.filter((group) => group.kind === 'run').length,
-      1,
-      'unscoped calls share one explicitly unscoped group',
+      summary.overview.length,
+      4,
+      'output chunks stay in replay and the complete log, rather than the overview',
     )
     assert.deepEqual([...phases], ['read', 'records', 'assets', 'timeline'])
-    const selection = summary.items[0].selection
+    const selection = summary.defaultSelection!
     assert.equal((await remote.frame(1, selection, false)).text, '')
     assert.equal((await remote.frame(2, selection, false)).text, 'Recorded output')
     assert.equal((await remote.frame(1, selection, false)).text, '')
     assert.deepEqual((await remote.rawRecords([2]))[0].type, 'instant')
-    assert.deepEqual(await remote.searchEvents('Model output'), [2])
+    const log = await remote.eventLog()
+    assert.equal(log.entries.length, 5)
+    assert.equal(log.dropped, 0)
+    assert.deepEqual((await remote.locate({ kind: 'instant', key: log.entries[2].key })).selection, selection)
   } finally {
     remote[releaseProxy]()
     await worker.terminate()

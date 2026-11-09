@@ -1,7 +1,12 @@
-import type { TraceAssetRef } from '@proj-airi/trace-kit'
+import type { TraceAssetRef, TraceRecord } from '@proj-airi/trace-kit'
+import type { EventLogState } from '@proj-airi/trace-kit/projections'
+import type { TraceItemRef } from '@proj-airi/trace-kit/views'
 import type { LocalFile, LoadProgress, OutputChannel, Recording, Span } from './viewer-model'
-import { spanKeyOf } from '@proj-airi/trace-kit'
+import { recordKey, spanKeyOf } from '@proj-airi/trace-kit'
+import { createEventLogProjection, TraceReader } from '@proj-airi/trace-kit/projections'
+import { itemOfRecord } from '@proj-airi/trace-kit/views'
 import { recordingDirectory } from './recording-files'
+import { isOverviewRecord } from './session-view'
 import { isAsset, isObject, loadDirectory, loadRecording, payload, Replay } from './viewer-model'
 
 export type Selection =
@@ -12,33 +17,6 @@ export interface SelectedFile {
   path: string
   file: Blob
 }
-export interface EventRow {
-  position: number
-  index: number
-  time: number
-  title: string
-  agent: string
-  kind: string
-  selection?: Selection
-}
-export interface TimelineGroup {
-  id: string
-  label: string
-  parent?: string
-  kind: string
-  expanded: boolean
-}
-export interface TimelineItem {
-  id: string
-  group: string
-  label: string
-  start: number
-  end: number
-  kind: string
-  status: string
-  position: number
-  selection: Selection
-}
 export interface SessionSummary {
   name: string
   records: number
@@ -46,10 +24,12 @@ export interface SessionSummary {
   models: number
   tools: number
   duration: number
+  origin: number
+  clock: string
   issues: string[]
-  events: EventRow[]
-  groups: TimelineGroup[]
-  items: TimelineItem[]
+  events: { index: number; time: number }[]
+  overview: TraceRecord[]
+  defaultSelection?: Selection
   playTimes: number[]
   seekTimes: number[]
   seekPositions: number[]
@@ -59,8 +39,8 @@ export interface Frame {
   index: number
   time: number
   selection?: Selection
+  item?: TraceItemRef
   heading: string
-  breadcrumb: string[]
   state: string
   channel: boolean
   text: string
@@ -84,35 +64,13 @@ export interface Evidence {
 }
 type Progress = (update: LoadProgress) => void | Promise<void>
 
-const names: Record<string, string> = {
-  'source.started': 'Recording started',
-  'source.stopped': 'Recording closed',
-  'input.received': 'Player input received',
-  'input.queued': 'Player input queued',
-  'input.applied': 'Input sent to model',
-  'stop.requested': 'Stop requested',
-  'stop.applied': 'Stop applied',
-  'plan.changed': 'Plan updated',
-  'compaction.started': 'Compaction started',
-  'compaction.finished': 'Compaction finished',
-  'history.repaired': 'History repaired',
-  'city.tool.result': 'City tool result',
-  'recording.gap': 'Known recording gap',
-  'session.fact': 'Session facts',
-  'model.output.delta': 'Model output update',
-  'acp.output.delta': 'External output update',
-}
-
-export function spanKind(span: Pick<Span, 'track'>) {
-  return span.track.endsWith('/llm') ? 'model' : span.track.endsWith('/tools') ? 'tool' : 'run'
-}
-
 export class ViewerSession {
   private recording?: Recording
   private replay?: Replay
   private summary?: SessionSummary
-  private spanLabels = new Map<string, string>()
   private positions = new Map<number, number>()
+  private recordKeys = new Map<string, number>()
+  private structural: number[] = []
 
   async openFiles(files: SelectedFile[], progress: Progress) {
     return this.loaded(
@@ -136,188 +94,69 @@ export class ViewerSession {
   private loaded(recording: Recording): SessionSummary {
     this.recording = recording
     this.replay = new Replay(recording)
-    this.spanLabels.clear()
     this.positions = new Map(recording.events.map((index, position) => [index, position]))
+    this.recordKeys = new Map(recording.records.map((record, index) => [recordKey(record), index]))
+    this.structural = recording.records.flatMap((record, index) => (isOverviewRecord(record) ? [index] : []))
     const spans = [...recording.full.timelineView().spans.values()]
-    const models = spans.filter((span) => spanKind(span) === 'model')
-    const tools = spans.filter((span) => spanKind(span) === 'tool')
-    const runs = spans.filter((span) => spanKind(span) === 'run' && span.name !== 'chat-turn')
-    const turns = spans.filter((span) => span.name === 'chat-turn')
-    const runKeys = new Set(runs.map((span) => span.key))
-    const runFor = (span: Span) => {
-      const seen = new Set<string>()
-      let parent: Span | undefined = span
-      while (parent && !seen.has(parent.key)) {
-        if (runKeys.has(parent.key)) return parent
-        seen.add(parent.key)
-        parent = parent.parentKey ? recording.full.timelineView().spans.get(parent.parentKey) : undefined
-      }
-      return runs.find((run) => run.ids?.run !== undefined && run.ids.run === span.ids?.run)
-    }
-    const runOwners = new Map(spans.map((span) => [span.key, runFor(span)]))
+    const models = spans.filter((span) => span.track.endsWith('/llm'))
     const origin = recording.full.reader.timeOf(recording.records[0]).time
-    const duration = recording.records.reduce(
-      (end, record) => Math.max(end, recording.full.reader.timeOf(record).time - origin),
-      0,
-    )
-    models.forEach((span, index) =>
-      this.spanLabels.set(span.key, `Request ${index + 1} · ${span.attrs['gen_ai.request.model'] ?? span.name}`),
-    )
-    tools.forEach((span) =>
-      this.spanLabels.set(
-        span.key,
-        String(span.attrs['gen_ai.tool.name'] ?? span.name.replace(/^execute_tool\s*/, '')),
-      ),
-    )
-    runs.forEach((span, index) => this.spanLabels.set(span.key, `Run ${index + 1} · ${span.ids?.agent ?? 'Mayor'}`))
-    turns.forEach((span, index) => this.spanLabels.set(span.key, `Turn ${index + 1}`))
-    const groups: TimelineGroup[] = []
-    const items: TimelineItem[] = []
-    const owner = new Map<string, string>()
-    turns.forEach((turn, index) => {
-      const id = `turn:${turn.key}`
-      groups.push({
-        id,
-        label: `Turn ${index + 1} · ${turn.status ?? 'incomplete'}`,
-        kind: 'turn',
-        expanded: index === turns.length - 1,
-      })
-      owner.set(String(turn.ids?.turn ?? turn.spanId), id)
-    })
-    const ensureRun = (span: Span) => {
-      const id = `run:${span.ids?.run ?? span.key}`
-      if (groups.some((group) => group.id === id)) return id
-      const parent = owner.get(String(span.ids?.turn))
-      const count = (kind: string) =>
-        spans.filter((child) => runOwners.get(child.key)?.key === span.key && spanKind(child) === kind).length
-      groups.push({
-        id,
-        parent,
-        label: `${this.spanLabels.get(span.key) ?? 'Agent run'} · ${((span.end ?? origin + duration) - span.start).toFixed(0)} ms`,
-        kind: 'run',
-        expanded: true,
-      })
-      groups.push({
-        id: `${id}:model`,
-        parent: id,
-        label: `Model requests · ${count('model')}`,
-        kind: 'model',
-        expanded: true,
-      })
-      groups.push({
-        id: `${id}:tool`,
-        parent: id,
-        label: `City tools · ${count('tool')}`,
-        kind: 'tool',
-        expanded: true,
-      })
-      return id
-    }
-    runs.forEach(ensureRun)
-    for (const span of spans) {
-      if (span.name === 'chat-turn') continue
-      const kind = spanKind(span)
-      const run = runOwners.get(span.key)
-      let group: string
-      if (run) group = ensureRun(run)
-      else {
-        group = 'unscoped'
-        if (!groups.some((item) => item.id === group)) {
-          groups.push({ id: group, label: 'Calls without a recorded run', kind: 'run', expanded: true })
-          for (const kind of ['model', 'tool'])
-            groups.push({
-              id: `${group}:${kind}`,
-              parent: group,
-              label: kind === 'model' ? 'Model requests' : 'City tools',
-              kind,
-              expanded: true,
-            })
-        }
-      }
-      const first = recording.index.spans.get(span.key)?.[0] ?? 0
-      items.push({
-        id: span.key,
-        group: kind === 'run' ? group : `${group}:${kind}`,
-        label: this.spanLabels.get(span.key) ?? span.name,
-        start: span.start - origin,
-        end: (span.end ?? origin + duration) - origin,
-        kind,
-        status: span.status ?? 'incomplete',
-        position: this.positions.get(first) ?? 0,
-        selection: { kind: 'span', key: span.key },
-      })
-    }
-    const events = recording.events.map((index, position): EventRow => {
-      const record = recording.records[index]
-      let title = names[record.type] ?? record.type
-      if (record.type === 'span.begin' || record.type === 'span.complete')
-        title = this.spanLabels.get(spanKeyOf(record.source, record.epoch, record.spanId)) ?? record.name
-      else if (record.type === 'span.end') title = `Finished · ${record.status}`
-      else if (record.type === 'span.update') title = 'Input / attributes captured'
-      else if (record.type === 'log') title = `${record.level} · ${record.message}`
-      else if (record.type === 'instant') {
-        const data = payload(recording, record)
-        title = `${names[record.name] ?? record.name}${typeof data.index === 'number' ? ` #${data.index + 1}` : ''}`
-      }
-      return {
-        position,
-        index,
-        time: recording.full.reader.timeOf(record).time - origin,
-        title,
-        agent: String(record.ids?.agent ?? ('track' in record ? (record.track.split('/')[1] ?? 'City') : 'City')),
-        kind: 'track' in record ? spanKind(record) : 'event',
-        selection: this.selectionAt(index),
-      }
-    })
-    for (const [session, indices] of recording.index.sessions) {
-      if (
-        !indices.some(
-          (index) =>
-            recording.records[index].type === 'instant' &&
-            (recording.records[index] as { name?: string }).name === 'acp.output.delta',
-        )
-      )
-        continue
-      const id = `acp:${session}`
-      groups.push({ id, label: `External conversation · ${session.slice(0, 12)}`, kind: 'run', expanded: true })
-      const first = this.positions.get(indices[0]) ?? 0,
-        last = this.positions.get(indices.at(-1)!) ?? first
-      items.push({
-        id,
-        group: id,
-        label: 'External mayor output',
-        start: events[first].time,
-        end: events[last].time,
-        kind: 'run',
-        status: 'external',
-        position: first,
-        selection: { kind: 'acp', agentSession: session },
-      })
-    }
+    const events = recording.events.map((index) => ({
+      index,
+      time: recording.full.reader.timeOf(recording.records[index]).time - origin,
+    }))
+    const duration = events.reduce((end, event) => Math.max(end, event.time), 0)
     const playTimes = events.map(() => 0)
     for (let index = 1; index < events.length; index++)
       playTimes[index] = playTimes[index - 1] + Math.min(1500, Math.max(0, events[index].time - events[index - 1].time))
-    const ordered = [...events].sort((a, b) => a.time - b.time || a.position - b.position)
+    const ordered = events
+      .map((event, position) => ({ ...event, position }))
+      .sort((a, b) => a.time - b.time || a.position - b.position)
+    const lastModel = models.at(-1)
+    const lastOutput = [...recording.index.outputs.values()].at(-1)?.at(-1)
     return (this.summary = {
       name: recording.name,
       records: recording.records.length,
       spans: spans.length,
       models: models.length,
-      tools: tools.length,
+      tools: spans.filter((span) => span.track.endsWith('/tools')).length,
       duration,
+      origin,
+      clock: recording.records[0].clock,
       issues: recording.issues.map((issue) => issue.message),
       events,
-      groups,
-      items,
+      overview: this.structural.map((index) => recording.records[index]),
+      defaultSelection: lastModel
+        ? { kind: 'span', key: lastModel.key }
+        : lastOutput === undefined
+          ? undefined
+          : this.selectionAt(lastOutput),
       playTimes,
-      seekTimes: ordered.map((row) => row.time),
-      seekPositions: ordered.map((row) => row.position),
+      seekTimes: ordered.map((event) => event.time),
+      seekPositions: ordered.map((event) => event.position),
     })
   }
 
+  locate(item: TraceItemRef) {
+    const index = item.kind === 'span' ? this.recording!.index.spans.get(item.key)?.[0] : this.recordKeys.get(item.key)
+    if (index === undefined) throw new Error('The selected item is absent from this recording.')
+    return { position: this.positions.get(index) ?? 0, selection: this.selectionAt(index) }
+  }
+
+  snapshot(position: number) {
+    const cursor = this.summary!.events[position].index
+    return this.recording!.index.through(this.structural, cursor).map((index) => this.recording!.records[index])
+  }
+
+  eventLog(): EventLogState {
+    const projection = createEventLogProjection({ limit: Infinity })
+    const reader = new TraceReader([projection], this.summary!.clock)
+    reader.handleRecords(this.recording!.records)
+    return reader.view(projection)
+  }
+
   private selectionAt(index: number): Selection | undefined {
-    const recording = this.recording!
-    const record = recording.records[index]
+    const recording = this.recording!,
+      record = recording.records[index]
     if (record.type === 'instant' && record.name === 'acp.output.delta')
       return {
         kind: 'acp',
@@ -327,7 +166,7 @@ export class ViewerSession {
       const key = spanKeyOf(record.source, record.epoch, record.spanId)
       if (recording.full.timelineView().spans.has(key)) return { kind: 'span', key }
     }
-    if (record.type === 'instant' || record.type === 'log') return { kind: 'record', index }
+    if (record.type === 'instant' || record.type === 'log' || record.type === 'state') return { kind: 'record', index }
   }
 
   private context(selection: Selection | undefined, cursor: number) {
@@ -354,11 +193,17 @@ export class ViewerSession {
     position = Math.max(0, Math.min(summary.events.length - 1, Math.floor(position)))
     const row = summary.events[position]
     replay.seek(row.index)
-    const candidate = row.selection
+    const candidate = this.selectionAt(row.index)
     if (
       follow &&
       candidate &&
-      !(candidate.kind === 'span' && spanKind(recording.full.timelineView().spans.get(candidate.key)!) === 'run')
+      !(
+        candidate.kind === 'span' &&
+        !recording.full
+          .timelineView()
+          .spans.get(candidate.key)!
+          .track.match(/\/(llm|tools)$/)
+      )
     )
       selection = candidate
     const { indices, channel, span } = this.context(selection, row.index)
@@ -375,33 +220,19 @@ export class ViewerSession {
         ? 'Recorded'
         : 'Not reached'
     const output = channel ? replay.output(channel) : { text: '', reasoning: '', chunks: 0 }
-    const breadcrumb: string[] = []
-    let parent = span
-    const seen = new Set<string>()
-    while (parent && !seen.has(parent.key)) {
-      seen.add(parent.key)
-      breadcrumb.unshift(this.spanLabels.get(parent.key) ?? parent.name)
-      parent = parent.parentKey ? recording.full.timelineView().spans.get(parent.parentKey) : undefined
-    }
-    if (span?.ids?.turn) {
-      const turn = [...recording.full.timelineView().spans.values()].find(
-        (item) => item.name === 'chat-turn' && item.ids?.turn === span.ids?.turn,
-      )
-      if (turn && !seen.has(turn.key)) breadcrumb.unshift(this.spanLabels.get(turn.key)!)
-    }
+    const item =
+      selection?.kind === 'span'
+        ? { kind: 'span' as const, key: selection.key }
+        : selection?.kind === 'record'
+          ? itemOfRecord(recording.records[selection.index])
+          : undefined
     return {
       position,
       index: row.index,
       time: row.time,
       selection,
-      heading: span
-        ? (this.spanLabels.get(span.key) ?? span.name)
-        : selection?.kind === 'acp'
-          ? 'External mayor output'
-          : selection?.kind === 'record'
-            ? summary.events[this.positions.get(selection.index) ?? 0].title
-            : 'Select a call or event',
-      breadcrumb,
+      item,
+      heading: span?.name ?? (selection?.kind === 'acp' ? 'External mayor output' : 'Recorded event'),
       state,
       channel: !!channel,
       text: output.text,
@@ -440,7 +271,7 @@ export class ViewerSession {
     for (const index of context.indices) {
       const record = recording.records[index]
       if (record.type === 'instant' && record.name !== 'model.output.delta' && record.name !== 'acp.output.delta')
-        add(names[record.name] ?? record.name, payload(recording, record))
+        add(record.name, payload(recording, record))
       if (record.type === 'log') add(`${record.level} · ${record.message}`, record)
     }
     if (!sections.length && context.channel)
@@ -473,12 +304,5 @@ export class ViewerSession {
 
   rawRecords(indices: number[]) {
     return indices.map((index) => this.recording!.records[index])
-  }
-
-  searchEvents(query: string) {
-    query = query.trim().toLowerCase()
-    return this.summary!.events.filter(
-      (row) => !query || `${row.title} ${row.agent} ${row.kind}`.toLowerCase().includes(query),
-    ).map((row) => row.position)
   }
 }

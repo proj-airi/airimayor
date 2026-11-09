@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ViewerSession } from './viewer-session'
+import { createTraceViewReader } from '@proj-airi/trace-kit/views'
 
-test('session presentation keeps turns, native runs, model calls and tools distinct, with cursor-scoped evidence', async () => {
+test('AIRI view readers receive native nesting and cursor-scoped evidence without a parallel presentation model', async () => {
   const records: object[] = []
   const add = (record: object) => {
     records.push({
@@ -60,25 +61,63 @@ test('session presentation keeps turns, native runs, model calls and tools disti
     () => {},
   )
   assert.deepEqual(summary.issues, [])
-  assert.equal(summary.items.length, 3, 'the chat wrapper is a group, not another identical run bar')
-  const run = summary.groups.find((group) => group.kind === 'run')!
-  assert.equal(run.parent, summary.groups.find((group) => group.kind === 'turn')!.id)
-  assert.equal(summary.groups.find((group) => group.kind === 'model')!.parent, run.id)
-  assert.equal(summary.groups.find((group) => group.kind === 'tool')!.parent, run.id)
-  assert.equal(
-    summary.items.find((item) => item.kind === 'model')!.group,
-    `${run.id}:model`,
-    'native parentage groups calls even without an enriched run ID',
-  )
-  assert.match(summary.items.find((item) => item.kind === 'model')!.label, /Request 1.*model-a/)
-  assert.equal(summary.items.find((item) => item.kind === 'tool')!.label, 'zone')
-  const selection = summary.items.find((item) => item.kind === 'model')!.selection
+  const view = createTraceViewReader(summary.clock, { seriesRetention: false })
+  view.reader.handleRecords(summary.overview)
+  const spans = [...view.timelineView().spans.values()]
+  assert.equal(spans.length, 4)
+  const run = spans.find((span) => span.name === 'invoke_agent mayor')!
+  const model = spans.find((span) => span.track.endsWith('/llm'))!
+  assert.equal(model.parentKey, run.key)
+  const selection = summary.defaultSelection!
+  assert.deepEqual(session.locate({ kind: 'span', key: model.key }), { position: 3, selection })
   assert.equal(session.frame(2, selection, false).state, 'Not reached')
   assert.equal(session.frame(3, selection, false).state, 'In progress')
   const before = await session.evidence(selection, 3)
   assert.equal(JSON.stringify(before.sections).includes('model-a'), false)
   const end = session.frame(4, selection, false)
   assert.equal(end.state, 'ok')
-  assert.match(end.breadcrumb.join('/'), /Turn 1.*Run 1.*Request 1/)
+  assert.deepEqual(end.item, { kind: 'span', key: model.key })
+  const prefix = createTraceViewReader(summary.clock, { seriesRetention: false })
+  prefix.reader.handleRecords(session.snapshot(3))
+  assert.equal(prefix.timelineView().spans.get(model.key)!.attrs['gen_ai.request.model'], undefined)
+  assert.equal(session.eventLog().entries.length, records.length)
+  assert.equal(session.eventLog().dropped, 0)
   assert.equal(JSON.stringify((await session.evidence(selection, 4)).sections).includes('model-a'), true)
+})
+
+test('offline AIRI event log retains records beyond the live projection limit without filling canvas rows with output chunks', async () => {
+  const count = 20_001
+  const records: object[] = [
+    { type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] },
+    { type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat' },
+    ...Array.from({ length: count }, () => ({
+      type: 'instant',
+      spanId: 'call',
+      track: 'agents/mayor/llm',
+      name: 'model.output.delta',
+    })),
+    { type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok' },
+    { type: 'source.stopped' },
+  ]
+  const session = new ViewerSession()
+  const summary = await session.openFiles(
+    [
+      {
+        path: 'test/records.jsonl',
+        file: new Blob([
+          records
+            .map((record, seq) =>
+              JSON.stringify({ source: 'test', epoch: 'test', clock: 'mono:test', seq, ts: seq, ...record }),
+            )
+            .join('\n'),
+        ]),
+      },
+    ],
+    () => {},
+  )
+  const log = session.eventLog()
+  assert.equal(log.entries.length, count + 4)
+  assert.equal(log.dropped, 0)
+  assert.equal(summary.overview.length, 4)
+  assert.equal(session.frame(summary.events.length - 1, summary.defaultSelection, false).chunks, count)
 })
