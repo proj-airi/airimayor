@@ -4,12 +4,14 @@ import type { TraceItemRef } from '@proj-airi/trace-kit/views'
 import type { Frame, Selection, SessionSummary } from './viewer-session'
 import type { LoadProgress } from './viewer-model'
 import { createTraceViewReader } from '@proj-airi/trace-kit/views'
+import { formatOffset as elapsed } from '@proj-airi/ui-timeline/headless'
 import { TraceEventLog, TraceMetrics, TraceTimeline, ViewPresetMenu, useTracerView } from '@proj-airi/ui-trace'
 import { useTheme } from '@proj-airi/ui'
 import { proxy } from 'comlink'
 import { sortedLastIndex } from 'es-toolkit/compat'
-import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { VList } from 'virtua/vue'
 import { Playback } from './playback'
 import { ViewerClient } from './viewer-client'
 import Evidence from './viewer-evidence.vue'
@@ -46,7 +48,8 @@ const loading = ref(false),
   playing = ref(false),
   follow = ref(true),
   speed = ref(1)
-const tab = ref<'replay' | 'detail' | 'raw' | 'events' | 'metrics'>('replay')
+const tab = ref<'replay' | 'detail' | 'raw'>('replay')
+const view = ref<'timeline' | 'events' | 'metrics'>('timeline')
 const log = shallowRef<EventLogState>(),
   logLoading = ref(false)
 const folderInput = ref<HTMLInputElement>(),
@@ -65,8 +68,13 @@ const phases = {
   timeline: 'Building timeline',
 }
 const number = (value: number) => value.toLocaleString()
-const elapsed = (value: number) => `${(value / 1000).toFixed(3)}s`
 const traceNow = () => (summary.value && frame.value ? summary.value.origin + frame.value.time : undefined)
+const statusLabels: Record<string, string> = { ok: 'Completed', error: 'Failed', cancelled: 'Cancelled' }
+
+function fitTimeline() {
+  follow.value = false
+  timeline.value?.fit()
+}
 
 watch([client, summary], ([client, summary]) => {
   player?.pause()
@@ -144,6 +152,8 @@ async function select(item: TraceItemRef | undefined) {
     const target = await current.remote.locate(item)
     if (serial === requestSerial && activeClient === current) {
       const position = item.kind === 'span' ? Math.max(frame.value?.position ?? 0, target.position) : target.position
+      const span = item.kind === 'span' ? state.value.spans.get(item.key) : undefined
+      tab.value = span?.track.endsWith('/llm') || target.selection?.kind === 'acp' ? 'replay' : 'detail'
       await seek(position, target.selection)
     }
   } catch (value) {
@@ -191,17 +201,20 @@ async function open(
     if (serial !== loadSerial) return
     const initial = await next.remote.frame(result.events.length - 1, result.defaultSelection, false)
     if (serial !== loadSerial) return
-    const view = createTraceViewReader(result.clock, { seriesRetention: false })
-    view.reader.handleRecords(result.overview)
-    overview.value = view
-    state.value = view.timelineView()
+    const loadedView = createTraceViewReader(result.clock, { seriesRetention: false })
+    loadedView.reader.handleRecords(result.overview)
+    overview.value = loadedView
+    state.value = loadedView.timelineView()
     version.value++
     summary.value = result
     frame.value = initial
     client.value = next
-    follow.value = true
+    follow.value = false
     tab.value = 'replay'
+    view.value = 'timeline'
     loading.value = false
+    await nextTick()
+    timeline.value?.fit()
   } catch (value) {
     if (serial === loadSerial) {
       error.value = String(value)
@@ -279,7 +292,7 @@ function changeSpeed() {
   if (playing.value && frame.value) player?.play(frame.value.position, speed.value)
 }
 
-watch(tab, async (value) => {
+watch(view, async (value) => {
   if (value !== 'events' || log.value || !client.value) return
   const current = client.value
   logLoading.value = true
@@ -296,17 +309,23 @@ watch(tab, async (value) => {
 
 <template>
   <header class="app-header">
-    <div class="brand">
-      <span class="brand-mark">a</span>
-      <div><strong>AIRI MAYOR</strong><span>SESSION REPLAY</span></div>
-    </div>
-    <div class="header-title">
-      <span class="eyebrow">LOCAL RECORDING · AIRI TRACE UI</span>
-      <h1>{{ summary?.name ?? 'Follow the mayor’s work.' }}</h1>
-    </div>
-    <div class="import-actions">
-      <button class="button primary" :disabled="loading" @click="chooseFolder">Open record folder</button
-      ><button class="button subtle" :disabled="loading" @click="recordInput?.click()">Open records.jsonl</button>
+    <a class="brand" href="https://github.com/proj-airi/airimayor" target="_blank" rel="noreferrer">AIRI Mayor</a>
+    <span class="header-divider" aria-hidden="true">/</span>
+    <h1>Trace</h1>
+    <span v-if="summary" class="session-name" :title="summary.name">{{ summary.name }}</span>
+    <span v-else class="offline-label">Offline viewer</span>
+    <div v-if="summary || loading || error" class="import-actions">
+      <button
+        class="button subtle"
+        title="Open records.jsonl without attachments"
+        :disabled="loading"
+        @click="recordInput?.click()"
+      >
+        <span class="i-mingcute:file-import-line" aria-hidden="true" />Open file
+      </button>
+      <button class="button primary" :disabled="loading" @click="chooseFolder">
+        <span class="i-mingcute:folder-open-line" aria-hidden="true" />Open session
+      </button>
     </div>
     <input
       ref="folderInput"
@@ -326,178 +345,304 @@ watch(tab, async (value) => {
       @change="filesSelected"
     />
   </header>
-  <main>
+  <main :class="{ 'has-session': summary }">
     <section v-if="!summary && !loading && !error" class="empty-state">
-      <span class="eyebrow">EVERY STEP, IN CONTEXT</span>
-      <h2>See how a session unfolded.</h2>
-      <p>Inspect the AIRI trace timeline, calls and causal links.<br />Replay the mayor’s output in recorded order.</p>
-      <button class="button primary" @click="chooseFolder">Choose a session folder ↗</button>
-      <p class="local-note">
-        Select the folder containing <code>records.jsonl</code> and <code>assets</code>.<br />Everything stays in this
-        browser. No server or network is used.
-      </p>
+      <div class="trace-motif" aria-hidden="true">
+        <div class="motif-axis"><span>0</span><span>5</span><span>10</span><span>15s</span></div>
+        <div class="motif-grid">
+          <span class="motif-bar motif-root" /><span class="motif-link" /> <span class="motif-bar motif-model" /><span
+            class="motif-bar motif-tool"
+          />
+          <span class="motif-bar motif-reply" /><span class="motif-cursor" />
+        </div>
+      </div>
+      <h2>Trace</h2>
+      <p>Open a session record.</p>
+      <div class="empty-actions">
+        <button class="button primary" @click="chooseFolder">
+          <span class="i-mingcute:folder-open-line" aria-hidden="true" />Open session folder
+        </button>
+        <button class="button subtle" title="Open records.jsonl without attachments" @click="recordInput?.click()">
+          <span class="i-mingcute:file-import-line" aria-hidden="true" />Open file
+        </button>
+      </div>
+      <span class="file-hint"><code>records.jsonl</code><span aria-hidden="true"> + </span><code>assets/</code></span>
     </section>
-    <p v-if="error" id="import-status" class="error" role="alert">{{ error }}</p>
+    <div v-if="error" id="import-status" class="error-message" role="alert">
+      <span class="i-mingcute:alert-line" aria-hidden="true" />
+      <p>{{ error }}</p>
+    </div>
     <section v-if="loading" class="import-loading" role="status">
-      <p>
-        {{
-          progress
-            ? `${phases[progress.phase]} · ${number(progress.completed)} / ${number(progress.total)}`
-            : 'Opening recording…'
-        }}
-      </p>
-      <progress id="import-progress" :max="progress?.total || 1" :value="progress?.completed ?? 0" /><button
-        class="button subtle"
-        @click="cancelImport"
-      >
-        Cancel import
-      </button>
+      <span class="i-mingcute:loading-line loading-icon" aria-hidden="true" />
+      <h2>{{ progress ? phases[progress.phase] : 'Opening session…' }}</h2>
+      <progress id="import-progress" :max="progress?.total || 1" :value="progress?.completed ?? 0" />
+      <span v-if="progress" class="mono">{{ number(progress.completed) }} / {{ number(progress.total) }}</span>
+      <button class="button subtle" @click="cancelImport">Cancel</button>
     </section>
     <template v-if="summary && frame && client">
       <div class="session-summary">
         <div class="stats">
           <span
+            ><span class="i-mingcute:time-line" aria-hidden="true" /><b>{{ elapsed(summary.duration) }}</b></span
+          >
+          <span
+            ><b>{{ number(summary.models) }}</b> model calls</span
+          >
+          <span
+            ><b>{{ number(summary.tools) }}</b> tool calls</span
+          >
+          <span
             ><b>{{ number(summary.records) }}</b> records</span
-          ><span
-            ><b>{{ number(summary.models) }}</b> model requests</span
-          ><span
-            ><b>{{ number(summary.tools) }}</b> city tools</span
-          ><span
-            ><b>{{ elapsed(summary.duration) }}</b> recorded</span
           >
         </div>
-        <span class="badge" :class="{ warning: summary.issues.length }">{{
-          summary.issues.length ? `${number(summary.issues.length)} evidence issues` : 'Evidence validated'
-        }}</span>
-      </div>
-      <details v-if="summary.issues.length" class="issues">
-        <summary>{{ number(summary.issues.length) }} validation issues</summary>
-        <Json :data="summary.issues" />
-      </details>
-      <section class="playback panel" aria-label="Replay controls">
-        <div class="transport">
-          <div class="transport-buttons">
-            <button class="icon-button" aria-label="First event" @click="seek(0)">|◀</button
-            ><button class="icon-button" aria-label="Previous event" @click="seek(frame.position - 1)">‹</button
-            ><button class="button play-button" @click="togglePlay">{{ playing ? 'Ⅱ Pause' : '▶ Play' }}</button
-            ><button class="icon-button" aria-label="Next event" @click="seek(frame.position + 1)">›</button
-            ><button class="icon-button" aria-label="Last event" @click="seek(summary.events.length - 1)">▶|</button>
-          </div>
-          <span class="cursor-label"
-            >{{ number(frame.position + 1) }} / {{ number(summary.events.length) }} · {{ elapsed(frame.time) }}</span
-          >
-          <div class="transport-options">
-            <label
-              >Speed
-              <select v-model="speed" @change="changeSpeed">
-                <option v-for="value in [0.5, 1, 2, 4, 8]" :key="value" :value="value">{{ value }}×</option>
-              </select></label
-            ><label class="follow"><input v-model="follow" type="checkbox" /> Follow cursor</label
-            ><button class="button subtle" @click="timeline?.fit()">Fit timeline</button>
-          </div>
-        </div>
-        <input
-          type="range"
-          min="0"
-          :max="summary.events.length - 1"
-          :value="frame.position"
-          aria-label="Replay event position"
-          @input="seek(Number(($event.target as HTMLInputElement).value))"
-        />
-        <div class="range-labels">
-          <span>0.000s</span><span>Recorded order · long gaps capped at 1.5 seconds during playback</span
-          ><span>{{ elapsed(summary.duration) }}</span>
-        </div>
-      </section>
-      <section class="panel airi-timeline" aria-label="AIRI execution timeline">
-        <TraceTimeline
-          ref="timeline"
-          :state="state"
-          :indexes="overview.reader.indexes"
-          :version="version"
-          :lanes="entities.lanes"
-          :connectors="entities.connectors"
-          :details="details"
-          :selection="selection"
-          :cursor="summary.origin + frame.time"
-          :follow="follow"
-          :now="traceNow"
-          :hidden="hiddenTracks"
-          @select="select"
-          @cursor="seekTime"
-          @unfollow="follow = false"
-          @toggle="toggleLane"
-          @visibility="setVisibility"
+        <span
+          v-if="!summary.issues.length"
+          class="validation-status"
+          title="Records and referenced files passed validation."
+          ><span class="i-mingcute:check-circle-line" aria-hidden="true" />Files checked</span
         >
-          <template #corner><ViewPresetMenu v-model="presetKey" :presets="presets" :locale="locale" /></template>
-          <template #status>Full recording overview</template>
-        </TraceTimeline>
-      </section>
-      <p class="timeline-footnote">
-        AIRI entity lanes and track rows. Select a call to inspect it, or click the time axis to seek. Replay from
-        selection starts at that call or event. Evidence follows the replay cursor.
-      </p>
-      <section class="inspector panel">
-        <div class="inspector-header">
-          <h2>{{ frame.heading }}</h2>
-          <span class="badge">{{ frame.state }}</span>
-          <button class="button subtle" :disabled="!selection" @click="replaySelection">Replay from selection</button>
-        </div>
-        <div class="inspector-tabs" role="tablist">
-          <button
-            v-for="[value, label] in [
-              ['replay', 'Output replay'],
-              ['detail', 'Call details & evidence'],
-              ['raw', 'Raw records'],
-              ['events', 'Event log'],
-              ['metrics', 'Metrics'],
-            ] as const"
-            :key="value"
-            role="tab"
-            :aria-selected="tab === value"
-            @click="inspect(value)"
+        <details v-else class="issues">
+          <summary>{{ number(summary.issues.length) }} validation issues</summary>
+          <div class="issue-list">
+            <VList :data="summary.issues" class="issue-items"
+              ><template #default="{ item }"
+                ><p>{{ item }}</p></template
+              ></VList
+            >
+          </div>
+        </details>
+      </div>
+      <div class="trace-workbench">
+        <section class="explorer panel" aria-label="Session trace">
+          <div class="panel-toolbar">
+            <div class="panel-tabs" role="tablist" aria-label="Trace views">
+              <button
+                v-for="[value, label, icon] in [
+                  ['timeline', 'Timeline', 'i-mingcute:timeline-line'],
+                  ['events', 'Event log', 'i-mingcute:list-ordered-line'],
+                  ['metrics', 'Metrics', 'i-mingcute:chart-bar-line'],
+                ] as const"
+                :id="`view-tab-${value}`"
+                :key="value"
+                role="tab"
+                :aria-selected="view === value"
+                aria-controls="trace-view"
+                @click="view = value"
+              >
+                <span :class="icon" aria-hidden="true" />{{ label }}
+              </button>
+            </div>
+            <div v-if="view === 'timeline'" class="timeline-actions">
+              <button
+                class="icon-button"
+                :class="{ active: follow }"
+                :aria-pressed="follow"
+                aria-label="Follow playback"
+                title="Follow playback"
+                @click="follow = !follow"
+              >
+                <span class="i-mingcute:aiming-2-line" aria-hidden="true" />
+              </button>
+              <button class="icon-button" aria-label="Fit timeline" title="Fit timeline" @click="fitTimeline">
+                <span class="i-mingcute:fullscreen-2-line" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div id="trace-view" class="explorer-body" role="tabpanel" :aria-labelledby="`view-tab-${view}`">
+            <div v-show="view === 'timeline'" class="airi-timeline">
+              <TraceTimeline
+                ref="timeline"
+                :state="state"
+                :indexes="overview.reader.indexes"
+                :version="version"
+                :lanes="entities.lanes"
+                :connectors="entities.connectors"
+                :details="details"
+                :selection="selection"
+                :cursor="summary.origin + frame.time"
+                :follow="follow"
+                :now="traceNow"
+                :hidden="hiddenTracks"
+                @select="select"
+                @cursor="seekTime"
+                @unfollow="follow = false"
+                @toggle="toggleLane"
+                @visibility="setVisibility"
+              >
+                <template #corner><ViewPresetMenu v-model="presetKey" :presets="presets" :locale="locale" /></template>
+                <template #status
+                  ><span class="timeline-status"
+                    ><span class="status-dot" :class="{ playing }" />{{ playing ? 'Playing' : 'Paused' }}</span
+                  ></template
+                >
+              </TraceTimeline>
+            </div>
+            <div v-if="view === 'events'" class="airi-event-log">
+              <TraceEventLog v-if="log" :log="log" :version="1" :origin="summary.origin" :late="0" @select="select" />
+              <p v-else class="empty-detail" role="status">
+                {{ logLoading ? 'Loading events…' : 'No events.' }}
+              </p>
+            </div>
+            <div v-if="view === 'metrics'" class="metrics-view">
+              <TraceMetrics :state="state" :samples="overview.metricSamples()" :version="version" :locale="locale" />
+              <p v-if="!Object.values(overview.metricSamples()).some((samples) => samples.length)" class="empty-detail">
+                No metric samples recorded.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section class="inspector panel" aria-label="Selected call">
+          <div class="panel-toolbar">
+            <div class="panel-tabs" role="tablist" aria-label="Call views">
+              <button
+                v-for="[value, label] in [
+                  ['replay', 'Output'],
+                  ['detail', 'Details'],
+                  ['raw', 'Records'],
+                ] as const"
+                :id="`inspector-tab-${value}`"
+                :key="value"
+                role="tab"
+                :aria-selected="tab === value"
+                aria-controls="call-view"
+                @click="inspect(value)"
+              >
+                {{ label }}
+              </button>
+            </div>
+            <button
+              class="icon-button"
+              :disabled="!selection"
+              aria-label="Play from selection"
+              title="Play from selection"
+              @click="replaySelection"
+            >
+              <span class="i-mingcute:back-2-line" aria-hidden="true" />
+            </button>
+          </div>
+          <div v-if="tab !== 'detail' || !frame.item" class="inspector-header">
+            <h2>{{ frame.selection ? frame.heading : 'No selection' }}</h2>
+            <span
+              v-if="frame.selection"
+              class="call-status"
+              :class="{
+                completed: frame.state === 'ok' || frame.state === 'Completed',
+                failed: frame.state === 'error',
+                pending: ['Not reached', 'Incomplete', 'In progress'].includes(frame.state),
+              }"
+              ><span class="status-dot" />{{ statusLabels[frame.state] ?? frame.state }}</span
+            >
+          </div>
+          <div
+            id="call-view"
+            class="inspector-body"
+            :class="{ 'show-details': tab === 'detail' }"
+            role="tabpanel"
+            :aria-labelledby="`inspector-tab-${tab}`"
           >
-            {{ label }}
+            <template v-if="tab === 'replay'">
+              <details v-if="frame.reasoning" class="reasoning">
+                <summary>Reasoning</summary>
+                <pre>{{ frame.reasoning }}</pre>
+              </details>
+              <pre v-if="frame.text" class="output-text">{{ frame.text }}</pre>
+              <Json v-if="frame.completedOutput !== undefined" :data="frame.completedOutput" />
+              <div v-if="!frame.text && !frame.reasoning && frame.completedOutput === undefined" class="empty-detail">
+                <span class="i-mingcute:chat-3-line empty-icon" aria-hidden="true" />
+                <p>
+                  {{
+                    !frame.selection
+                      ? 'Select a call in the timeline.'
+                      : frame.channel
+                        ? 'No output at this point.'
+                        : 'No text output for this call.'
+                  }}
+                </p>
+                <button v-if="frame.selection && !frame.channel" class="button subtle" @click="inspect('detail')">
+                  View details<span class="i-mingcute:arrow-right-line" aria-hidden="true" />
+                </button>
+              </div>
+            </template>
+            <Evidence
+              v-else
+              :client="client"
+              :frame="frame"
+              :clock="summary.clock"
+              :raw="tab === 'raw'"
+              @select="select"
+            />
+          </div>
+        </section>
+      </div>
+      <section class="playback" aria-label="Replay controls">
+        <div class="transport-buttons">
+          <button
+            class="icon-button"
+            aria-label="First event"
+            title="First event"
+            :disabled="frame.position === 0"
+            @click="seek(0)"
+          >
+            <span class="i-mingcute:skip-previous-line" aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            aria-label="Previous event"
+            title="Previous event"
+            :disabled="frame.position === 0"
+            @click="seek(frame.position - 1)"
+          >
+            <span class="i-mingcute:left-line" aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button play-button"
+            :aria-label="playing ? 'Pause' : 'Play'"
+            :title="playing ? 'Pause' : 'Play'"
+            @click="togglePlay"
+          >
+            <span :class="playing ? 'i-mingcute:pause-fill' : 'i-mingcute:play-fill'" aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            aria-label="Next event"
+            title="Next event"
+            :disabled="frame.position === summary.events.length - 1"
+            @click="seek(frame.position + 1)"
+          >
+            <span class="i-mingcute:right-line" aria-hidden="true" />
+          </button>
+          <button
+            class="icon-button"
+            aria-label="Last event"
+            title="Last event"
+            :disabled="frame.position === summary.events.length - 1"
+            @click="seek(summary.events.length - 1)"
+          >
+            <span class="i-mingcute:skip-forward-line" aria-hidden="true" />
           </button>
         </div>
-        <div class="inspector-body" role="tabpanel">
-          <template v-if="tab === 'replay'"
-            ><p class="output-meta">
-              {{
-                frame.channel
-                  ? `${number(frame.chunks)} recorded output updates through this cursor`
-                  : 'Select a model request to replay its output. Open Call details & evidence to inspect a tool or event.'
-              }}
-            </p>
-            <details v-if="frame.reasoning" class="reasoning">
-              <summary>Reasoning at cursor</summary>
-              <pre>{{ frame.reasoning }}</pre>
-            </details>
-            <pre v-if="frame.text" class="output-text">{{ frame.text }}</pre>
-            <Json v-if="frame.completedOutput !== undefined" :data="frame.completedOutput" />
-            <p v-if="frame.channel && !frame.chunks && frame.completedOutput === undefined" class="empty-detail">
-              No output has reached this cursor.
-            </p></template
-          >
-          <Evidence
-            v-else-if="tab === 'detail' || tab === 'raw'"
-            :client="client"
-            :frame="frame"
-            :clock="summary.clock"
-            :raw="tab === 'raw'"
-            @select="select"
+        <span class="cursor-time mono">{{ elapsed(frame.time) }}</span>
+        <div class="seek-control">
+          <input
+            type="range"
+            min="0"
+            :max="summary.events.length - 1"
+            :value="frame.position"
+            aria-label="Replay event position"
+            title="Replay in recorded order; gaps longer than 1.5 seconds are shortened."
+            @input="seek(Number(($event.target as HTMLInputElement).value))"
           />
-          <div v-else-if="tab === 'events'" class="airi-event-log">
-            <TraceEventLog v-if="log" :log="log" :version="1" :origin="summary.origin" :late="0" @select="select" />
-            <p v-else role="status">{{ logLoading ? 'Reading the complete event log…' : 'No event log loaded.' }}</p>
-          </div>
-          <div v-else>
-            <p class="output-meta">Metrics appear when the recording contains samples for its declared metrics.</p>
-            <TraceMetrics :state="state" :samples="overview.metricSamples()" :version="version" :locale="locale" />
-          </div>
         </div>
+        <span class="duration mono">{{ elapsed(summary.duration) }}</span>
+        <select v-model="speed" aria-label="Playback speed" @change="changeSpeed">
+          <option v-for="value in [0.5, 1, 2, 4, 8]" :key="value" :value="value">{{ value }}×</option>
+        </select>
+        <span
+          class="event-position mono"
+          :title="`Event ${number(frame.position + 1)} of ${number(summary.events.length)}`"
+          >{{ number(frame.position + 1) }} / {{ number(summary.events.length) }}</span
+        >
       </section>
     </template>
   </main>
-  <footer><span>airimayor · AIRI trace-kit / ui-trace</span><span>Local evidence. Recorded facts.</span></footer>
 </template>

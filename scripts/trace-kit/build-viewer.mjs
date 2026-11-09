@@ -60,7 +60,7 @@ const uno = await createGenerator({
       },
     }),
   ],
-  theme: { colors: { primary: wind.theme.colors.violet } },
+  theme: { colors: { primary: wind.theme.colors.pink } },
 })
 const sourceFiles = (await readdir(root, { recursive: true })).filter(
   (file) => !file.startsWith('node_modules') && /\.(?:vue|ts)$/.test(file),
@@ -69,6 +69,7 @@ const utilities = await uno.generate(
   (await Promise.all(sourceFiles.map((file) => readFile(join(root, file), 'utf8')))).join('\n'),
 )
 const css =
+  `@font-face { font-family: Comfortaa; font-style: normal; font-weight: 300 700; font-display: swap; src: url(data:font/ttf;base64,${(await readFile(join(root, 'fonts/Comfortaa.ttf'))).toString('base64')}) format('truetype'); }\n` +
   utilities.css +
   '\n' +
   result.outputFiles
@@ -106,7 +107,11 @@ const licenses = await Promise.all(
   }),
 )
 const notices = `<!-- Bundled dependency licenses\n${licenses.join('\n\n').replaceAll('-->', '-- >')}\n-->\n`
+const fontNotice = `<!-- Comfortaa\n${(await readFile(join(root, 'fonts/OFL.txt'), 'utf8')).replaceAll('-->', '-- >')}\n-->\n`
 const html =
-  attribution + notices + template.replace('/* VIEWER_STYLE */', () => css).replace('/* VIEWER_SCRIPT */', () => script)
+  attribution +
+  notices +
+  fontNotice +
+  template.replace('/* VIEWER_STYLE */', () => css).replace('/* VIEWER_SCRIPT */', () => script)
 await writeFile(join(root, 'viewer.html'), html)
 console.log(`Built offline viewer: ${join(root, 'viewer.html')} (${Buffer.byteLength(html).toLocaleString()} bytes)`)

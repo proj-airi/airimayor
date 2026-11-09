@@ -46,7 +46,11 @@ watch(
 )
 watch(evidence, (value, _old, onCleanup) => {
   const files =
-    value?.attachments.map((file) => ({ name: file.name, type: file.type, url: URL.createObjectURL(file.blob) })) ?? []
+    value?.attachments.map((file) => ({
+      name: file.name,
+      type: file.type,
+      url: URL.createObjectURL(file.blob),
+    })) ?? []
   attachments.value = files
   onCleanup(() => files.forEach((file) => URL.revokeObjectURL(file.url)))
 })
@@ -59,9 +63,9 @@ function toggle(index: number, event: Event) {
 </script>
 <template>
   <p v-if="error" class="error">{{ error }}</p>
-  <p v-else-if="!evidence" class="empty-detail" role="status">Reading evidence at the replay cursor…</p>
+  <p v-else-if="!evidence" class="empty-detail" role="status">Loading details…</p>
   <template v-else-if="raw"
-    ><p class="raw-count">{{ evidence.rawIndices.length.toLocaleString() }} original records through this cursor.</p>
+    ><p class="raw-count">{{ evidence.rawIndices.length.toLocaleString() }} records at this point</p>
     <VList :data="evidence.rawIndices" class="raw-list"
       ><template #default="{ item }"><RawRecord :client="client" :index="item" /></template></VList
   ></template>
@@ -76,9 +80,9 @@ function toggle(index: number, event: Event) {
       />
     </div>
     <div class="resolved-evidence">
-      <h3>Resolved evidence at cursor</h3>
+      <h3>Evidence</h3>
       <p v-if="!evidence.sections.length" class="empty-detail">
-        No evidence for this selection has reached the cursor.
+        {{ frame.selection ? 'No evidence at this point.' : 'Select a call in the timeline.' }}
       </p>
       <details
         v-for="(section, index) in evidence.sections"
