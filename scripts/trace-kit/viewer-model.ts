@@ -9,7 +9,13 @@ export interface LocalFile {
   read: () => Promise<Uint8Array>
 }
 
+export interface LocalDirectory {
+  name: string
+  file: (path: string) => Promise<LocalFile | undefined>
+}
+
 export interface Issue { message: string; index?: number }
+export interface LoadProgress { phase: 'read' | 'records' | 'assets' | 'timeline'; completed: number; total: number }
 export type ViewReader = ReturnType<typeof createSessionViewReader>
 export type Timeline = ReturnType<ViewReader['timelineView']>
 export type Span = Timeline['spans'] extends Map<string, infer Value> ? Value : never
@@ -31,16 +37,23 @@ export function safePath(path: string) {
 export class AssetStore {
   private json = new Map<string, unknown>()
   private validated = new Set<string>()
+  private files = new Map<string, Promise<LocalFile | undefined>>()
   readonly references = new Map<string, TraceAssetRef>()
 
-  constructor(private files: Map<string, LocalFile>, readonly issues: Issue[]) {}
+  constructor(private directory: LocalDirectory, readonly issues: Issue[]) {}
 
   data(ref: unknown): unknown {
     return isAsset(ref) ? this.json.get(`${ref.$asset}\0${ref.mediaType}`) : undefined
   }
 
-  file(ref: TraceAssetRef): LocalFile | undefined {
-    return safePath(ref.$asset) && ref.$asset.startsWith('assets/') ? this.files.get(ref.$asset) : undefined
+  async file(ref: TraceAssetRef): Promise<LocalFile | undefined> {
+    if (!safePath(ref.$asset) || !ref.$asset.startsWith('assets/')) return
+    let file = this.files.get(ref.$asset)
+    if (!file) {
+      file = this.directory.file(ref.$asset)
+      this.files.set(ref.$asset, file)
+    }
+    return file
   }
 
   async visit(value: unknown, index: number): Promise<void> {
@@ -58,7 +71,7 @@ export class AssetStore {
       return
     }
     const key = `${value.$asset}\0${value.mediaType}`
-    const file = this.file(value)
+    const file = await this.file(value)
     if (!file) {
       this.issues.push({ index, message: `Missing asset: ${value.$asset}` })
       return
@@ -132,7 +145,7 @@ function validateLifecycle(records: TraceRecord[], issues: Issue[]) {
     if (open) issues.push({ message: `Incomplete span: ${span} has no end` })
 }
 
-export async function loadRecording(selected: readonly LocalFile[]): Promise<Recording> {
+export async function loadRecording(selected: readonly LocalFile[], onProgress?: (progress: LoadProgress) => void | Promise<void>): Promise<Recording> {
   if (!selected.length) throw new Error('Select a recording folder containing records.jsonl and assets.')
   for (const file of selected)
     if (!safePath(file.path)) throw new Error(`Unsafe selected path: ${file.path}`)
@@ -146,10 +159,22 @@ export async function loadRecording(selected: readonly LocalFile[]): Promise<Rec
     if (files.has(key)) throw new Error(`Duplicate selected file: ${key}`)
     files.set(key, file)
   }
+  return loadDirectory({ name: prefix.split('/').filter(Boolean).at(-1) ?? recordFile.path, file: async path => files.get(path) }, onProgress)
+}
+
+export async function loadDirectory(directory: LocalDirectory, onProgress?: (progress: LoadProgress) => void | Promise<void>): Promise<Recording> {
+  const progress = async (phase: LoadProgress['phase'], completed: number, total: number) => { await onProgress?.({ phase, completed, total }) }
+  const recordFile = await directory.file('records.jsonl')
+  if (!recordFile) throw new Error('Select the session folder containing records.jsonl and assets.')
   const issues: Issue[] = []
   const records: TraceRecord[] = []
+  await progress('read', 0, recordFile.size)
   const text = new TextDecoder().decode(await recordFile.read())
-  for (const [line, source] of text.split(/\r?\n/).entries()) {
+  await progress('read', recordFile.size, recordFile.size)
+  const lines = text.split(/\r?\n/)
+  await progress('records', 0, lines.length)
+  for (const [line, source] of lines.entries()) {
+    if (line > 0 && line % 512 === 0) await progress('records', line, lines.length)
     if (!source.trim()) continue
     let value: unknown
     try { value = JSON.parse(source) }
@@ -163,14 +188,24 @@ export async function loadRecording(selected: readonly LocalFile[]): Promise<Rec
       throw new Error(`Unsupported trace format ${parsed.output.format}; expected ${TRACE_FORMAT}.`)
     records.push(parsed.output)
   }
+  await progress('records', lines.length, lines.length)
   if (!records.length) throw new Error('No native trace-kit records found. This viewer reads records.jsonl.')
   validateLifecycle(records, issues)
-  const assets = new AssetStore(files, issues)
-  for (const [index, record] of records.entries()) await assets.visit(record, index)
+  const assets = new AssetStore(directory, issues)
+  await progress('assets', 0, records.length)
+  for (let start = 0; start < records.length; start += 32) {
+    const end = Math.min(start + 32, records.length)
+    await Promise.all(records.slice(start, end).map((record, offset) => assets.visit(record, start + offset)))
+    if (end % 512 === 0 || end === records.length) await progress('assets', end, records.length)
+  }
   const full = createSessionViewReader(records[0].clock)
-  full.reader.handleRecords(records)
+  await progress('timeline', 0, records.length)
+  for (let start = 0; start < records.length; start += 4096) {
+    full.reader.handleRecords(records.slice(start, start + 4096))
+    await progress('timeline', Math.min(start + 4096, records.length), records.length)
+  }
   const events = records.flatMap((record, index) => record.type === 'definition' || record.type === 'clock.snapshot' ? [] : [index])
-  return { name: prefix.split('/').filter(Boolean).at(-1) ?? recordFile.path, records, issues, assets, full, events }
+  return { name: directory.name, records, issues, assets, full, events }
 }
 
 export function payload(recording: Recording, record: TraceRecord): Record<string, unknown> {

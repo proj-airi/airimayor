@@ -1,8 +1,9 @@
 import type { TraceAssetRef, TraceRecord } from '@proj-airi/trace-kit'
-import type { LocalFile, OutputChannel, Recording, Span } from './viewer-model'
+import type { LoadProgress, LocalFile, OutputChannel, Recording, Span } from './viewer-model'
 import { spanKeyOf } from '@proj-airi/trace-kit'
 import { spansOfLink } from '@proj-airi/trace-kit/views'
-import { isAsset, isObject, loadRecording, payload, Replay } from './viewer-model'
+import { recordingDirectory } from './recording-files'
+import { isAsset, isObject, loadDirectory, loadRecording, payload, Replay } from './viewer-model'
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!)
@@ -264,7 +265,7 @@ async function renderAttachments(value: unknown, generation: number) {
   const target = document.createElement('div')
   target.className = 'attachments'
   for (const ref of refs) {
-    const file = recording!.assets.file(ref)
+    const file = await recording!.assets.file(ref)
     const card = document.createElement('div')
     card.className = 'attachment'
     if (!file) { card.textContent = `Missing ${ref.mediaType} attachment`; target.append(card); continue }
@@ -393,12 +394,30 @@ function renderSummary() {
   $('end-time').textContent = seconds(duration)
 }
 
-export async function openRecording(files: readonly LocalFile[]) {
+export function openRecording(files: readonly LocalFile[]) {
+  return importRecording(progress => loadRecording(files, progress))
+}
+
+async function importRecording(load: (progress: (update: LoadProgress) => Promise<void>) => Promise<Recording>) {
   stop()
+  const importControls = document.querySelectorAll<HTMLButtonElement | HTMLInputElement>('.open-folder,#open-records,#folder-input,#record-input')
+  importControls.forEach(control => { control.disabled = true })
+  const progress = $<HTMLProgressElement>('import-progress')
+  progress.hidden = false
+  progress.max = 1
+  progress.value = 0
   $('import-status').className = ''
-  $('import-status').textContent = 'Reading and validating local evidence…'
+  $('import-status').textContent = 'Preparing local recording…'
   try {
-    const loaded = await loadRecording(files)
+    const labels = { read: 'Reading records.jsonl', records: 'Validating records', assets: 'Validating attachments', timeline: 'Building timeline' }
+    const loaded = await load(async update => {
+      progress.max = Math.max(1, update.total)
+      progress.value = update.completed
+      $('import-status').textContent = update.phase === 'read'
+        ? `${labels.read} (${(update.total / 1048576).toFixed(1)} MB)…`
+        : `${labels[update.phase]} — ${update.completed.toLocaleString()} / ${update.total.toLocaleString()} ${update.phase === 'records' ? 'lines' : 'records'}`
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
     recording = loaded
     replay = new Replay(loaded)
     const models = [...loaded.full.timelineView().spans.values()].filter(span => span.track.endsWith('/llm'))
@@ -409,17 +428,21 @@ export async function openRecording(files: readonly LocalFile[]) {
     $('recording-title').textContent = loaded.name
     $('empty-state').hidden = true
     $('workspace').hidden = false
-    $('import-status').textContent = ''
     $<HTMLInputElement>('seek').max = String(loaded.events.length - 1)
     $<HTMLInputElement>('event-search').value = ''
     renderSummary()
     eventPosition = loaded.events.length - 1
     filterEvents()
     seek(eventPosition, false)
+    $('import-status').textContent = ''
   }
   catch (error) {
     $('import-status').className = 'error'
     $('import-status').textContent = `Could not open recording: ${(error as Error).message}`
+  }
+  finally {
+    progress.hidden = true
+    importControls.forEach(control => { control.disabled = false })
   }
 }
 
@@ -429,7 +452,26 @@ function selectedFiles(files: FileList | null) {
     read: async () => new Uint8Array(await file.arrayBuffer()) })))
 }
 
-document.querySelectorAll('.open-folder').forEach(button => button.addEventListener('click', () => $<HTMLInputElement>('folder-input').click()))
+async function chooseFolder() {
+  if (!window.showDirectoryPicker) {
+    const input = $<HTMLInputElement>('folder-input')
+    input.value = ''
+    input.click()
+    return
+  }
+  $('import-status').className = ''
+  $('import-status').textContent = 'Choose a session folder…'
+  try {
+    const directory = await window.showDirectoryPicker({ mode: 'read' })
+    await importRecording(progress => loadDirectory(recordingDirectory(directory), progress))
+  }
+  catch (error) {
+    $('import-status').className = 'error'
+    $('import-status').textContent = error instanceof DOMException && error.name === 'AbortError' ? '' : `Could not open folder: ${(error as Error).message}`
+  }
+}
+
+document.querySelectorAll('.open-folder').forEach(button => button.addEventListener('click', chooseFolder))
 $('open-records').addEventListener('click', () => $<HTMLInputElement>('record-input').click())
 $('folder-input').addEventListener('change', event => selectedFiles((event.target as HTMLInputElement).files))
 $('record-input').addEventListener('change', event => selectedFiles((event.target as HTMLInputElement).files))
@@ -479,5 +521,8 @@ document.addEventListener('keydown', event => {
   if (event.key === 'ArrowLeft') { event.preventDefault(); stop(); seek(eventPosition - 1) }
 })
 
-declare global { interface Window { airimayorTraceViewer: { open: typeof openRecording; seek: typeof seek; state: () => { cursor: number; eventPosition: number; playing: boolean; issues: number } } } }
+declare global { interface Window {
+  showDirectoryPicker?: (options: { mode: 'read' }) => Promise<FileSystemDirectoryHandle>
+  airimayorTraceViewer: { open: typeof openRecording; seek: typeof seek; state: () => { cursor: number; eventPosition: number; playing: boolean; issues: number } }
+} }
 window.airimayorTraceViewer = { open: openRecording, seek, state: () => ({ cursor: replay?.cursor ?? -1, eventPosition, playing, issues: recording?.issues.length ?? 0 }) }

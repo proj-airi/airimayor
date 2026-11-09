@@ -829,6 +829,12 @@ input[type="checkbox"] {
 #import-status.error {
   color: #ff9caa;
 }
+#import-progress {
+  width: 100%;
+  height: 8px;
+  margin-bottom: 20px;
+  accent-color: var(--violet);
+}
 .event-empty {
   padding: 30px 20px;
   color: #8093b0;

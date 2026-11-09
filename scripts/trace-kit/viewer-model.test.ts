@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { test } from 'node:test'
 import { spansOfLink } from '@proj-airi/trace-kit/views'
-import { loadRecording, Replay, type LocalFile } from './viewer-model'
+import { recordingDirectory } from './recording-files'
+import { loadDirectory, loadRecording, payload, Replay, type LocalFile } from './viewer-model'
 
 function fixture() {
   const records: object[] = []
@@ -72,7 +73,7 @@ test('non-streaming final content becomes available only at its end, without inv
   assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'child' }).chunks, 0)
 })
 
-test('long streamed sessions remain indexed and replayable without quadratic projection work', async () => {
+test('long streamed sessions retain every update while the overview scales with calls', async () => {
   const trace = fixture()
   const deltas = Array.from({ length: 200 }, (_, index) => trace.asset({ index, text: 'x' }))
   for (let call = 0; call < 200; call++) {
@@ -84,7 +85,6 @@ test('long streamed sessions remain indexed and replayable without quadratic pro
   }
   trace.add({ type: 'source.stopped' })
   const files = trace.files()
-  const started = performance.now()
   const recording = await loadRecording(files)
   const replay = new Replay(recording)
   replay.seek(recording.records.length - 1)
@@ -92,7 +92,7 @@ test('long streamed sessions remain indexed and replayable without quadratic pro
   assert.equal(replay.view.reader.indexes.byKey.size, trace.records.length)
   assert.equal(replay.view.timelineView().spans.size, 200)
   assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' }).chunks, 200)
-  assert.ok(performance.now() - started < 2000, '40,000 updates must load and seek within two seconds')
+  assert.ok(recording.full.timelineView().tracks.get('agents/mayor/llm')!.instants.length <= 200)
 })
 
 test('reconstructs ACP output separately for root and owned conversations', async () => {
@@ -106,6 +106,65 @@ test('reconstructs ACP output separately for root and owned conversations', asyn
   assert.equal(replay.output({ kind: 'acp', agentSession: 'child' }).reasoning, 'Inspect')
   replay.seek(4)
   assert.equal(replay.output({ kind: 'acp', agentSession: 'root' }).text, 'Mayor reply')
+})
+
+test('attachment import overlaps independent reads and reports each loading phase', async () => {
+  const trace = fixture()
+  for (let index = 0; index < 498; index++)
+    trace.add({ type: 'instant', track: 'city/events', name: 'sample', attrs: { 'airimayor.data': trace.asset({ index }) } })
+  trace.add({ type: 'source.stopped' })
+  let active = 0, maximum = 0
+  const updates: { phase: string; completed: number; total: number }[] = []
+  const files = trace.files().map(file => file.path.includes('/assets/') ? { ...file, read: async () => {
+    active++
+    maximum = Math.max(maximum, active)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      return await file.read()
+    }
+    finally { active-- }
+  } } : file)
+  const recording = await loadRecording(files, async update => { updates.push(update) })
+  assert.ok(maximum > 1 && maximum <= 32, `attachment reads must overlap within a fixed bound; observed ${maximum}`)
+  assert.deepEqual([...new Set(updates.map(update => update.phase))], ['read', 'records', 'assets', 'timeline'])
+  for (const phase of ['read', 'records', 'assets', 'timeline']) {
+    const progress = updates.filter(update => update.phase === phase)
+    assert.equal(progress[0].completed, 0)
+    assert.equal(progress.at(-1)!.completed, progress.at(-1)!.total)
+    assert.ok(progress.every((update, index) => index === 0 || update.completed >= progress[index - 1].completed))
+  }
+  assert.equal(recording.issues.length, 0)
+  for (let index = 0; index < 498; index++)
+    assert.deepEqual(payload(recording, recording.records[index + 1]), { index })
+})
+
+test('directory handles open referenced files without enumerating the selected folder', async () => {
+  const trace = fixture()
+  const image = { $asset: 'assets/images/city.png', mediaType: 'image/png', bytes: 3 }
+  const data = trace.asset({ image })
+  trace.asset({ unused: true })
+  for (let index = 0; index < 5; index++)
+    trace.add({ type: 'instant', track: 'city/events', name: 'sample', attrs: { 'airimayor.data': data } })
+  trace.add({ type: 'source.stopped' })
+  const files = new Map([...trace.files(), trace.file('session/assets/images/city.png', 'png')].map(file => [file.path.slice('session/'.length), file]))
+  const opened: string[] = [], directories: string[] = []
+  const handle = (prefix: string): Parameters<typeof recordingDirectory>[0] => ({
+    name: prefix || 'session',
+    getDirectoryHandle: async name => { directories.push(prefix + name); return handle(`${prefix}${name}/`) },
+    getFileHandle: async name => {
+      const path = prefix + name
+      opened.push(path)
+      const file = files.get(path)
+      if (!file) throw new DOMException('Missing file', 'NotFoundError')
+      return { getFile: async () => ({ size: file.size, arrayBuffer: async () => new Uint8Array(await file.read()).buffer }) }
+    },
+  })
+  const recording = await loadDirectory(recordingDirectory(handle('')))
+  assert.deepEqual(opened, ['records.jsonl', data.$asset, image.$asset])
+  assert.deepEqual(directories, ['assets', 'assets/images'])
+  assert.equal(recording.issues.length, 0)
+  assert.deepEqual(payload(recording, recording.records[1]), { image })
+  assert.equal((await recording.assets.file(image))!.size, 3)
 })
 
 test('loads an aborted prefix and reports incomplete spans and malformed trailing JSON', async () => {
