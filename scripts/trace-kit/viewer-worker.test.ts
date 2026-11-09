@@ -87,6 +87,7 @@ test('the production recording worker imports cloned files, reports progress, an
     const search = await remote.search({ text: 'Recorded output', status: 'ok', limit: 1 })
     assert.equal(search.total, 1)
     assert.equal(search.hits[0].index, 2)
+    assert.deepEqual((await remote.city(4)).metrics, [])
   } finally {
     remote[releaseProxy]()
     await worker.terminate()

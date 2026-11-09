@@ -5,7 +5,7 @@
   "scripts": {
     "postinstall": "node prepare.mjs",
     "check": "tsx check.ts",
-    "test": "tsx --test check.test.ts viewer-model.test.ts playback.test.ts viewer-session.test.ts viewer-worker.test.ts recording-analysis.test.ts build-viewer.test.ts",
+    "test": "tsx --test check.test.ts viewer-model.test.ts playback.test.ts viewer-session.test.ts viewer-worker.test.ts recording-analysis.test.ts city-view.test.ts build-viewer.test.ts",
     "build": "node build-viewer.mjs",
     "typecheck": "vue-tsc --noEmit",
     "generate-profile": "tsx generate-profile.ts"

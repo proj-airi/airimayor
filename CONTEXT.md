@@ -70,6 +70,10 @@ _Avoid_: agent log, timeline file (the timeline is one part), telemetry, a set o
 The city ledger read before and after a write: treasury, development points, building, network edge, and transit line counts, frame, and pause. It lives in the session record. The model never reads it. A write is judged confirmed, diverged, or undetermined from it.
 _Avoid_: a snapshot on the write result, a retry trigger, proof while the simulation runs
 
+**City observation**:
+A city fact read at a particular game time, kept with its source. An earlier reading stays dated until the city is read again. Native history samples describe their own earlier times, while the session acquires that history when the read returns.
+_Avoid_: continuously sampled city state, a change automatically attributed to the preceding city action
+
 **Plan**:
 The mayor's list of city steps and their completion. The player sees the current list beside the chat; a player message can constrain it without clearing it.
 _Avoid_: a statutory plan, `goal` and `success` as the plan, compact JSON as the live plan, gating the tool catalog, the plan prompting a time advance, a live note as the plan, several plans at once

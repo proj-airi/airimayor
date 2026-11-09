@@ -18,6 +18,7 @@ import Evidence from './viewer-evidence.vue'
 import Json from './viewer-json.vue'
 import Analysis from './viewer-analysis.vue'
 import Search from './viewer-search.vue'
+import City from './viewer-city.vue'
 
 type PickerWindow = Window & {
   showDirectoryPicker?: (options: { mode: 'read' }) => Promise<Parameters<ViewerClient['remote']['openDirectory']>[0]>
@@ -51,7 +52,7 @@ const loading = ref(false),
   follow = ref(true),
   speed = ref(1)
 const tab = ref<'replay' | 'detail' | 'evidence' | 'raw'>('replay')
-const view = ref<'timeline' | 'events' | 'metrics' | 'search'>('timeline')
+const view = ref<'timeline' | 'events' | 'metrics' | 'search' | 'city'>('timeline')
 const workspace = ref<'trace' | 'call'>('trace')
 const log = shallowRef<EventLogState>(),
   logLoading = ref(false)
@@ -492,13 +493,14 @@ watch(view, async (value) => {
           aria-label="Session trace"
         >
           <div class="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-800 px-3">
-            <div class="flex gap-4" role="tablist" aria-label="Trace views">
+            <div class="flex min-w-0 gap-3 overflow-x-auto" role="tablist" aria-label="Trace views">
               <button
                 v-for="[value, label] in [
                   ['timeline', 'Timeline'],
                   ['events', 'Event log'],
                   ['metrics', 'Metrics'],
                   ['search', 'Search'],
+                  ['city', 'City'],
                 ] as const"
                 :id="`view-tab-${value}`"
                 :key="value"
@@ -581,6 +583,9 @@ watch(view, async (value) => {
               <Analysis :client="client" @select="select" @seek="seekTime(summary.origin + $event)" />
             </div>
             <Search v-if="view === 'search'" :client="client" @record="inspectRecord" />
+            <div v-if="view === 'city'" class="h-full overflow-y-auto">
+              <City :client="client" :position="frame.position" @record="inspectRecord" />
+            </div>
           </div>
         </section>
         <section

@@ -60,6 +60,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0052-trace-kit-session-records.md](./adr/0052-trace-kit-session-records.md) | Native SDK evidence and durable output deltas; trace-kit offline checking, graphical inspection and replay |
 | [0053-native-summary-checkpoints.md](./adr/0053-native-summary-checkpoints.md) | Persist native MAF summaries once; keep request prefixes stable between summary checkpoints |
 | [0054-offline-recording-analysis.md](./adr/0054-offline-recording-analysis.md) | Worker-owned metrics, context/cache analysis, shared write judgments and paged content search |
+| [0055-city-observations-in-replay.md](./adr/0055-city-observations-in-replay.md) | Cursor-scoped city observations, native history, road identity, write changes and images |
 
 ## Guide
 

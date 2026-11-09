@@ -9,6 +9,7 @@ import { recordingDirectory } from './recording-files'
 import { isOverviewRecord } from './session-view'
 import { isAsset, isObject, loadDirectory, loadRecording, payload, Replay } from './viewer-model'
 import { RecordingAnalysis, type AnalysisFilter, type SearchQuery } from './recording-analysis'
+import { CityRecording, type CityQuery } from './city-view'
 
 export type Selection =
   | { kind: 'span'; key: string }
@@ -73,6 +74,7 @@ export class ViewerSession {
   private recordKeys = new Map<string, number>()
   private structural: number[] = []
   private analysis?: RecordingAnalysis
+  private cityRecording?: CityRecording
 
   async openFiles(files: SelectedFile[], progress: Progress) {
     return this.loaded(
@@ -96,6 +98,7 @@ export class ViewerSession {
   private loaded(recording: Recording): SessionSummary {
     this.recording = recording
     this.analysis = new RecordingAnalysis(recording)
+    this.cityRecording = new CityRecording(recording)
     this.replay = new Replay(recording)
     this.positions = new Map(recording.events.map((index, position) => [index, position]))
     this.recordKeys = new Map(recording.records.map((record, index) => [recordKey(record), index]))
@@ -163,6 +166,26 @@ export class ViewerSession {
 
   search(query: SearchQuery) {
     return this.analysis!.search(query)
+  }
+
+  city(position: number, query: CityQuery = {}) {
+    return this.cityRecording!.view(this.summary!.events[position].index, query)
+  }
+
+  async cityImage(index: number) {
+    const files = payload(this.recording!, this.recording!.records[index]).files
+    if (!Array.isArray(files)) return
+    for (const file of files)
+      if (isObject(file) && isAsset(file.asset) && file.asset.mediaType.startsWith('image/'))
+        return this.attachment(file.asset)
+  }
+
+  private async attachment(ref: TraceAssetRef): Promise<Attachment | undefined> {
+    const file = await this.recording!.assets.file(ref)
+    if (file) return {
+      name: ref.$asset.split('/').at(-1)!, type: ref.mediaType,
+      blob: new Blob([(await file.read()) as Uint8Array<ArrayBuffer>], { type: ref.mediaType }),
+    }
   }
 
   private selectionAt(index: number): Selection | undefined {
@@ -302,13 +325,8 @@ export class ViewerSession {
     const attachments: Attachment[] = []
     for (const ref of refs.values()) {
       if (ref.mediaType === 'application/json') continue
-      const file = await recording.assets.file(ref)
-      if (file)
-        attachments.push({
-          name: ref.$asset.split('/').at(-1)!,
-          type: ref.mediaType,
-          blob: new Blob([(await file.read()) as Uint8Array<ArrayBuffer>], { type: ref.mediaType }),
-        })
+      const attachment = await this.attachment(ref)
+      if (attachment) attachments.push(attachment)
     }
     return { sections, attachments, rawIndices: context.indices }
   }
