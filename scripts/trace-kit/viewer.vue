@@ -363,18 +363,55 @@ watch(view, async (value) => {
     />
   </header>
   <main class="flex min-h-0 flex-1 flex-col px-3 [&_.font-semibold]:font-medium">
-    <section v-if="!summary && !loading && !error" class="viewer-empty">
-      <span class="i-mingcute:timeline-line mb-2 size-8 text-pink-300" aria-hidden="true" />
-      <h2 class="text-sm font-medium text-neutral-200">Open a session record</h2>
-      <div class="flex flex-wrap justify-center gap-2">
-        <button class="viewer-button bg-pink-300 text-neutral-950 hover:bg-pink-200" @click="chooseFolder">
-          <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />Open session folder
-        </button>
-        <button class="viewer-button" title="Open records.jsonl without attachments" @click="recordInput?.click()">
-          Open file
-        </button>
+    <section v-if="!summary && !loading && !error" class="flex min-h-0 flex-1 overflow-y-auto px-6 text-center">
+      <div class="m-auto flex max-w-full flex-col items-center pb-20 pt-11">
+        <div class="w-[270px] max-w-full opacity-85" aria-hidden="true">
+          <div class="flex justify-between pb-2.5 font-mono text-[9px] leading-none text-neutral-500">
+            <span>0</span><span>5</span><span>10</span><span>15s</span>
+          </div>
+          <div class="relative h-[106px] border-t border-neutral-700">
+            <div class="absolute inset-0 grid grid-cols-3">
+              <span class="border-l border-neutral-800/40" />
+              <span class="border-l border-neutral-800/40" />
+              <span class="border-l border-neutral-800/40" />
+            </div>
+            <span
+              class="absolute left-[4%] top-[15px] h-3 w-[90%] rounded border border-pink-300/45 bg-pink-300/15"
+            />
+            <span
+              class="absolute left-[9%] top-[27px] h-[21px] w-[6%] rounded-bl-md border-b border-l border-pink-300/25"
+            />
+            <span class="absolute left-[16%] top-[41px] h-3 w-[33%] rounded bg-pink-300/50" />
+            <span class="absolute left-[51%] top-[66px] h-3 w-[13%] rounded bg-emerald-200/40" />
+            <span class="absolute left-[66%] top-[91px] h-3 w-[26%] rounded bg-pink-300/30" />
+            <span class="absolute bottom-[-7px] left-[72%] top-[-3px] w-px bg-pink-300">
+              <span class="absolute left-[-2px] top-[-2px] size-[5px] rounded-full bg-pink-300" />
+            </span>
+          </div>
+        </div>
+        <h2
+          class="mt-8 font-['Comfortaa_Variable'] text-6xl font-normal leading-[1.15] tracking-[-0.06em] text-neutral-200 sm:text-7xl"
+        >
+          Trace
+        </h2>
+        <p class="mt-3.5 text-sm text-neutral-400">Open a session record.</p>
+        <div class="mt-8 flex flex-wrap justify-center gap-2.5">
+          <button
+            class="viewer-button rounded-lg bg-pink-300 px-[18px] py-3 text-neutral-950 hover:bg-pink-200"
+            @click="chooseFolder"
+          >
+            <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />Open session folder
+          </button>
+          <button
+            class="viewer-button rounded-lg px-[18px] py-3"
+            title="Open records.jsonl without attachments"
+            @click="recordInput?.click()"
+          >
+            <span class="viewer-icon i-mingcute:file-import-line" aria-hidden="true" />Open file
+          </button>
+        </div>
+        <p class="mt-5 font-mono text-xs text-neutral-500">records.jsonl + assets/</p>
       </div>
-      <p class="text-neutral-500"><code>records.jsonl</code> + <code>assets/</code></p>
     </section>
     <p v-if="error" id="import-status" class="shrink-0 break-words py-3 text-red-400" role="alert">{{ error }}</p>
     <section v-if="loading" class="viewer-empty" role="status">

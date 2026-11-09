@@ -28,6 +28,7 @@ const result = await build({
   format: 'iife',
   outfile: join(root, 'viewer.js'),
   plugins: [Vue({ isProduction: true, sourceMap: false })],
+  loader: { '.woff2': 'dataurl' },
   target: 'es2022',
   tsconfig: join(root, 'tsconfig.json'),
   legalComments: 'inline',
