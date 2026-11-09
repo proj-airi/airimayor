@@ -3,36 +3,45 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Agents.AI.Compaction;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace airimayor.Agent
 {
-    // Observe the SDK strategy at the same seam for in-loop and stored-history reduction.
+    // Persist native summaries once so later requests append to the same history prefix.
     internal sealed class RecordedCompaction : CompactionStrategy
     {
-        private readonly ContextWindowCompactionStrategy m_Inner;
+        private readonly SummarizationCompactionStrategy m_Inner;
         private readonly SessionRecord m_Record;
-        private readonly string m_Phase;
+        private readonly int m_WindowTokens;
+        private readonly int m_OutputTokens;
+        private readonly int m_TriggerTokens;
+        private readonly int m_TargetTokens;
 
-        public RecordedCompaction(ContextWindowCompactionStrategy inner, SessionRecord record, string phase) : base(_ => true)
+        public RecordedCompaction(IChatClient summarizer, int windowTokens, int outputTokens, SessionRecord record)
+            : base(CompactionTriggers.TokensExceed((windowTokens - outputTokens) / 2))
         {
-            m_Inner = inner;
             m_Record = record;
-            m_Phase = phase;
+            m_WindowTokens = windowTokens;
+            m_OutputTokens = outputTokens;
+            m_TriggerTokens = (windowTokens - outputTokens) / 2;
+            m_TargetTokens = (windowTokens - outputTokens) / 5;
+            m_Inner = new SummarizationCompactionStrategy(summarizer, CompactionTriggers.TokensExceed(m_TriggerTokens),
+                target: index => index.IncludedTokenCount <= m_TargetTokens);
         }
 
         protected override async ValueTask<bool> CompactCoreAsync(CompactionMessageIndex index, ILogger logger, CancellationToken cancellationToken)
         {
-            if (m_Record.Directory == null || index.IncludedTokenCount <= (int)(m_Inner.InputBudgetTokens * m_Inner.ToolEvictionThreshold))
+            if (m_Record.Directory == null)
                 return await m_Inner.CompactAsync(index, logger, cancellationToken).ConfigureAwait(false);
 
             string operation = Guid.NewGuid().ToString("N");
             JsonObject before = m_Record.KeepMessages(index.GetIncludedMessages(), index.IncludedTokenCount);
             JsonObject details = new JsonObject
             {
-                ["operationId"] = operation, ["phase"] = m_Phase, ["strategy"] = nameof(ContextWindowCompactionStrategy), ["reason"] = "context-window",
-                ["maxContextWindowTokens"] = m_Inner.MaxContextWindowTokens, ["maxOutputTokens"] = m_Inner.MaxOutputTokens, ["inputBudgetTokens"] = m_Inner.InputBudgetTokens,
-                ["toolEvictionThreshold"] = m_Inner.ToolEvictionThreshold, ["truncationThreshold"] = m_Inner.TruncationThreshold, ["before"] = before,
+                ["operationId"] = operation, ["phase"] = "history", ["strategy"] = nameof(SummarizationCompactionStrategy), ["reason"] = "context-window",
+                ["maxContextWindowTokens"] = m_WindowTokens, ["maxOutputTokens"] = m_OutputTokens, ["inputBudgetTokens"] = m_WindowTokens - m_OutputTokens,
+                ["triggerTokens"] = m_TriggerTokens, ["targetTokens"] = m_TargetTokens, ["minimumPreservedGroups"] = m_Inner.MinimumPreservedGroups, ["before"] = before,
             };
             m_Record.Record("compaction.started", details);
             bool changed = false;

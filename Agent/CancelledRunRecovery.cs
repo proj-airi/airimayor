@@ -112,8 +112,6 @@ namespace airimayor.Agent
                     if (message.MessageId != null) restored.Add(message.MessageId);
                 }
             m_History.SetMessages(session, history);
-            // The SDK's compaction index still describes the history before this repair.
-            session.StateBag.TryRemoveValue(nameof(RecordedCompaction));
             m_Record.Record("history.repaired", new JsonObject
             {
                 ["path"] = "cancelled-run", ["reason"] = cancellationRequested ? "cancelled" : "failed",

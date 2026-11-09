@@ -9,8 +9,11 @@ using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using airimayor.Agent;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Xunit;
+
+#pragma warning disable MAAI001
 
 public sealed class HarnessSessionTests
 {
@@ -487,32 +490,119 @@ public sealed class HarnessSessionTests
     }
 
     [Fact]
-    public async Task Long_tool_runs_compact_model_input_and_keep_the_latest_result()
+    public async Task Long_tool_runs_summarize_history_and_keep_request_prefixes_between_summaries()
     {
+        var requests = new List<(int Summaries, string[] Messages, string Instructions, string Tools)>();
         var tools = new Tools
         {
-            Run = _ => Task.FromResult(new string ('x', 18000))
+            Run = _ => Task.FromResult("{\"cityFacts\":\"" + new string('x', 4000) + "\"}")
         };
-        var client = new Client((n, _, _, _) => Task.FromResult(n <= 10 ? Calls(("read-" + n, "city_read", Empty())) : Text("done")));
-        using var session = Open(client, tools, 16000, 1000);
-        await Prompt(session, "long task");
-        Assert.Equal(10, tools.Count);
+        Client client = null;
+        client = new Client((n, input, options, _) =>
+        {
+            requests.Add((client.SummaryCalls, Messages(input), options.Instructions,
+                JsonSerializer.Serialize(options.Tools.OfType<AIFunction>().Select(tool => new { tool.Name, tool.Description, tool.JsonSchema }))));
+            return Task.FromResult(n <= 60 ? Calls(("read-" + n, "city_read", Empty())) : Text("done"));
+        });
+        using var session = Open(client, tools, 64000, 2000);
+        await Prompt(session, "Keep the north riverbank clear while developing the city.");
+        Assert.Equal(60, tools.Count);
+        Assert.InRange(client.SummaryCalls, 1, 3);
+        Assert.Contains(client.SummaryInputs[0], message => message.Text.Contains("Keep the north riverbank clear"));
+        Assert.Contains(client.LastInput, message => message.Text.Contains("[Summary]\nKeep the north riverbank clear"));
+        int stable = 0;
+        for (int i = 1; i < requests.Count; i++)
+        {
+            Assert.Equal(requests[0].Instructions, requests[i].Instructions);
+            Assert.Equal(requests[0].Tools, requests[i].Tools);
+            if (requests[i].Summaries != requests[i - 1].Summaries) continue;
+            Assert.True(requests[i].Messages.Length >= requests[i - 1].Messages.Length);
+            Assert.Equal(requests[i - 1].Messages, requests[i].Messages.Take(requests[i - 1].Messages.Length));
+            stable++;
+        }
+        Assert.True(stable >= 55, "history prefix changed between summary checkpoints");
         var results = client.LastInput.SelectMany(item => item.Contents).OfType<FunctionResultContent>().ToList();
-        Assert.True(results.Sum(item => JsonSerializer.Serialize(item.Result).Length) < 10 * 18000, "model still received all ten full tool results");
-        Assert.Contains(results, result => result.CallId == "read-10");
+        Assert.Contains(results, result => result.CallId == "read-60");
+        Assert.True(Messages(client.LastInput).Sum(message => message.Length) < 125000, "summary retained the old tool-result bodies as text");
         await session.CloseAsync();
         JsonObject[] records = Recorded(session);
         var compactions = records.Where(line => (string)line["name"] == "compaction.finished").Select(line => Data(session, line)).Where(data => (bool)data["changed"]).ToArray();
-        Assert.NotEmpty(compactions);
+        Assert.Equal(client.SummaryCalls, compactions.Length);
         Assert.All(compactions, compacted =>
         {
-            Assert.Equal(15000, (int)compacted["inputBudgetTokens"]);
+            Assert.Equal(nameof(SummarizationCompactionStrategy), (string)compacted["strategy"]);
+            Assert.Equal("history", (string)compacted["phase"]);
+            Assert.Equal(62000, (int)compacted["inputBudgetTokens"]);
             Assert.Equal("ok", (string)compacted["status"]);
-            JsonObject before = ReadAsset(session, compacted["before"]);
             JsonObject after = ReadAsset(session, compacted["after"]);
-            Assert.NotEqual(before["messages"].ToJsonString(), after["messages"].ToJsonString());
-            Assert.Contains(new string('x', 18000), before.ToJsonString());
+            Assert.True((int)after["tokenCount"] < (int)compacted["triggerTokens"]);
+            Assert.Contains("[Summary]", after.ToJsonString());
         });
+        Assert.Equal(client.SummaryCalls + client.Calls, records.Count(line => (string)line["type"] == "span.end" && line["attrs"]?["gen_ai.operation.name"]?.GetValue<string>() == "chat"));
+    }
+
+    private static string[] Messages(IEnumerable<ChatMessage> messages) => messages
+        .Select(message => JsonSerializer.Serialize(new { message.Role, message.Contents })).ToArray();
+
+    [Fact]
+    public async Task Stop_after_summarizing_keeps_the_saved_summary_and_request_prefix()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        string[] beforeStop = null;
+        bool stopped = false;
+        Client client = null;
+        client = new Client(async (n, input, _, ct) =>
+        {
+            if (client.SummaryCalls > 0 && !stopped)
+            {
+                stopped = true;
+                beforeStop = Messages(input);
+                entered.SetResult();
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            return stopped ? Text("continued") : Calls(("read-" + n, "city_read", Empty()));
+        });
+        var tools = new Tools { Run = _ => Task.FromResult(new string('x', 4000)) };
+        using var session = Open(client, tools, 64000, 2000);
+        session.Prompt("Keep the north riverbank clear while developing the city.");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Stop(session);
+        int summaries = client.SummaryCalls;
+        await Prompt(session, "Continue the same city work.");
+        Assert.Equal(summaries, client.SummaryCalls);
+        Assert.Equal(beforeStop, Messages(client.LastInput).Take(beforeStop.Length));
+        Assert.Contains(client.LastInput, message => message.Text.Contains("[Summary]\nKeep the north riverbank clear"));
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task Stop_during_summarization_keeps_the_original_history_for_the_next_attempt()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Client client = null;
+        client = new Client((n, _, _, _) => Task.FromResult(client.SummaryCalls > 0 ? Text("continued") : Calls(("read-" + n, "city_read", Empty()))))
+        {
+            Summarize = async (n, _, ct) =>
+            {
+                if (n == 1)
+                {
+                    entered.SetResult();
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+                return "Keep the north riverbank clear. City work checkpoint.";
+            }
+        };
+        using var session = Open(client, new Tools { Run = _ => Task.FromResult(new string('x', 4000)) }, 64000, 2000);
+        session.Prompt("Keep the north riverbank clear while developing the city.");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Stop(session);
+        await Prompt(session, "Continue the same city work.");
+        Assert.Equal(2, client.SummaryCalls);
+        Assert.Contains(client.SummaryInputs[1], message => message.Text.Contains("Keep the north riverbank clear while developing the city."));
+        Assert.Equal(Messages(client.SummaryInputs[0]), Messages(client.SummaryInputs[1]).Take(client.SummaryInputs[0].Count));
+        Assert.Contains(client.LastInput, message => message.Text.Contains("[Summary]\nKeep the north riverbank clear"));
+        await session.CloseAsync();
+        Assert.Contains(Recorded(session), line => (string)line["name"] == "compaction.finished" && (string)Data(session, line)["status"] == "cancelled");
     }
 
     [Fact]
@@ -704,6 +794,10 @@ public sealed class HarnessSessionTests
     {
         private readonly Func<int, List<ChatMessage>, ChatOptions, CancellationToken, Task<IReadOnlyList<ChatResponseUpdate>>> Handler;
         public int Calls;
+        public int SummaryCalls;
+        public List<List<ChatMessage>> SummaryInputs = new();
+        public Func<int, List<ChatMessage>, CancellationToken, Task<string>> Summarize = (n, _, _) =>
+            Task.FromResult("Keep the north riverbank clear. City work checkpoint " + n + ".");
         public List<ChatMessage> LastInput = new();
         public List<string> Catalog = new();
         public Client(Func<int, List<ChatMessage>, ChatOptions, CancellationToken, Task<IReadOnlyList<ChatResponseUpdate>>> handler) => Handler = handler;
@@ -716,6 +810,16 @@ public sealed class HarnessSessionTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var input = messages.ToList();
+            if (input.Any(message => message.Role == ChatRole.System && message.Text == SummarizationCompactionStrategy.DefaultSummarizationPrompt))
+            {
+                SummaryInputs.Add(input);
+                SummaryCalls++;
+                Assert.NotNull(options);
+                Assert.InRange(options.MaxOutputTokens.Value, 1, 4096);
+                Assert.True(options.Tools == null || options.Tools.Count == 0);
+                yield return new ChatResponseUpdate(ChatRole.Assistant, await Summarize(SummaryCalls, input, cancellationToken));
+                yield break;
+            }
             var pending = new HashSet<string>();
             foreach (var message in input)
             {

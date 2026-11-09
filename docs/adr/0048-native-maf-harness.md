@@ -6,6 +6,8 @@ The Responses-only transport choice below is superseded by [0050](0050-model-pro
 
 The session-record capture omissions below are superseded by [0052](0052-trace-kit-session-records.md), which adopts native SDK observation and the trace-kit record format.
 
+The compaction policy and compaction-index invalidation below are superseded by [0053](0053-native-summary-checkpoints.md), which persists native summaries through the history reducer.
+
 The built-in mayor now uses `Microsoft.Agents.AI.Harness` 1.27.0 over the Responses adapter, replacing our handwritten loop. The second prototype measured 2,067 fewer normalized lines (43.3%) across the runtime and all new client adapters; preserving the old diagnostics, gateway patches and scheduling rules had erased most of that benefit. We accept the library's planning, compaction and background-task behavior rather than implementing those policies again around Harness.
 
 Set native `MaximumIterationsPerRequest` to `int.MaxValue` for both mayor and inspector. The default 40-round tool loop removes the tool catalog on request 41, forcing long city work into a final text response before the task is complete; live traces exposed literal call markup at exactly that request. A different fixed ceiling only moves this interruption, and an outer continuation scheduler would duplicate Harness behavior. Native model completion, errors, player Stop and session closure still end work; compaction retains the context budget. No automatic restart is added.

@@ -69,8 +69,12 @@ namespace airimayor.Agent
         private AIAgent CreateAgent(string name, bool vision, string instructions, int window, int outputTokens,
             ILoggerFactory logger, IEnumerable<AIAgent> children, out InMemoryChatHistoryProvider history)
         {
-            var compaction = new ContextWindowCompactionStrategy(window, outputTokens);
-            history = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions { ChatReducer = new RecordedCompaction(compaction, Record, "history").AsChatReducer() });
+            var summarizer = m_Client.AsBuilder()
+                .ConfigureOptions(options => options.MaxOutputTokens = Math.Min(outputTokens, 4096))
+                .UseOpenTelemetry(sourceName: HarnessTrace.SourceName, configure: telemetry => telemetry.EnableSensitiveData = true)
+                .Build();
+            var compaction = new RecordedCompaction(summarizer, window, outputTokens, Record);
+            history = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions { ChatReducer = compaction.AsChatReducer() });
             var agent = new HarnessAgent(m_Client, new HarnessAgentOptions
             {
                 Name = name,
@@ -85,7 +89,8 @@ namespace airimayor.Agent
                 DisableOpenTelemetry = false,
                 OpenTelemetrySourceName = HarnessTrace.SourceName,
                 ChatHistoryProvider = history,
-                CompactionStrategy = new RecordedCompaction(compaction, Record, "model"),
+                // Harness reloads this reduced history before every model call, including tool-loop iterations.
+                DisableCompaction = true,
                 MaxContextWindowTokens = window,
                 MaxOutputTokens = outputTokens,
                 MaximumIterationsPerRequest = int.MaxValue,
@@ -292,7 +297,6 @@ namespace airimayor.Agent
                         restored.Add(input.MessageId);
                     }
                 m_History.SetMessages(m_Session, history);
-                m_Session.StateBag.TryRemoveValue(nameof(RecordedCompaction));
                 Record.Record("history.repaired", new JsonObject
                 {
                     ["path"] = "player-input", ["reason"] = reason,
