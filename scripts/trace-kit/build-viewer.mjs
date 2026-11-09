@@ -106,6 +106,7 @@ const licenses = await Promise.all(
   }),
 )
 const notices = `<!-- Bundled dependency licenses\n${licenses.join('\n\n').replaceAll('-->', '-- >')}\n-->\n`
-const html = attribution + notices + template.replace('/* VIEWER_STYLE */', css).replace('/* VIEWER_SCRIPT */', script)
+const html =
+  attribution + notices + template.replace('/* VIEWER_STYLE */', () => css).replace('/* VIEWER_SCRIPT */', () => script)
 await writeFile(join(root, 'viewer.html'), html)
 console.log(`Built offline viewer: ${join(root, 'viewer.html')} (${Buffer.byteLength(html).toLocaleString()} bytes)`)
