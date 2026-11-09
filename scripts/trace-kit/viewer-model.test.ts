@@ -93,6 +93,13 @@ test('long streamed sessions retain every update while the overview scales with 
   assert.equal(replay.view.timelineView().spans.size, 200)
   assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' }).chunks, 200)
   assert.ok(recording.full.timelineView().tracks.get('agents/mayor/llm')!.instants.length <= 200)
+  let historyReads = 0
+  recording.records = new Proxy(recording.records, { get(target, key, receiver) {
+    if (typeof key === 'string' && /^\d+$/.test(key)) historyReads++
+    return Reflect.get(target, key, receiver)
+  } })
+  replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' })
+  assert.ok(historyReads <= 400, `one model output must not rescan unrelated history; read ${historyReads} records`)
 })
 
 test('reconstructs ACP output separately for root and owned conversations', async () => {

@@ -1,5 +1,6 @@
 import type { TraceAssetRef, TraceRecord } from '@proj-airi/trace-kit'
-import { TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
+import { spanKeyOf, TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
+import { sortedLastIndex } from 'es-toolkit/compat'
 import { safeParse } from 'valibot'
 import { createSessionViewReader } from './session-view'
 
@@ -113,6 +114,43 @@ export interface Recording {
   assets: AssetStore
   full: ViewReader
   events: number[]
+  index: RecordingIndex
+}
+
+export type OutputChannel = { kind: 'model'; source: string; epoch: string; spanId: string }
+  | { kind: 'acp'; agentSession: string }
+
+function channelKey(channel: OutputChannel) {
+  return channel.kind === 'model' ? spanKeyOf(channel.source, channel.epoch, channel.spanId) : `acp:${channel.agentSession}`
+}
+
+export class RecordingIndex {
+  readonly spans = new Map<string, number[]>()
+  readonly sessions = new Map<string, number[]>()
+  readonly outputs = new Map<string, number[]>()
+
+  constructor(records: readonly TraceRecord[], assets: AssetStore) {
+    const add = (map: Map<string, number[]>, key: string, index: number) => {
+      let values = map.get(key)
+      if (!values) { values = []; map.set(key, values) }
+      values.push(index)
+    }
+    records.forEach((record, index) => {
+      if ('spanId' in record && record.spanId) add(this.spans, spanKeyOf(record.source, record.epoch, record.spanId), index)
+      const data = assets.data(record.attrs?.['airimayor.data'])
+      const session = record.ids?.agentSession ?? (isObject(data) ? data.agentSession : undefined)
+      if (session !== undefined) add(this.sessions, String(session), index)
+      if (record.type !== 'instant') return
+      if (record.name === 'model.output.delta' && record.spanId)
+        add(this.outputs, channelKey({ kind: 'model', source: record.source, epoch: record.epoch, spanId: record.spanId }), index)
+      else if (record.name === 'acp.output.delta' && session !== undefined)
+        add(this.outputs, channelKey({ kind: 'acp', agentSession: String(session) }), index)
+    })
+  }
+
+  through(indices: readonly number[] | undefined, cursor: number) {
+    return indices ? indices.slice(0, sortedLastIndex(indices, cursor)) : []
+  }
 }
 
 function validateLifecycle(records: TraceRecord[], issues: Issue[]) {
@@ -205,16 +243,13 @@ export async function loadDirectory(directory: LocalDirectory, onProgress?: (pro
     await progress('timeline', Math.min(start + 4096, records.length), records.length)
   }
   const events = records.flatMap((record, index) => record.type === 'definition' || record.type === 'clock.snapshot' ? [] : [index])
-  return { name: directory.name, records, issues, assets, full, events }
+  return { name: directory.name, records, issues, assets, full, events, index: new RecordingIndex(records, assets) }
 }
 
 export function payload(recording: Recording, record: TraceRecord): Record<string, unknown> {
   const data = recording.assets.data(record.attrs?.['airimayor.data'])
   return isObject(data) ? data : {}
 }
-
-export type OutputChannel = { kind: 'model'; source: string; epoch: string; spanId: string }
-  | { kind: 'acp'; agentSession: string }
 
 export class Replay {
   readonly view: ViewReader
@@ -237,7 +272,7 @@ export class Replay {
     let reasoning = ''
     let chunks = 0
     const updates: { index: number; recordIndex: number; data: Record<string, unknown> }[] = []
-    for (let index = 0; index <= this.cursor; index++) {
+    for (const index of this.recording.index.through(this.recording.index.outputs.get(channelKey(channel)), this.cursor)) {
       const record = this.recording.records[index]
       if (record.type !== 'instant') continue
       const data = payload(this.recording, record)

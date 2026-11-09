@@ -1,64 +1,21 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob:; connect-src 'none'">
-  <title>AIRI Mayor · Session replay</title>
-  <style>/* VIEWER_STYLE */</style>
-</head>
-<body>
-  <header class="app-header">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">a</span><div><strong>AIRI MAYOR</strong><span>SESSION REPLAY</span></div></div>
-    <div class="header-title"><span class="eyebrow">LOCAL RECORDING</span><h1 id="recording-title">Follow the mayor’s work.</h1></div>
-    <div class="import-actions"><button class="button primary open-folder">Open record folder</button><button class="button subtle" id="open-records">Open records.jsonl</button></div>
-    <input type="file" id="folder-input" webkitdirectory multiple hidden aria-label="Select session record folder">
-    <input type="file" id="record-input" accept=".jsonl" hidden aria-label="Select records.jsonl">
-  </header>
-  <main>
-    <section id="empty-state" class="empty-state">
-      <div class="empty-visual" aria-hidden="true"><i></i><i></i><i></i><b>↳</b></div>
-      <span class="eyebrow">EVERY STEP, IN CONTEXT</span>
-      <h2>See how a session unfolded.</h2>
-      <p>Follow model requests, city tools, and background tasks.<br>Replay the output one recorded update at a time.</p>
-      <button class="button primary open-folder">Choose a session folder <span aria-hidden="true">↗</span></button>
-      <p class="local-note">Select the folder containing <code>records.jsonl</code> and <code>assets</code>.<br>Everything stays in this browser. No server or network is used.</p>
-    </section>
-    <div id="import-status" role="status" aria-live="polite"></div>
-    <progress id="import-progress" hidden aria-label="Recording import progress"></progress>
-    <section id="workspace" hidden>
-      <div class="session-summary"><div id="stats" class="stats"></div><span id="integrity" class="badge"></span></div>
-      <details id="issues" class="issues" hidden><summary id="issue-summary"></summary><ul id="issue-list"></ul></details>
-      <section class="playback panel" aria-label="Replay controls">
-        <div class="transport">
-          <div class="transport-buttons"><button id="first" class="icon-button" title="First event" aria-label="First event">|◀</button><button id="previous" class="icon-button" title="Previous event (Left arrow)" aria-label="Previous event">‹</button><button id="play" class="button play-button" aria-label="Play recording">▶ Play</button><button id="next" class="icon-button" title="Next event (Right arrow)" aria-label="Next event">›</button><button id="last" class="icon-button" title="Last event" aria-label="Last event">▶|</button></div>
-          <span id="cursor-label" class="cursor-label"></span>
-          <div class="transport-options"><label for="speed">Speed</label><select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select><label class="follow"><input id="follow" type="checkbox" checked> Follow cursor</label></div>
-        </div>
-        <input id="seek" type="range" min="0" max="0" value="0" aria-label="Replay event position">
-        <div class="range-labels"><span id="start-time">0.000s</span><span>Recorded event order · long gaps capped at 1.5 seconds during playback</span><span id="end-time"></span></div>
-      </section>
-      <section class="timeline-panel panel" aria-labelledby="timeline-heading">
-        <div class="panel-heading"><h2 id="timeline-heading">Execution overview</h2><div class="legend"><span class="turn-dot">Run</span><span class="model-dot">Model</span><span class="tool-dot">Tool</span><span class="link-dot">Causal link</span></div></div>
-        <div id="timeline" class="timeline" tabindex="0" aria-label="Execution lanes; select a span to inspect"></div>
-        <div class="timeline-footnote">Full recording overview. The replay cursor controls the evidence and output shown below.</div>
-      </section>
-      <div class="detail-layout">
-        <section class="event-panel panel" aria-labelledby="events-heading">
-          <div class="panel-heading"><h2 id="events-heading">Event order <span id="event-count"></span></h2><span class="eyebrow">SELECT TO SEEK</span></div>
-          <label class="search-label"><span aria-hidden="true">⌕</span><input id="event-search" type="search" placeholder="Filter events or agents…" aria-label="Filter events or agents"></label>
-          <div id="event-list" class="event-list" role="list" aria-label="Recorded event order"></div>
-          <div class="event-pagination"><button id="events-earlier" class="icon-button" aria-label="Earlier events">‹</button><span id="event-page"></span><button id="events-later" class="icon-button" aria-label="Later events">›</button></div>
-        </section>
-        <section class="inspector panel" aria-labelledby="inspector-heading">
-          <div id="inspector-header" class="inspector-header"><h2 id="inspector-heading">Select a span or event</h2></div>
-          <div class="inspector-tabs" role="tablist" aria-label="Inspector view"><button role="tab" id="tab-replay" aria-selected="true" data-tab="replay">Output replay</button><button role="tab" id="tab-evidence" aria-selected="false" data-tab="evidence">Full evidence</button><button role="tab" id="tab-raw" aria-selected="false" data-tab="raw">Raw records</button></div>
-          <div id="inspector-body" class="inspector-body" role="tabpanel" aria-labelledby="tab-replay"></div>
-        </section>
-      </div>
-    </section>
-  </main>
-  <footer><span>airimayor <span class="footer-dot">·</span> trace-kit</span><span>Local evidence. Recorded facts.</span></footer>
-  <script>/* VIEWER_SCRIPT */</script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob:; connect-src 'none'; worker-src blob:"
+    />
+    <title>AIRI Mayor · Session replay</title>
+    <style>
+      /* VIEWER_STYLE */
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      /* VIEWER_SCRIPT */
+    </script>
+  </body>
 </html>
