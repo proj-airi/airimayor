@@ -95,6 +95,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-native-summary-order-controls.md](./ops/2026-11-10-native-summary-order-controls.md) | Controlled instruction-position and role experiments on the saved summary history |
 | [2026-11-10-native-summary-diagnosis.md](./ops/2026-11-10-native-summary-diagnosis.md) | Native-path replays isolate summary task confusion on OpenCode Go DeepSeek |
 | [2026-11-10-native-summary-second-checkpoint.md](./ops/2026-11-10-native-summary-second-checkpoint.md) | Repeated malformed summary and observed response to occupancy/pollution guidance |
 | [2026-11-10-native-summary-first-checkpoint.md](./ops/2026-11-10-native-summary-first-checkpoint.md) | First 100k-run checkpoint: malformed persisted summary, early planning guidance and milestone interruption |
