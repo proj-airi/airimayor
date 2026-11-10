@@ -141,8 +141,11 @@ namespace airimayor.Agent
 
         internal JsonObject KeepAsset(JsonNode value)
         {
-            if (Directory == null || m_Disposed) return null;
-            return KeepAsset(Encoding.UTF8.GetBytes(value?.ToJsonString() ?? "null"), "application/json");
+            lock (m_Lock)
+            {
+                if (Directory == null || m_Disposed) return null;
+                return WriteAsset(Encoding.UTF8.GetBytes(Redact(value)?.ToJsonString() ?? "null"), "application/json");
+            }
         }
 
         internal JsonObject KeepMessages(IEnumerable<ChatMessage> messages, int? tokenCount = null)
@@ -170,23 +173,27 @@ namespace airimayor.Agent
             lock (m_Lock)
             {
                 if (Directory == null || m_Disposed) return null;
-                byte[] bytes = value;
                 if (mediaType == "application/json")
-                    bytes = Encoding.UTF8.GetBytes(Redact(JsonNode.Parse(Encoding.UTF8.GetString(value)))?.ToJsonString() ?? "null");
-                else if (mediaType.StartsWith("text/", StringComparison.Ordinal))
-                    bytes = Encoding.UTF8.GetBytes(RedactSecrets(Encoding.UTF8.GetString(value)));
-                string hash;
-                using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
-                string relative = "assets/" + hash;
-                try
-                {
-                    global::System.IO.Directory.CreateDirectory(Path.Combine(Directory, "assets"));
-                    string path = Path.Combine(Directory, relative);
-                    if (!File.Exists(path)) File.WriteAllBytes(path, bytes);
-                    return new JsonObject { ["$asset"] = relative, ["mediaType"] = mediaType, ["bytes"] = bytes.Length };
-                }
-                catch (Exception error) when (IsFileError(error)) { Fail(error); return null; }
+                    return KeepAsset(JsonNode.Parse(value));
+                if (mediaType.StartsWith("text/", StringComparison.Ordinal))
+                    value = Encoding.UTF8.GetBytes(RedactSecrets(Encoding.UTF8.GetString(value)));
+                return WriteAsset(value, mediaType);
             }
+        }
+
+        private JsonObject WriteAsset(byte[] bytes, string mediaType)
+        {
+            string hash;
+            using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+            string relative = "assets/" + hash;
+            try
+            {
+                global::System.IO.Directory.CreateDirectory(Path.Combine(Directory, "assets"));
+                string path = Path.Combine(Directory, relative);
+                if (!File.Exists(path)) File.WriteAllBytes(path, bytes);
+                return new JsonObject { ["$asset"] = relative, ["mediaType"] = mediaType, ["bytes"] = bytes.Length };
+            }
+            catch (Exception error) when (IsFileError(error)) { Fail(error); return null; }
         }
 
         public void Describe(string key, JsonNode value) => Record("session.fact", new JsonObject { ["key"] = key, ["value"] = value?.DeepClone() });

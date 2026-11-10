@@ -72,9 +72,13 @@ namespace airimayor.Tests
         {
             using var record = Open();
             string full = new string('x', 70000);
-            JsonObject first = record.KeepAsset(new JsonObject { ["text"] = full, ["apiKey"] = "sk-private123456", ["authorization"] = "Bearer secret" });
+            var original = new JsonObject { ["text"] = full, ["apiKey"] = "sk-private123456", ["authorization"] = "Bearer secret" };
+            JsonObject first = record.KeepAsset(original);
             JsonObject second = record.KeepAsset(new JsonObject { ["text"] = full, ["apiKey"] = "different", ["authorization"] = "other" });
             Assert.Equal((string)first["$asset"], (string)second["$asset"]);
+            JsonObject serialized = record.KeepAsset(Encoding.UTF8.GetBytes(original.ToJsonString()), "application/json");
+            Assert.True(JsonNode.DeepEquals(first, serialized));
+            Assert.Equal("sk-private123456", (string)original["apiKey"]);
             byte[] bytes = File.ReadAllBytes(Path.Combine(record.Directory, (string)first["$asset"]));
             Assert.Equal(bytes.Length, (int)first["bytes"]);
             var restored = JsonNode.Parse(bytes);

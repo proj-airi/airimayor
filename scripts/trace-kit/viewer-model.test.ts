@@ -189,7 +189,10 @@ test('loads an aborted prefix and reports incomplete spans and malformed trailin
 
 test('validates selected asset sizes, nested references, and traversal without fetching', async () => {
   const trace = fixture()
-  const value = trace.asset({ image: { $asset: 'assets/missing', mediaType: 'image/png', bytes: 10 } })
+  const value = trace.asset({
+    image: { $asset: 'assets/missing', mediaType: 'image/png', bytes: 10 },
+    media: { $asset: 'assets/no-media-type', mediaType: '', bytes: 0 },
+  })
   trace.add({ type: 'instant', name: 'data.kept', track: 'city/events', attrs: {
     text: { ...value, mediaType: 'text/plain' }, json: value,
     bad: { $asset: 'assets/../escape', mediaType: 'text/plain', bytes: 0 },
@@ -197,7 +200,7 @@ test('validates selected asset sizes, nested references, and traversal without f
   } })
   trace.add({ type: 'source.stopped' })
   const recording = await loadRecording(trace.files())
-  assert.equal(recording.issues.length, 3)
+  assert.equal(recording.issues.length, 4)
   assert.ok(recording.issues.some(issue => issue.message.includes('Missing asset')))
   assert.ok(recording.issues.some(issue => issue.message.includes('Unsafe')))
   assert.ok(recording.issues.some(issue => issue.message.includes('byte count')))
@@ -209,6 +212,15 @@ test('rejects unknown format, unsafe selected paths, and ambiguous recording fol
   await assert.rejects(loadRecording(trace.files()), /Unsupported trace format/)
   await assert.rejects(loadRecording([trace.file('../records.jsonl', '')]), /Unsafe selected path/)
   await assert.rejects(loadRecording([trace.file('one/records.jsonl', ''), trace.file('two/records.jsonl', '')]), /exactly one session/)
+})
+
+test('reports a span changing tracks through the shared recording validator', async () => {
+  const trace = fixture()
+  trace.add({ type: 'span.begin', spanId: 'call', name: 'chat', track: 'agents/mayor/llm' })
+  trace.add({ type: 'span.end', spanId: 'call', track: 'agents/mayor/tools', status: 'ok' })
+  trace.add({ type: 'source.stopped' })
+  const recording = await loadRecording(trace.files())
+  assert.deepEqual(recording.issues.map(issue => issue.message), ['Span changes track: call'])
 })
 
 test('official projections preserve root/background branches and causal links', async () => {

@@ -29,6 +29,7 @@ test('the production recording worker imports cloned files, reports progress, an
   )
   const remote = wrap<ViewerSession>(nodeEndpoint(worker))
   try {
+    const delta = JSON.stringify({ text: 'Recorded output', contents: [] })
     const records = [
       { type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] },
       { type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat' },
@@ -37,13 +38,11 @@ test('the production recording worker imports cloned files, reports progress, an
         spanId: 'call',
         track: 'agents/mayor/llm',
         name: 'model.output.delta',
-        attrs: { 'airimayor.data': { $asset: 'assets/delta.json', mediaType: 'application/json', bytes: 0 } },
+        attrs: { 'airimayor.data': { $asset: 'assets/delta.json', mediaType: 'application/json', bytes: Buffer.byteLength(delta) } },
       },
-      { type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok' },
+      { type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok', attrs: { 'llm.ttft_ms': 10 } },
       { type: 'source.stopped' },
     ]
-    const delta = JSON.stringify({ text: 'Recorded output', contents: [] })
-    records[2].attrs!['airimayor.data'].bytes = Buffer.byteLength(delta)
     const phases = new Set<string>()
     const summary = await remote.openFiles(
       [

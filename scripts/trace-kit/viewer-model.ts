@@ -26,7 +26,8 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function isAsset(value: unknown): value is TraceAssetRef {
-  return isObject(value) && typeof value.$asset === 'string' && typeof value.mediaType === 'string'
+  return isObject(value) && typeof value.$asset === 'string'
+    && typeof value.mediaType === 'string' && value.mediaType.length > 0
     && typeof value.bytes === 'number' && Number.isSafeInteger(value.bytes) && value.bytes >= 0
 }
 
@@ -72,7 +73,12 @@ export class AssetStore {
       return
     }
     const key = `${value.$asset}\0${value.mediaType}`
-    const file = await this.file(value)
+    let file: LocalFile | undefined
+    try { file = await this.file(value) }
+    catch (error) {
+      this.issues.push({ index, message: `${value.$asset}: ${(error as Error).message}` })
+      return
+    }
     if (!file) {
       this.issues.push({ index, message: `Missing asset: ${value.$asset}` })
       return
@@ -153,9 +159,9 @@ export class RecordingIndex {
   }
 }
 
-function validateLifecycle(records: TraceRecord[], issues: Issue[]) {
+function validateLifecycle(records: TraceRecord[], issues: Issue[]): void {
   const epochs = new Map<string, { seq: number; stopped: boolean }>()
-  const spans = new Map<string, boolean>()
+  const spans = new Map<string, { open: boolean; track: string }>()
   records.forEach((record, index) => {
     const epoch = `${record.source}/${record.epoch}`
     const previous = epochs.get(epoch)
@@ -169,18 +175,22 @@ function validateLifecycle(records: TraceRecord[], issues: Issue[]) {
     if (record.type === 'span.begin' || record.type === 'span.complete') {
       const key = `${epoch}/${record.spanId}`
       if (spans.has(key)) issue(`Repeated span: ${record.spanId}`)
-      spans.set(key, record.type === 'span.begin')
+      spans.set(key, { open: record.type === 'span.begin', track: record.track })
     }
     else if (record.type === 'span.end' || record.type === 'span.update') {
       const key = `${epoch}/${record.spanId}`
-      if (!spans.get(key)) issue(`Orphan ${record.type}: ${record.spanId}`)
-      if (record.type === 'span.end') spans.set(key, false)
+      const span = spans.get(key)
+      if (!span?.open) issue(`Orphan ${record.type}: ${record.spanId}`)
+      else {
+        if (span.track !== record.track) issue(`Span changes track: ${record.spanId}`)
+        if (record.type === 'span.end') span.open = false
+      }
     }
   })
   for (const [epoch, state] of epochs)
     if (!state.stopped) issues.push({ message: `Incomplete source: ${epoch} has no source.stopped` })
-  for (const [span, open] of spans)
-    if (open) issues.push({ message: `Incomplete span: ${span} has no end` })
+  for (const [key, span] of spans)
+    if (span.open) issues.push({ message: `Incomplete span: ${key} has no end` })
 }
 
 export async function loadRecording(selected: readonly LocalFile[], onProgress?: (progress: LoadProgress) => void | Promise<void>): Promise<Recording> {

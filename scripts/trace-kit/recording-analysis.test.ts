@@ -53,7 +53,7 @@ test('recorded mayor metrics reach the actual AIRI metric projection', async () 
     },
   })
   trace.add({ type: 'source.stopped' })
-  const { summary } = await trace.open()
+  const { summary, session } = await trace.open()
   const view = createTraceViewReader(summary.clock, { seriesRetention: false })
   view.reader.handleRecords(summary.overview)
   const samples = view.metricSamples()
@@ -62,6 +62,7 @@ test('recorded mayor metrics reach the actual AIRI metric projection', async () 
   assert.equal(samples['model.duration_ms'][0].value, 40)
   assert.equal(samples['model.cache_tokens'][0].value, 80)
   assert.equal(samples['model.reasoning_tokens'][0].value, 5)
+  assert.equal(session.analyze().models[0].duration, 40)
 })
 
 test('analysis preserves missing usage, weights only paired cache samples, separates outcomes and agent sessions', async () => {
@@ -74,7 +75,8 @@ test('analysis preserves missing usage, weights only paired cache samples, separ
       ...(agent === 'mayor' ? { turn: 'root' } : { originTurn: 'root', originRun: 'one' }),
     }
     trace.add({ type: 'span.begin', spanId: id, track: `agents/${agent}/llm`, name: 'chat', ids })
-    trace.add({ type: 'span.end', spanId: id, track: `agents/${agent}/llm`, status, ids, attrs })
+    trace.add({ type: 'span.end', spanId: id, track: `agents/${agent}/llm`, status, ids,
+      attrs: { 'airimayor.duration_ms': 10, ...attrs } })
   }
   model('one', 'mayor', 'ok', {
     'gen_ai.usage.input_tokens': 100,
@@ -107,7 +109,7 @@ test('analysis preserves missing usage, weights only paired cache samples, separ
   assert.equal(session.analyze({}, 2).models[0].run, 'three')
 })
 
-test('observed latency ignores metadata and usage updates, preserving reasoning before a tool-only answer', async () => {
+test('latency uses captured metrics and leaves missing values unavailable instead of inferring them from output', async () => {
   const trace = fixture()
   trace.add({ type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat', ts: 100 })
   const delta = (ts: number, data: object) =>
@@ -126,11 +128,20 @@ test('observed latency ignores metadata and usage updates, preserving reasoning 
     update: { contents: [{ $type: 'textReasoning', text: 'River inspection' }] },
   })
   delta(150, { update: { contents: [{ $type: 'functionCall', name: 'map_text', callId: 'tool' }] } })
-  trace.add({ type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok', ts: 200 })
+  trace.add({ type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok', ts: 200,
+    attrs: { 'llm.ttft_ms': 31, 'llm.ttfat_ms': 55 } })
+  trace.add({ type: 'span.begin', spanId: 'without-metrics', track: 'agents/mayor/llm', name: 'chat', ts: 201 })
+  trace.add({ type: 'instant', name: 'model.output.delta', spanId: 'without-metrics', track: 'agents/mayor/llm', ts: 202,
+    attrs: { 'airimayor.data': trace.asset({ text: 'An observed answer without captured latency' }) } })
+  trace.add({ type: 'span.end', spanId: 'without-metrics', track: 'agents/mayor/llm', status: 'ok', ts: 203 })
   trace.add({ type: 'source.stopped', ts: 210 })
   const { session } = await trace.open()
-  assert.equal(session.analyze().models[0].ttft, 30)
-  assert.equal(session.analyze().models[0].ttfat, 50)
+  const calls = session.analyze().models
+  assert.equal(calls[0].ttft, 31)
+  assert.equal(calls[0].ttfat, 55)
+  assert.equal(calls[1].ttft, undefined)
+  assert.equal(calls[1].ttfat, undefined)
+  assert.equal(calls[1].duration, undefined)
 })
 
 test('tool summaries count each city result once, use reported failure, and share ledger judgments with the checker', async () => {

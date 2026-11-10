@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -116,8 +116,8 @@ test('rejects assets with wrong byte counts and paths outside the archive', asyn
   trace.add({ type: 'source.stopped' })
   const result = await trace.check()
   assert.equal(result.report.failures, 3, result.messages)
-  assert.match(result.messages, /reference says/)
-  assert.match(result.messages, /unsafe asset path/)
+  assert.match(result.messages, /byte count differs/)
+  assert.match(result.messages, /Unsafe or invalid asset reference/)
   assert.match(result.messages, /missing.png/)
 })
 
@@ -136,15 +136,22 @@ test('validates asset references nested inside JSON assets', async (t) => {
   assert.equal(result.report.verdicts.undetermined, 1)
 })
 
-test('rejects unknown format and legacy records', async (t) => {
+test('rejects unknown formats without trying another parser', async (t) => {
   const trace = await fixture(t)
   trace.records[0] = { ...base, seq: 0, ts: 0, type: 'source.started', format: 99, runtime: 'unity', profiles: [] }
+  trace.add({ type: 'source.stopped' })
+  const result = await trace.check()
+  assert.match(result.messages, /Unsupported trace format 99/)
+  assert.equal(result.report.failures, 1)
+})
+
+test('rejects legacy envelopes instead of converting them', async (t) => {
+  const trace = await fixture(t)
   trace.records.push({ schema: 1, seq: 1, type: 'function', data: {} })
   trace.add({ type: 'source.stopped' })
   const result = await trace.check()
-  assert.match(result.messages, /format 99 is not supported/)
-  assert.match(result.messages, /invalid native trace record/)
-  assert.ok(result.report.failures >= 2)
+  assert.match(result.messages, /invalid native record/)
+  assert.ok(result.report.failures > 0)
 })
 
 test('rejects incomplete source and open spans', async (t) => {
@@ -153,7 +160,7 @@ test('rejects incomplete source and open spans', async (t) => {
   const result = await trace.check()
   assert.equal(result.report.failures, 2, result.messages)
   assert.match(result.messages, /no source.stopped/)
-  assert.match(result.messages, /started and never ended/)
+  assert.match(result.messages, /Incomplete span/)
 })
 
 test('rejects orphan span ends and sequence gaps', async (t) => {
@@ -162,6 +169,27 @@ test('rejects orphan span ends and sequence gaps', async (t) => {
   trace.add({ type: 'source.stopped', seq: trace.records.length + 1 })
   const result = await trace.check()
   assert.equal(result.report.failures, 2, result.messages)
-  assert.match(result.messages, /has no open begin/)
-  assert.match(result.messages, /does not follow/)
+  assert.match(result.messages, /Orphan span.end/)
+  assert.match(result.messages, /Sequence gap or duplicate/)
+})
+
+test('rejects assets reached through a directory link outside the recording', async (t) => {
+  const trace = await fixture(t)
+  const outside = await mkdtemp(join(tmpdir(), 'airimayor-outside-'))
+  t.after(() => rm(outside, { recursive: true, force: true }))
+  await writeFile(join(outside, 'secret'), 'outside')
+  await mkdir(join(trace.directory, 'assets'))
+  await symlink(outside, join(trace.directory, 'assets', 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+  trace.add({
+    type: 'instant',
+    name: 'asset.kept',
+    track: 'city/events',
+    attrs: {
+      file: { $asset: 'assets/linked/secret', mediaType: 'text/plain', bytes: 7 },
+    },
+  })
+  trace.add({ type: 'source.stopped' })
+  const result = await trace.check()
+  assert.equal(result.report.failures, 1, result.messages)
+  assert.match(result.messages, /resolves outside the recording/)
 })

@@ -520,9 +520,10 @@ export class CityRecording {
       series.find((series) => series.key === 'population') ??
       series[0]
     const points = selected?.points ?? []
+    const selectedMetric = metrics.find((metric) => metric.key === selected?.key)
     const chartPoints = query.chartLimit ? points.slice(-query.chartLimit) : points
     const chart = sampleCityPoints(chartPoints, 599)
-    const current = selected && metric(selected).latest
+    const current = selectedMetric?.latest
     if (
       current &&
       current.frame >= (chartPoints[0]?.frame ?? 0) &&
@@ -550,7 +551,7 @@ export class CityRecording {
       cursor: frame === undefined ? undefined : (frames.get(frame) ?? { frame }),
       frames: [...frames.values()].sort((a, b) => a.frame - b.frame),
       metrics,
-      selected: selected && metric(selected),
+      selected: selectedMetric,
       points: points.slice(query.offset ?? 0, (query.offset ?? 0) + 50),
       pointTotal: points.length,
       chart,

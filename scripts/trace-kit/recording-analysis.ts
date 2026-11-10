@@ -167,8 +167,6 @@ export class RecordingAnalysis {
     const spans = recording.full.timelineView().spans
     const origin = recording.full.reader.timeOf(recording.records[0]).time
     const time = (index: number) => recording.full.reader.timeOf(recording.records[index]).time - origin
-    const firstContent = new Map<string, number>(),
-      firstAnswer = new Map<string, number>()
     const represented = new Set<string>()
     recording.records.forEach((record, index) => {
       const key =
@@ -177,19 +175,6 @@ export class RecordingAnalysis {
       if (span) this.recordSpans.set(index, span)
       if (record.type !== 'instant') return
       const data = payload(recording, record)
-      if (record.name === 'model.output.delta' && key) {
-        const contents = isObject(data.update) && Array.isArray(data.update.contents) ? data.update.contents : []
-        const answer =
-          Boolean(data.text) ||
-          contents.some(
-            (item) =>
-              isObject(item) &&
-              !['usage', 'textReasoning', 'reasoning'].includes(String(item.$type ?? item.type)) &&
-              ((item.$type ?? item.type) !== 'text' || Boolean(item.text)),
-          )
-        if ((answer || Boolean(data.reasoning)) && !firstContent.has(key)) firstContent.set(key, time(index))
-        if (answer && !firstAnswer.has(key)) firstAnswer.set(key, time(index))
-      }
       if (record.name === 'recording.gap' && typeof data.message === 'string') this.gaps.push(data.message)
       if (record.name === 'city.tool.result' && typeof data.tool === 'string') {
         if (key) represented.add(key)
@@ -272,13 +257,9 @@ export class RecordingAnalysis {
         reasoning: numeric(span.attrs[usageKeys.reasoning]),
         cacheRate: input && cache !== undefined ? cache / input : undefined,
         inputGrowth: input !== undefined && prior !== undefined ? input - prior : undefined,
-        duration: span.end === undefined ? undefined : span.end - span.start,
-        ttft:
-          numeric(span.attrs['llm.ttft_ms']) ??
-          (firstContent.has(span.key) ? firstContent.get(span.key)! - started : undefined),
-        ttfat:
-          numeric(span.attrs['llm.ttfat_ms']) ??
-          (firstAnswer.has(span.key) ? firstAnswer.get(span.key)! - started : undefined),
+        duration: numeric(span.attrs['airimayor.duration_ms']),
+        ttft: numeric(span.attrs['llm.ttft_ms']),
+        ttfat: numeric(span.attrs['llm.ttfat_ms']),
       })
       if (input !== undefined) previous.set(identity, input)
     }
