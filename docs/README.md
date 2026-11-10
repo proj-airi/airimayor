@@ -73,6 +73,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-planning-observation-design.md](./research/2026-11-10-planning-observation-design.md) | Frozen source facts and observation criteria for the 100k planning/summary run |
 | [2026-08-06-csharp-agent-runtimes.md](./research/2026-08-06-csharp-agent-runtimes.md) | C# agent stacks (superseded by [0001](./adr/0001-in-process-meai-loop.md)) |
 | [2026-08-06-agent-runtime-gameface-requirements.md](./research/2026-08-06-agent-runtime-gameface-requirements.md) | apeira/xsai vs Gameface Web APIs |
 | [2026-08-06-gameface-feature-support.md](./research/2026-08-06-gameface-feature-support.md) | Official Coherent support + CS2 empirical notes |
@@ -94,6 +95,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-native-summary-first-checkpoint.md](./ops/2026-11-10-native-summary-first-checkpoint.md) | First 100k-run checkpoint: malformed persisted summary, early planning guidance and milestone interruption |
 | [2026-08-16-20k-live-acceptance.md](./ops/2026-08-16-20k-live-acceptance.md) | In-progress 0→20k Windows live-acceptance evidence ledger |
 | [2026-08-15-windows-game-dll-handoff.md](./ops/2026-08-15-windows-game-dll-handoff.md) | Frozen `Game.dll` ILSpy paste-back (LV electricity + 8-step cap) |
 | [2026-08-12-tool-surface-audit-and-open-work.md](./ops/2026-08-12-tool-surface-audit-and-open-work.md) | Frozen audit (not current open work) |
