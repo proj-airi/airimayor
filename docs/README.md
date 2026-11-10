@@ -95,6 +95,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-native-summary-second-checkpoint.md](./ops/2026-11-10-native-summary-second-checkpoint.md) | Repeated malformed summary and observed response to occupancy/pollution guidance |
 | [2026-11-10-native-summary-first-checkpoint.md](./ops/2026-11-10-native-summary-first-checkpoint.md) | First 100k-run checkpoint: malformed persisted summary, early planning guidance and milestone interruption |
 | [2026-08-16-20k-live-acceptance.md](./ops/2026-08-16-20k-live-acceptance.md) | In-progress 0→20k Windows live-acceptance evidence ledger |
 | [2026-08-15-windows-game-dll-handoff.md](./ops/2026-08-15-windows-game-dll-handoff.md) | Frozen `Game.dll` ILSpy paste-back (LV electricity + 8-step cap) |
