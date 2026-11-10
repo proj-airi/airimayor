@@ -29,3 +29,12 @@ An August 19 comment on [#42363](https://github.com/anomalyco/opencode/issues/42
 ## Search limits
 
 GitHub API issue and PR queries covered `SummarizationCompactionStrategy`, compaction with `summary unavailable`, summarization with `prompt` and `order`, and summarizer with `continue`; broader compaction queries and the introducing PR discussion were also inspected. Statuses above came from fetched issue/PR objects, not search snippets. This was a focused review, not an exhaustive search of every discussion, private report or provider implementation. Related reports do not establish the local model-versus-gateway cause or a reliable production remedy.
+
+## Follow-up: MAF instruction-order reports
+
+A further targeted search on November 10 found two closer MAF reports:
+
+- [Python #8352](https://github.com/microsoft/agent-framework/issues/8352), filed September 13: partial deduplication in `prepend_instructions_to_messages` reverses configured instructions from `[First, Second]` to `[Second, First]`. [Fix #8353](https://github.com/microsoft/agent-framework/pull/8353) merged September 15; [#8360](https://github.com/microsoft/agent-framework/pull/8360#issuecomment-5659317206) was closed unmerged as its duplicate. This is an actual instruction-order defect, but in Python instruction deduplication, not the .NET summary instruction's position relative to historical messages.
+- [Python #3507](https://github.com/microsoft/agent-framework/issues/3507), filed January 29 and closed completed February 1: a reviewer writes another tagline, and a summarizer/classifier workflow answers the original task instead of following the assigned role. A [maintainer reproduced the problem specifically with `AzureAIAgentClient`](https://github.com/microsoft/agent-framework/issues/3507#issuecomment-3826113402). It is a similar task-selection failure in workflow agents, not a controlled compaction-request ordering reproduction.
+
+The follow-up searched open and closed issues and PRs separately for summarization, summarizer, DeepSeek, reducer/system, compaction/order, summarize/system, instruction, role, continue and history; selected searches included comments. Semantic Kernel results concerned tool-pair chronology and saved-summary retention, not this instruction-placement failure. No exact matching .NET compaction issue or merged fix was located. The absence of a matching search result does not establish that nobody has reported it.
