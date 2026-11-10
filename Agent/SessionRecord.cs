@@ -154,13 +154,25 @@ namespace airimayor.Agent
             var snapshot = messages.ToList();
             var data = new JsonObject
             {
-                ["messages"] = JsonSerializer.SerializeToNode(snapshot, AIJsonUtilities.DefaultOptions),
+                ["messages"] = KeepMessageReferences(snapshot.Select(message => JsonSerializer.SerializeToNode(message, AIJsonUtilities.DefaultOptions))),
                 ["messageIds"] = JsonSerializer.SerializeToNode(snapshot.Where(message => message.MessageId != null).Select(message => message.MessageId)),
                 ["messageCount"] = snapshot.Count,
             };
             if (tokenCount.HasValue) data["tokenCount"] = tokenCount.Value;
             return KeepAsset(data);
         }
+
+        internal JsonArray KeepMessageReferences(IEnumerable<JsonNode> messages)
+        {
+            var references = new JsonArray();
+            foreach (JsonNode message in messages) references.Add(KeepAsset(message));
+            return references;
+        }
+
+        internal static JsonObject DeltaAttributes(JsonObject data) => new JsonObject
+        {
+            ["airimayor.data"] = Redact(data).ToJsonString(),
+        };
 
         internal static JsonObject ExceptionData(Exception error) => error == null ? null : new JsonObject
         {
@@ -208,7 +220,8 @@ namespace airimayor.Agent
         {
             JsonObject ids = TraceIds;
             if (call != null) ids["toolCall"] = call;
-            EmitTrace(new JsonObject { ["type"] = "instant", ["name"] = type, ["track"] = EventsTrack, ["ids"] = ids, ["attrs"] = DataAttributes(data) });
+            EmitTrace(new JsonObject { ["type"] = "instant", ["name"] = type, ["track"] = EventsTrack, ["ids"] = ids,
+                ["attrs"] = type == "acp.output.delta" ? DeltaAttributes(data) : DataAttributes(data) });
         }
 
         public void TurnStart(string turnId, string userText)

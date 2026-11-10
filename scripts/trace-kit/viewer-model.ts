@@ -38,6 +38,7 @@ export function safePath(path: string) {
 
 export class AssetStore {
   private json = new Map<string, unknown>()
+  private inline = new Map<string, Record<string, unknown>>()
   private validated = new Set<string>()
   private files = new Map<string, Promise<LocalFile | undefined>>()
   readonly references = new Map<string, TraceAssetRef>()
@@ -45,7 +46,25 @@ export class AssetStore {
   constructor(private directory: LocalDirectory, readonly issues: Issue[]) {}
 
   data(ref: unknown): unknown {
+    if (typeof ref === 'string') return this.inline.get(ref)
     return isAsset(ref) ? this.json.get(`${ref.$asset}\0${ref.mediaType}`) : undefined
+  }
+
+  async visitRecord(record: TraceRecord, index: number): Promise<void> {
+    if (record.type === 'instant' && (record.name === 'model.output.delta' || record.name === 'acp.output.delta')) {
+      const encoded = record.attrs?.['airimayor.data']
+      try {
+        if (typeof encoded !== 'string') throw new Error('Output delta must contain inline JSON')
+        if (!this.inline.has(encoded)) {
+          const data: unknown = JSON.parse(encoded)
+          if (!isObject(data)) throw new Error('Output delta must be a JSON object')
+          this.inline.set(encoded, data)
+        }
+        await this.visit(this.inline.get(encoded), index)
+      }
+      catch (error) { this.issues.push({ index, message: `Invalid output delta: ${(error as Error).message}` }) }
+    }
+    await this.visit(record, index)
   }
 
   async file(ref: TraceAssetRef): Promise<LocalFile | undefined> {
@@ -243,7 +262,7 @@ export async function loadDirectory(directory: LocalDirectory, onProgress?: (pro
   await progress('assets', 0, records.length)
   for (let start = 0; start < records.length; start += 32) {
     const end = Math.min(start + 32, records.length)
-    await Promise.all(records.slice(start, end).map((record, offset) => assets.visit(record, start + offset)))
+    await Promise.all(records.slice(start, end).map((record, offset) => assets.visitRecord(record, start + offset)))
     if (end % 512 === 0 || end === records.length) await progress('assets', end, records.length)
   }
   const full = createSessionViewReader(records[0].clock)

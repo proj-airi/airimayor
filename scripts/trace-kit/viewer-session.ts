@@ -321,7 +321,11 @@ export class ViewerSession {
       else if (isObject(value)) Object.values(value).forEach(visit)
     }
     visit(current?.attrs)
-    context.indices.forEach((index) => visit(recording.records[index]))
+    context.indices.forEach((index) => {
+      const record = recording.records[index]
+      visit(record)
+      if (typeof record.attrs?.['airimayor.data'] === 'string') visit(payload(recording, record))
+    })
     const attachments: Attachment[] = []
     for (const ref of refs.values()) {
       if (ref.mediaType === 'application/json') continue

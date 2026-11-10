@@ -119,7 +119,7 @@ test('latency uses captured metrics and leaves missing values unavailable instea
       track: 'agents/mayor/llm',
       spanId: 'call',
       ts,
-      attrs: { 'airimayor.data': trace.asset(data) },
+      attrs: { 'airimayor.data': JSON.stringify(data) },
     })
   delta(110, { update: { contents: [] } })
   delta(120, { update: { contents: [{ $type: 'usage', details: {} }] } })
@@ -132,7 +132,7 @@ test('latency uses captured metrics and leaves missing values unavailable instea
     attrs: { 'llm.ttft_ms': 31, 'llm.ttfat_ms': 55 } })
   trace.add({ type: 'span.begin', spanId: 'without-metrics', track: 'agents/mayor/llm', name: 'chat', ts: 201 })
   trace.add({ type: 'instant', name: 'model.output.delta', spanId: 'without-metrics', track: 'agents/mayor/llm', ts: 202,
-    attrs: { 'airimayor.data': trace.asset({ text: 'An observed answer without captured latency' }) } })
+    attrs: { 'airimayor.data': JSON.stringify({ text: 'An observed answer without captured latency' }) } })
   trace.add({ type: 'span.end', spanId: 'without-metrics', track: 'agents/mayor/llm', status: 'ok', ts: 203 })
   trace.add({ type: 'source.stopped', ts: 210 })
   const { session } = await trace.open()

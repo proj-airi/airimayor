@@ -87,6 +87,31 @@ public sealed class HarnessTraceTests
     }
 
     [Fact]
+    public async Task Repeated_model_requests_reference_the_same_unchanged_message_bodies()
+    {
+        async IAsyncEnumerable<ChatResponseUpdate> Respond(List<ChatMessage> input, ChatOptions options,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "City inspected");
+            await Task.Yield();
+        }
+        using var session = Open(new Client(Respond));
+        await SessionTurn.RunAsync(session, "Inspect the river").WaitAsync(TimeSpan.FromSeconds(10));
+        await SessionTurn.RunAsync(session, "Inspect the bridge").WaitAsync(TimeSpan.FromSeconds(10));
+        await session.CloseAsync();
+        var requests = Read(session).Where(record => (string)record["type"] == "span.update"
+            && record["attrs"]?["gen_ai.input.messages"] != null).ToArray();
+        Assert.Equal(2, requests.Length);
+        JsonArray References(JsonNode request) => JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory,
+            (string)request["attrs"]["gen_ai.input.messages"]["$asset"]))).AsArray();
+        JsonArray first = References(requests[0]), second = References(requests[1]);
+        Assert.True(second.Count > first.Count);
+        Assert.All(Enumerable.Range(0, first.Count), index => Assert.True(JsonNode.DeepEquals(first[index], second[index])));
+        Assert.All(second, message => Assert.NotNull(message["$asset"]));
+        Assert.Contains("Inspect the bridge", Resolve(session, requests[1]["attrs"]["gen_ai.input.messages"]).ToJsonString());
+    }
+
+    [Fact]
     public async Task Latency_ignores_metadata_and_usage_and_separates_reasoning_from_answer()
     {
         async IAsyncEnumerable<ChatResponseUpdate> Respond(List<ChatMessage> _, ChatOptions options,
@@ -155,7 +180,7 @@ public sealed class HarnessTraceTests
         Assert.Equal("cancelled", (string)model["status"]);
         Assert.Contains("kept partial reply", Resolve(session, model["attrs"]["gen_ai.output.messages"]).ToJsonString());
         var delta = Assert.Single(Read(session), record => (string)record["name"] == "model.output.delta");
-        Assert.Equal("kept partial reply", (string)Resolve(session, delta["attrs"]["airimayor.data"])["text"]);
+        Assert.Equal("kept partial reply", (string)JsonNode.Parse((string)delta["attrs"]["airimayor.data"])["text"]);
     }
 
     [Fact]
@@ -194,7 +219,8 @@ public sealed class HarnessTraceTests
         await firstReady.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var firstRecords = Read(session);
         var first = Assert.Single(firstRecords, record => (string)record["name"] == "model.output.delta");
-        var firstData = Resolve(session, first["attrs"]["airimayor.data"]);
+        var firstData = JsonNode.Parse((string)first["attrs"]["airimayor.data"]);
+        int firstAssetCount = Directory.GetFiles(Path.Combine(session.Record.Directory, "assets")).Length;
         Assert.Equal(0, (int)firstData["index"]);
         Assert.Equal("first fragment", (string)firstData["text"]);
         Assert.Equal("first returned reasoning", (string)firstData["reasoning"]);
@@ -209,7 +235,8 @@ public sealed class HarnessTraceTests
         var secondRecords = Read(session);
         var fragments = secondRecords.Where(record => (string)record["name"] == "model.output.delta").ToList();
         Assert.Equal(2, fragments.Count);
-        var secondData = Resolve(session, fragments[1]["attrs"]["airimayor.data"]);
+        var secondData = JsonNode.Parse((string)fragments[1]["attrs"]["airimayor.data"]);
+        Assert.Equal(firstAssetCount, Directory.GetFiles(Path.Combine(session.Record.Directory, "assets")).Length);
         Assert.Equal(1, (int)secondData["index"]);
         Assert.Equal("second fragment", (string)secondData["text"]);
         Assert.Equal("second returned reasoning", (string)secondData["reasoning"]);
@@ -428,8 +455,19 @@ public sealed class HarnessTraceTests
         return records;
     }
 
-    private static JsonNode Resolve(ClientSession session, JsonNode value) => value is JsonObject obj && obj["$asset"] != null
-        ? JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)obj["$asset"]))) : value;
+    private static JsonNode Resolve(ClientSession session, JsonNode value)
+    {
+        if (value is JsonObject asset && asset["$asset"] != null)
+            return Resolve(session, JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)asset["$asset"]))));
+        if (value is JsonArray array) return new JsonArray(array.Select(item => Resolve(session, item)).ToArray());
+        if (value is JsonObject obj)
+        {
+            var result = new JsonObject();
+            foreach (var item in obj) result[item.Key] = Resolve(session, item.Value);
+            return result;
+        }
+        return value?.DeepClone();
+    }
 
     private static ChatResponseUpdate Call(string id, string name, Dictionary<string, object> args) => new ChatResponseUpdate(ChatRole.Assistant,
         new List<AIContent> { new FunctionCallContent(id, name, args) });

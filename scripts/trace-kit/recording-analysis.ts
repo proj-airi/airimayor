@@ -424,7 +424,8 @@ export class RecordingAnalysis {
         )
       )
         continue
-      const match = needle ? await find(record) : ''
+      const content = typeof record.attrs?.['airimayor.data'] === 'string' ? [data, record] : record
+      const match = needle ? await find(content) : ''
       if (match === undefined) continue
       if (total++ < offset || hits.length >= limit) continue
       hits.push({

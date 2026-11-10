@@ -85,16 +85,50 @@ test('AIRI view readers receive native nesting and cursor-scoped evidence withou
   assert.equal(JSON.stringify((await session.evidence(selection, 4)).sections).includes('model-a'), true)
 })
 
+test('inline deltas keep nested attachments, typed updates and search available at the reached cursor', async () => {
+  const image = { $asset: 'assets/map.png', mediaType: 'image/png', bytes: 3 }
+  const update = { contents: [{ type: 'blob', content: image }], messageId: 'reply' }
+  const records = [
+    { type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] },
+    { type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat' },
+    { type: 'instant', spanId: 'call', track: 'agents/mayor/llm', name: 'model.output.delta', attrs: {
+      'airimayor.data': JSON.stringify({ index: 0, text: 'River\nreport', reasoning: 'Inspect the bridge', update }),
+    } },
+  ]
+  const session = new ViewerSession()
+  const summary = await session.openFiles([
+    { path: 'session/records.jsonl', file: new Blob([records.map((record, seq) => JSON.stringify({
+      source: 'game', epoch: 'session', clock: 'mono:session', seq, ts: seq, ...record,
+    })).join('\n')]) },
+    { path: 'session/assets/map.png', file: new Blob(['png']) },
+  ], () => {})
+  assert.equal(summary.issues.length, 2)
+  assert.ok(summary.issues.every(issue => issue.startsWith('Incomplete')))
+  const selection = summary.defaultSelection!
+  assert.equal(session.frame(0, selection, false).chunks, 0)
+  assert.equal((await session.evidence(selection, 0)).attachments.length, 0)
+  assert.equal(session.frame(2, selection, false).text, 'River\nreport')
+  const evidence = await session.evidence(selection, 2)
+  assert.equal(evidence.attachments.length, 1)
+  assert.equal(evidence.attachments[0].name, 'map.png')
+  assert.equal(await evidence.attachments[0].blob.text(), 'png')
+  assert.deepEqual(JSON.parse(String(session.rawRecords([2])[0].attrs?.['airimayor.data'])).update, update)
+  const found = await session.search({ text: 'River\nreport' })
+  assert.equal(found.total, 1)
+  assert.equal(found.hits[0].index, 2)
+})
+
 test('offline AIRI event log retains records beyond the live projection limit without filling canvas rows with output chunks', async () => {
   const count = 20_001
   const records: object[] = [
     { type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] },
     { type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat' },
-    ...Array.from({ length: count }, () => ({
+    ...Array.from({ length: count }, (_, index) => ({
       type: 'instant',
       spanId: 'call',
       track: 'agents/mayor/llm',
       name: 'model.output.delta',
+      attrs: { 'airimayor.data': JSON.stringify({ index, text: 'x' }) },
     })),
     { type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok' },
     { type: 'source.stopped' },

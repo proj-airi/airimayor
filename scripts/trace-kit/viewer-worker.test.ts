@@ -29,7 +29,7 @@ test('the production recording worker imports cloned files, reports progress, an
   )
   const remote = wrap<ViewerSession>(nodeEndpoint(worker))
   try {
-    const delta = JSON.stringify({ text: 'Recorded output', contents: [] })
+    const delta = JSON.stringify({ index: 0, text: 'Recorded output', update: { contents: [] } })
     const records = [
       { type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] },
       { type: 'span.begin', spanId: 'call', track: 'agents/mayor/llm', name: 'chat' },
@@ -38,7 +38,7 @@ test('the production recording worker imports cloned files, reports progress, an
         spanId: 'call',
         track: 'agents/mayor/llm',
         name: 'model.output.delta',
-        attrs: { 'airimayor.data': { $asset: 'assets/delta.json', mediaType: 'application/json', bytes: Buffer.byteLength(delta) } },
+        attrs: { 'airimayor.data': delta },
       },
       { type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok', attrs: { 'llm.ttft_ms': 10 } },
       { type: 'source.stopped' },
@@ -56,7 +56,6 @@ test('the production recording worker imports cloned files, reports progress, an
               .join('\n'),
           ]),
         },
-        { path: 'test/assets/delta.json', file: new Blob([delta]) },
       ],
       proxy(async (progress) => {
         phases.add(progress.phase)

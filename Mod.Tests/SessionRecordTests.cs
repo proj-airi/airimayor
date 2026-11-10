@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using airimayor.Agent;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace airimayor.Tests
@@ -91,6 +92,35 @@ namespace airimayor.Tests
             byte[] image = { 1, 2, 3, 255 };
             JsonObject png = record.KeepAsset(image, "image/png");
             Assert.Equal(image, File.ReadAllBytes(Path.Combine(record.Directory, (string)png["$asset"])));
+        }
+
+        [Fact]
+        public void History_snapshots_share_unchanged_messages_and_keep_changed_versions_immutable()
+        {
+            using var record = Open();
+            JsonNode ReadAsset(JsonNode asset) => JsonNode.Parse(File.ReadAllText(Path.Combine(record.Directory, (string)asset["$asset"])));
+            var text = new TextContent(new string('x', 70000));
+            var first = new ChatMessage(ChatRole.User, new List<AIContent> { text }) { MessageId = "player" };
+            var second = new ChatMessage(ChatRole.Assistant, "River inspected") { MessageId = "mayor" };
+            var history = new[] { first, second };
+            JsonNode before = ReadAsset(record.KeepMessages(history, 100));
+            int files = Directory.GetFiles(Path.Combine(record.Directory, "assets")).Length;
+            JsonNode after = ReadAsset(record.KeepMessages(new[] { first, second, new ChatMessage(ChatRole.User, "Build a bridge") }, 120));
+            Assert.Equal(files + 2, Directory.GetFiles(Path.Combine(record.Directory, "assets")).Length);
+            Assert.Equal(2, (int)before["messageCount"]);
+            Assert.Equal(100, (int)before["tokenCount"]);
+            Assert.Equal(new[] { "player", "mayor" }, before["messageIds"].AsArray().Select(id => (string)id));
+            Assert.All(Enumerable.Range(0, 2), index => Assert.True(JsonNode.DeepEquals(before["messages"][index], after["messages"][index])));
+
+            JsonNode reordered = ReadAsset(record.KeepMessages(new[] { second, first }));
+            Assert.True(JsonNode.DeepEquals(before["messages"][0], reordered["messages"][1]));
+            text.Text = "Updated city requirement";
+            JsonNode changed = ReadAsset(record.KeepMessages(history));
+            Assert.NotEqual((string)before["messages"][0]["$asset"], (string)changed["messages"][0]["$asset"]);
+            Assert.True(JsonNode.DeepEquals(before["messages"][1], changed["messages"][1]));
+            Assert.Contains(new string('x', 70000), ReadAsset(before["messages"][0]).ToJsonString());
+            Assert.Contains("Updated city requirement", ReadAsset(changed["messages"][0]).ToJsonString());
+            Assert.DoesNotContain(new string('x', 100), before.ToJsonString());
         }
 
         [Fact]

@@ -51,7 +51,20 @@ public sealed class HarnessSessionTests
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonNode.Parse(line).AsObject()).ToArray();
     }
-    private static JsonObject ReadAsset(ClientSession session, JsonNode asset) => JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)asset["$asset"]))).AsObject();
+    private static JsonNode Resolve(ClientSession session, JsonNode value)
+    {
+        if (value is JsonObject asset && asset["$asset"] != null)
+            return Resolve(session, JsonNode.Parse(File.ReadAllText(Path.Combine(session.Record.Directory, (string)asset["$asset"]))));
+        if (value is JsonArray array) return new JsonArray(array.Select(item => Resolve(session, item)).ToArray());
+        if (value is JsonObject obj)
+        {
+            var result = new JsonObject();
+            foreach (var item in obj) result[item.Key] = Resolve(session, item.Value);
+            return result;
+        }
+        return value?.DeepClone();
+    }
+    private static JsonObject ReadAsset(ClientSession session, JsonNode asset) => Resolve(session, asset).AsObject();
     private static JsonObject Data(ClientSession session, JsonNode line) => ReadAsset(session, line["attrs"]["airimayor.data"]);
 
     private static async Task FinishTurn(ClientSession session, Action action)

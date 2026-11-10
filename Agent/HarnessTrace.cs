@@ -291,13 +291,16 @@ namespace airimayor.Agent
             if (activity?.GetCustomProperty(m_Key) is not Span span) return;
             JsonNode content = JsonSerializer.SerializeToNode(update, AIJsonUtilities.DefaultOptions);
             Assets(content);
-            Data(activity, span, "model.output.delta", new JsonObject
+            JsonObject record = Event(activity, span, "instant");
+            record["name"] = "model.output.delta";
+            record["attrs"] = SessionRecord.DeltaAttributes(new JsonObject
             {
                 ["index"] = index,
                 ["text"] = update.Text,
                 ["reasoning"] = string.Concat(update.Contents.OfType<TextReasoningContent>().Select(item => item.Text)),
                 ["update"] = content,
             });
+            m_Record.EmitTrace(record);
         }
 
         private void Data(Activity activity, Span span, string name, JsonObject data)
@@ -344,6 +347,8 @@ namespace airimayor.Agent
                 JsonNode value = tag.Value is string text && IsJson(tag.Key)
                     ? JsonNode.Parse(text) : JsonSerializer.SerializeToNode(tag.Value);
                 Assets(value);
+                if ((tag.Key == "gen_ai.input.messages" || tag.Key == "gen_ai.output.messages") && value is JsonArray messages)
+                    value = m_Record.KeepMessageReferences(messages);
                 if (value != null)
                     attributes[tag.Key] = value is JsonObject || value is JsonArray || value.ToJsonString().Length > 4096
                         ? m_Record.KeepAsset(value) : value;

@@ -25,7 +25,7 @@ function fixture() {
     return result
   }
   const delta = (spanId: string, index: number, text: string, reasoning = '') => add({ type: 'instant', track: 'agents/mayor/llm', spanId, name: 'model.output.delta', attrs: {
-    'airimayor.data': asset({ index, text, reasoning, update: { contents: [{ type: 'text', text }] } }),
+    'airimayor.data': JSON.stringify({ index, text, reasoning, update: { contents: [{ type: 'text', text }] } }),
   } })
   const files = (suffix = '') => [file('session/records.jsonl', records.map(record => JSON.stringify(record)).join('\n') + suffix), ...assets]
   add({ type: 'source.started', format: 1, runtime: 'dotnet', profiles: [{ key: 'agent', version: '1' }] })
@@ -75,7 +75,7 @@ test('non-streaming final content becomes available only at its end, without inv
 
 test('long streamed sessions retain every update while the overview scales with calls', async () => {
   const trace = fixture()
-  const deltas = Array.from({ length: 200 }, (_, index) => trace.asset({ index, text: 'x' }))
+  const deltas = Array.from({ length: 200 }, (_, index) => JSON.stringify({ index, text: 'x' }))
   for (let call = 0; call < 200; call++) {
     const spanId = `model-${call}`
     trace.add({ type: 'span.begin', spanId, name: 'chat', track: 'agents/mayor/llm' })
@@ -85,6 +85,7 @@ test('long streamed sessions retain every update while the overview scales with 
   }
   trace.add({ type: 'source.stopped' })
   const files = trace.files()
+  assert.equal(files.length, 1, 'streamed updates must not need separate asset files')
   const recording = await loadRecording(files)
   const replay = new Replay(recording)
   replay.seek(recording.records.length - 1)
@@ -105,7 +106,7 @@ test('long streamed sessions retain every update while the overview scales with 
 test('reconstructs ACP output separately for root and owned conversations', async () => {
   const trace = fixture()
   for (const [agentSession, index, text, reasoning] of [['root', 0, 'Mayor ', ''], ['child', 0, 'Report', 'Inspect'], ['root', 1, 'reply', '']] as const)
-    trace.add({ type: 'instant', name: 'acp.output.delta', track: 'city/events', attrs: { 'airimayor.data': trace.asset({ agentSession, index, text, reasoning }) } })
+    trace.add({ type: 'instant', name: 'acp.output.delta', track: 'city/events', attrs: { 'airimayor.data': JSON.stringify({ agentSession, index, text, reasoning }) } })
   trace.add({ type: 'source.stopped' })
   const replay = new Replay(await loadRecording(trace.files()))
   replay.seek(2)
@@ -113,6 +114,48 @@ test('reconstructs ACP output separately for root and owned conversations', asyn
   assert.equal(replay.output({ kind: 'acp', agentSession: 'child' }).reasoning, 'Inspect')
   replay.seek(4)
   assert.equal(replay.output({ kind: 'acp', agentSession: 'root' }).text, 'Mayor reply')
+})
+
+test('message references restore ordered histories and model inputs while reading shared bodies once', async () => {
+  const trace = fixture()
+  const original = { role: 'user', contents: [{ type: 'text', text: 'Keep the river clean' }] }
+  const changed = { role: 'user', contents: [{ type: 'text', text: 'Keep the river and lake clean' }] }
+  const first = trace.asset(original), second = trace.asset(changed)
+  const before = trace.asset({ messages: [first], messageCount: 1 })
+  const after = trace.asset({ messages: [first, second], messageCount: 2 })
+  const inputs = trace.asset([second, first])
+  trace.add({ type: 'instant', name: 'history.repaired', track: 'city/events', attrs: {
+    'airimayor.data': trace.asset({ before, after }),
+  } })
+  trace.add({ type: 'span.complete', spanId: 'model', name: 'chat', track: 'agents/mayor/llm', durationMs: 1, status: 'ok', attrs: {
+    'gen_ai.input.messages': inputs,
+  } })
+  trace.add({ type: 'source.stopped' })
+  const reads = new Map<string, number>()
+  const recording = await loadRecording(trace.files().map(file => ({ ...file, read: async () => {
+    reads.set(file.path, (reads.get(file.path) ?? 0) + 1)
+    return file.read()
+  } })))
+  assert.deepEqual(recording.issues, [])
+  assert.deepEqual(recording.assets.resolve(payload(recording, recording.records[1])), {
+    before: { messages: [original], messageCount: 1 },
+    after: { messages: [original, changed], messageCount: 2 },
+  })
+  assert.deepEqual(recording.assets.resolve(inputs), [changed, original])
+  assert.equal(reads.get(`session/${first.$asset}`), 1)
+  assert.equal(reads.get(`session/${second.$asset}`), 1)
+})
+
+test('inline deltas validate nested assets and reject malformed or file-backed payloads', async () => {
+  const trace = fixture()
+  const missing = { $asset: 'assets/missing', mediaType: 'image/png', bytes: 3 }
+  for (const data of [JSON.stringify({ agentSession: 'root', update: { image: missing } }), '{', '[]', trace.asset({ text: 'old delta' })])
+    trace.add({ type: 'instant', name: 'acp.output.delta', track: 'city/events', attrs: { 'airimayor.data': data } })
+  trace.add({ type: 'source.stopped' })
+  const recording = await loadRecording(trace.files())
+  assert.equal(recording.issues.length, 4)
+  assert.ok(recording.issues.some(issue => issue.message === 'Missing asset: assets/missing'))
+  assert.equal(recording.issues.filter(issue => issue.message.startsWith('Invalid output delta')).length, 3)
 })
 
 test('attachment import overlaps independent reads and reports each loading phase', async () => {

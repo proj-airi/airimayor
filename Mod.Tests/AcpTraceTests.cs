@@ -21,6 +21,7 @@ namespace airimayor.Tests
 
             session.Prompt("inspect river", "Inspect this place", "[]");
             session.Cancel();
+            int assetCount = Directory.GetFiles(Path.Combine(session.Record.Directory, "assets")).Length;
             await session.SessionUpdateAsync(new SessionNotification
             {
                 SessionId = "external-session",
@@ -31,6 +32,7 @@ namespace airimayor.Tests
                 SessionId = "external-session",
                 Update = new SessionUpdateAgentMessageChunk { Content = new TextContent { Text = "partial river report" } },
             });
+            Assert.Equal(assetCount, Directory.GetFiles(Path.Combine(session.Record.Directory, "assets")).Length);
             await session.RequestPermissionAsync(new RequestPermissionRequest
             {
                 SessionId = "external-session",
@@ -54,7 +56,8 @@ namespace airimayor.Tests
             JsonObject stopped = Data(Assert.Single(records, record => (string)record["name"] == "stop.applied"));
             Assert.Equal((string)requested["requestId"], (string)stopped["requestId"]);
             Assert.False((bool)stopped["active"]);
-            JsonObject[] deltas = records.Where(record => (string)record["name"] == "acp.output.delta").Select(Data).ToArray();
+            JsonObject[] deltas = records.Where(record => (string)record["name"] == "acp.output.delta")
+                .Select(record => JsonNode.Parse((string)record["attrs"]["airimayor.data"]).AsObject()).ToArray();
             Assert.Equal(new[] { 0, 1 }, deltas.Select(delta => (int)delta["index"]));
             Assert.All(deltas, delta => Assert.Equal("external-session", (string)delta["agentSession"]));
             Assert.Equal("returned reasoning", (string)deltas[0]["reasoning"]);
