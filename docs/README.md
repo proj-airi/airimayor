@@ -73,6 +73,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-native-summary-upstream-reports.md](./research/2026-11-10-native-summary-upstream-reports.md) | Frozen public reports, MAF source/tests and comparison with the local summary failure |
 | [2026-11-10-planning-observation-design.md](./research/2026-11-10-planning-observation-design.md) | Frozen source facts and observation criteria for the 100k planning/summary run |
 | [2026-08-06-csharp-agent-runtimes.md](./research/2026-08-06-csharp-agent-runtimes.md) | C# agent stacks (superseded by [0001](./adr/0001-in-process-meai-loop.md)) |
 | [2026-08-06-agent-runtime-gameface-requirements.md](./research/2026-08-06-agent-runtime-gameface-requirements.md) | apeira/xsai vs Gameface Web APIs |
