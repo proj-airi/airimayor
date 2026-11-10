@@ -73,6 +73,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-10-harness-compaction-comparison.md](./research/2026-11-10-harness-compaction-comparison.md) | Frozen OpenCode, Pi and Responses comparison: summary instructions, framing and cache reuse |
 | [2026-11-10-instruction-position-papers.md](./research/2026-11-10-instruction-position-papers.md) | Frozen paper evidence for instruction position effects and limits of the local summary diagnosis |
 | [2026-11-10-native-summary-upstream-reports.md](./research/2026-11-10-native-summary-upstream-reports.md) | Frozen public reports, MAF source/tests and comparison with the local summary failure |
 | [2026-11-10-planning-observation-design.md](./research/2026-11-10-planning-observation-design.md) | Frozen source facts and observation criteria for the 100k planning/summary run |
