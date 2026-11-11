@@ -726,14 +726,13 @@ watch([view, activeTurn], async ([value, turn]) => {
             </div>
           </template>
           <template #metrics>
-            <div class="h-full overflow-y-auto">
-              <Analysis
-                :client="client"
-                :turn="activeTurn || undefined"
-                @select="select"
-                @seek="seekTime(summary.origin + $event)"
-              />
-              <details class="mx-3 mb-4 rounded border border-neutral-800 text-xs">
+            <Analysis
+              :client="client"
+              :turn="activeTurn || undefined"
+              @select="select"
+              @seek="seekTime(summary.origin + $event)"
+            >
+              <details class="rounded border border-neutral-800 text-xs">
                 <summary class="cursor-pointer p-3 text-neutral-400">
                   Individual metric distributions · p50 / p95
                 </summary>
@@ -744,7 +743,7 @@ watch([view, activeTurn], async ([value, turn]) => {
                   :locale="locale"
                 />
               </details>
-            </div>
+            </Analysis>
           </template>
           <template #search>
             <Search :client="client" :turn="activeTurn || undefined" @record="inspectRecord" />

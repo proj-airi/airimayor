@@ -4,9 +4,17 @@ import type { ViewerClient } from './viewer-client'
 import type { AnalysisFilter, AnalysisResult } from './recording-analysis'
 import { computed, ref, shallowRef, watch } from 'vue'
 import Filters from './viewer-filters.vue'
+import Report from './viewer-report.vue'
 
 const props = defineProps<{ client: ViewerClient; turn?: string }>()
 defineEmits<{ select: [item: TraceItemRef]; seek: [time: number] }>()
+const sections = [
+  { id: 'metrics-overview', label: 'Overview' },
+  { id: 'metrics-context', label: 'Context', title: 'Context and cache by request' },
+  { id: 'metrics-compaction', label: 'Compaction', title: 'Compaction checkpoints' },
+  { id: 'metrics-tools', label: 'Tools', title: 'Tool execution' },
+  { id: 'metrics-distributions', label: 'Distributions', title: 'Individual metrics' },
+]
 const filter = ref<AnalysisFilter>({}),
   offset = ref(0),
   result = shallowRef<AnalysisResult>(),
@@ -59,104 +67,112 @@ const chart = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-5 p-3 text-sm">
-    <p class="text-xs text-neutral-400">
-      {{ turn ? 'Selected turn' : 'Whole session' }} · latency percentiles use successful calls; token
-      totals include every reported usage, including failed or cancelled calls. Missing usage stays
-      unavailable.
-    </p>
-    <details v-if="result" class="text-xs text-neutral-400">
-      <summary class="mb-2 cursor-pointer">Advanced filters</summary>
-      <Filters v-model="filter" :options="result.options" :scoped="!!turn" />
-    </details>
-    <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
-    <p v-if="loading" class="text-neutral-400" role="status">Calculating…</p>
-    <template v-if="result">
-      <div class="flex flex-wrap gap-3">
-        <div
-          v-for="key in ['input', 'output', 'cache', 'reasoning'] as const"
-          :key="key"
-          class="rounded bg-neutral-900 px-3 py-2"
-        >
-          <div class="text-xs capitalize text-neutral-400">
-            {{ key === 'cache' ? 'Cache-read' : key }} tokens
-          </div>
-          <div class="mt-1 tabular-nums">{{ number(result.usage[key].total) }}</div>
-          <div class="text-xs text-neutral-500">
-            {{ result.usage[key].calls }} / {{ result.calls }} calls reported
-          </div>
-        </div>
-        <div class="rounded bg-neutral-900 px-3 py-2">
-          <div class="text-xs text-neutral-400">Weighted cache reuse</div>
-          <div class="mt-1">{{ percent(result.cacheRate) }}</div>
-          <div class="text-xs text-neutral-500">{{ result.cacheCalls }} calls with input + cache usage</div>
-        </div>
-      </div>
-      <p class="flex flex-wrap gap-3 text-xs text-neutral-400">
-        <span>{{ result.calls }} model calls</span
-        ><span v-for="(count, status) in result.outcomes" :key="status">{{ status }} {{ count }}</span>
+  <Report label="Metrics" :sections="sections">
+    <template #metrics-overview>
+      <p class="text-xs text-neutral-400">
+        {{ turn ? 'Selected turn' : 'Whole session' }} · latency percentiles use successful calls; token
+        totals include every reported usage, including failed or cancelled calls. Missing usage stays
+        unavailable.
       </p>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs tabular-nums">
-          <thead class="text-neutral-400">
-            <tr>
-              <th class="p-2">Successful-call latency</th>
-              <th>p50</th>
-              <th>p95</th>
-              <th>Samples</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(values, key) in result.latency" :key="key" class="border-t border-neutral-800">
-              <td class="p-2">
-                {{
-                  key === 'ttft'
-                    ? 'First content (includes reasoning)'
-                    : key === 'ttfat'
-                      ? 'First answer / tool call'
-                      : 'Total duration'
-                }}
-              </td>
-              <td>{{ ms(values.p50) }}</td>
-              <td>{{ ms(values.p95) }}</td>
-              <td>{{ values.count }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="text-xs text-neutral-500">
-        First content ignores empty and usage-only updates. Timing uses recorded attributes or observed
-        content timestamps; unstreamed content becomes observable at completion. Reasoning and cache counts
-        are subsets of output and input respectively. AIRI leaves p95 unavailable below 100 valid samples.
-      </p>
-      <div v-if="result.agents.length" class="overflow-x-auto">
-        <table class="w-full text-left text-xs tabular-nums">
-          <thead class="text-neutral-400">
-            <tr>
-              <th class="p-2">Agent</th>
-              <th>Calls</th>
-              <th>Input</th>
-              <th>Output</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="agent in result.agents" :key="agent.name" class="border-t border-neutral-800">
-              <td class="p-2">{{ agent.name }}</td>
-              <td>{{ agent.calls }}</td>
-              <td>{{ number(agent.input) }}</td>
-              <td>{{ number(agent.output) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <section class="space-y-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-medium">Context and cache by request</h3>
-          <span class="text-xs text-neutral-400"
-            >Input <span class="text-pink-300">●</span> · cache-read <span class="text-emerald-300">●</span> ·
-            current page</span
+      <details v-if="result" class="text-xs text-neutral-400">
+        <summary class="mb-2 cursor-pointer">Advanced filters</summary>
+        <Filters v-model="filter" :options="result.options" :scoped="!!turn" />
+      </details>
+      <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
+      <p v-if="loading" class="text-neutral-400" role="status">Calculating…</p>
+      <template v-if="result">
+        <div class="flex flex-wrap gap-3">
+          <div
+            v-for="key in ['input', 'output', 'cache', 'reasoning'] as const"
+            :key="key"
+            class="rounded bg-neutral-900 px-3 py-2"
           >
+            <div class="text-xs capitalize text-neutral-400">
+              {{ key === 'cache' ? 'Cache-read' : key }} tokens
+            </div>
+            <div class="mt-1 tabular-nums">{{ number(result.usage[key].total) }}</div>
+            <div class="text-xs text-neutral-500">
+              {{ result.usage[key].calls }} / {{ result.calls }} calls reported
+            </div>
+          </div>
+          <div class="rounded bg-neutral-900 px-3 py-2">
+            <div class="text-xs text-neutral-400">Weighted cache reuse</div>
+            <div class="mt-1">{{ percent(result.cacheRate) }}</div>
+            <div class="text-xs text-neutral-500">{{ result.cacheCalls }} calls with input + cache usage</div>
+          </div>
         </div>
+        <p class="flex flex-wrap gap-3 text-xs text-neutral-400">
+          <span>{{ result.calls }} model calls</span>
+          <span v-for="(count, status) in result.outcomes" :key="status">{{ status }} {{ count }}</span>
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs tabular-nums">
+            <thead class="text-neutral-400">
+              <tr>
+                <th class="p-2">Successful-call latency</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Samples</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(values, key) in result.latency" :key="key" class="border-t border-neutral-800">
+                <td class="p-2">
+                  {{
+                    key === 'ttft'
+                      ? 'First content (includes reasoning)'
+                      : key === 'ttfat'
+                        ? 'First answer / tool call'
+                        : 'Total duration'
+                  }}
+                </td>
+                <td>{{ ms(values.p50) }}</td>
+                <td>{{ ms(values.p95) }}</td>
+                <td>{{ values.count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-neutral-500">
+          First content ignores empty and usage-only updates. Timing uses recorded attributes or observed
+          content timestamps; unstreamed content becomes observable at completion. Reasoning and cache counts
+          are subsets of output and input respectively. AIRI leaves p95 unavailable below 100 valid samples.
+        </p>
+        <div v-if="result.agents.length" class="overflow-x-auto">
+          <table class="w-full text-left text-xs tabular-nums">
+            <thead class="text-neutral-400">
+              <tr>
+                <th class="p-2">Agent</th>
+                <th>Calls</th>
+                <th>Input</th>
+                <th>Output</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="agent in result.agents" :key="agent.name" class="border-t border-neutral-800">
+                <td class="p-2">{{ agent.name }}</td>
+                <td>{{ agent.calls }}</td>
+                <td>{{ number(agent.input) }}</td>
+                <td>{{ number(agent.output) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details v-if="result.gaps.length" class="text-xs text-neutral-400">
+          <summary class="cursor-pointer">Declared recording gaps</summary>
+          <p v-for="gap in result.gaps" :key="gap" class="mt-2">{{ gap }}</p>
+        </details>
+      </template>
+    </template>
+    <template #metrics-context>
+      <template v-if="result">
+        <p class="text-xs text-neutral-400">
+          Input
+          <span class="text-pink-300">●</span>
+          · cache-read
+          <span class="text-emerald-300">●</span>
+          · current page
+        </p>
         <svg
           v-if="chart.length"
           viewBox="0 0 800 165"
@@ -229,16 +245,18 @@ const chart = computed(() => {
           </table>
         </div>
         <div class="flex items-center justify-between text-xs">
-          <span class="text-neutral-500"
-            >¹ Change from the preceding reported request in the same agent session.</span
-          >
+          <span class="text-neutral-500">
+            ¹ Change from the preceding reported request in the same agent session.
+          </span>
           <div class="flex items-center gap-2">
             <button class="viewer-button py-1" :disabled="offset === 0" @click="offset -= 100">
-              Previous</button
-            ><span
-              >{{ result.modelTotal ? offset + 1 : 0 }}–{{ Math.min(offset + 100, result.modelTotal) }} /
-              {{ result.modelTotal }}</span
-            ><button
+              Previous
+            </button>
+            <span>
+              {{ result.modelTotal ? offset + 1 : 0 }}–{{ Math.min(offset + 100, result.modelTotal) }} /
+              {{ result.modelTotal }}
+            </span>
+            <button
               class="viewer-button py-1"
               :disabled="offset + 100 >= result.modelTotal"
               @click="offset += 100"
@@ -247,9 +265,10 @@ const chart = computed(() => {
             </button>
           </div>
         </div>
-      </section>
-      <section class="space-y-2">
-        <h3 class="font-medium">Compaction checkpoints</h3>
+      </template>
+    </template>
+    <template #metrics-compaction>
+      <template v-if="result">
         <p class="text-xs text-neutral-400">
           {{ result.compactionTotal }} recorded operations · showing the last 100. Counts here are history
           token estimates; request usage above is provider-reported.
@@ -280,9 +299,10 @@ const chart = computed(() => {
             </tbody>
           </table>
         </div>
-      </section>
-      <section class="space-y-2">
-        <h3 class="font-medium">Tool execution</h3>
+      </template>
+    </template>
+    <template #metrics-tools>
+      <template v-if="result">
         <p class="text-xs text-neutral-400">
           Duration p50/p95 uses successful calls. Queue p50/p95 uses all reported samples. Write verdicts
           describe ledger evidence, independently of the tool outcome.
@@ -319,11 +339,10 @@ const chart = computed(() => {
             </tbody>
           </table>
         </div>
-      </section>
-      <details v-if="result.gaps.length" class="text-xs text-neutral-400">
-        <summary class="cursor-pointer">Declared recording gaps</summary>
-        <p v-for="gap in result.gaps" :key="gap" class="mt-2">{{ gap }}</p>
-      </details>
+      </template>
     </template>
-  </div>
+    <template #metrics-distributions>
+      <slot />
+    </template>
+  </Report>
 </template>

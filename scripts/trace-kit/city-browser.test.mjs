@@ -165,6 +165,61 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   assert.equal(await slider.getAttribute('max'), '9')
   await page.getByRole('tab', { name: 'Metrics', exact: true }).click()
   await page.getByText('2 model calls', { exact: true }).waitFor()
+  const metricsNav = page.getByRole('navigation', { name: 'Metrics sections', exact: true })
+  const metricsReport = page.getByRole('region', { name: 'Metrics report', exact: true })
+  const metricsScroll = metricsReport.locator('[data-reka-scroll-area-viewport]')
+  async function openSection(name, title) {
+    const link = metricsNav.getByRole('link', { name, exact: true })
+    await link.press('Enter')
+    assert.equal(await link.getAttribute('aria-current'), 'location')
+    const heading = await metricsReport.getByRole('heading', { name: title, exact: true }).boundingBox()
+    const report = await metricsReport.boundingBox()
+    assert.ok(
+      Math.abs(heading.y - report.y - 12) < 2,
+      `${name} must scroll to the start of the report viewport`,
+    )
+    assert.ok(await metricsNav.isVisible(), 'section navigation stays reachable after scrolling')
+  }
+  assert.ok(
+    (await metricsNav.boundingBox()).x < (await metricsReport.boundingBox()).x,
+    'wide panels show section navigation on the left',
+  )
+  await openSection('Context', 'Context and cache by request')
+  await metricsReport
+    .getByRole('button', { name: 'mayor: input 100, cache unavailable', exact: true })
+    .press('Enter')
+  await inspector.waitFor()
+  await page.setViewportSize({ width: 900, height: 800 })
+  await page.waitForFunction(() => {
+    const nav = document.querySelector('nav[aria-label="Metrics sections"]').getBoundingClientRect()
+    const report = document.querySelector('[aria-label="Metrics report"]').getBoundingClientRect()
+    return nav.bottom <= report.top
+  })
+  const splitNav = await metricsNav.boundingBox()
+  const splitReport = await metricsReport.boundingBox()
+  assert.ok(
+    splitNav.y + splitNav.height <= splitReport.y,
+    `a narrow report pane uses top navigation even inside a desktop workbench: ${JSON.stringify({ splitNav, splitReport })}`,
+  )
+  await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="Metrics report"]').getBoundingClientRect().width > 1000,
+  )
+  await openSection('Tools', 'Tool execution')
+  const metricsPosition = await metricsScroll.evaluate((element) => element.scrollTop)
+  await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
+  await page.getByRole('tab', { name: 'Metrics', exact: true }).click()
+  assert.equal(await metricsScroll.evaluate((element) => element.scrollTop), metricsPosition)
+  assert.equal(
+    await metricsNav.getByRole('link', { name: 'Tools', exact: true }).getAttribute('aria-current'),
+    'location',
+  )
+  await metricsReport.hover()
+  await page.mouse.wheel(0, 10000)
+  await metricsNav.locator('a[aria-current="location"]').filter({ hasText: 'Distributions' }).waitFor()
+  await page.mouse.wheel(0, -10000)
+  await metricsNav.locator('a[aria-current="location"]').filter({ hasText: 'Overview' }).waitFor()
   await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
   await scope.click()
   await scopeMenu.getByRole('option', { name: 'Whole session', exact: true }).click()
@@ -176,6 +231,17 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   assert.ok(narrowScopeBox.x >= 0 && narrowScopeBox.x + narrowScopeBox.width <= 390)
   await page.keyboard.press('Escape')
   assert.equal(await scope.innerText(), 'Whole session')
+  await page.getByRole('tab', { name: 'Metrics', exact: true }).click()
+  const narrowNav = await metricsNav.boundingBox()
+  const narrowReport = await metricsReport.boundingBox()
+  assert.ok(
+    narrowNav.y + narrowNav.height <= narrowReport.y,
+    'narrow panels put section navigation above the report',
+  )
+  await openSection('Tools', 'Tool execution')
+  await openSection('Overview', 'Overview')
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
   await page.getByRole('button', { name: /chat second-model/ }).press('Enter')
   await inspector.waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

@@ -50,6 +50,7 @@ function ready(value: WorkbenchApi) {
       component: id,
       title: titles[id],
       minimumWidth: 260,
+      renderer: id === 'metrics' ? 'always' : undefined,
       ...(id === 'timeline'
         ? {}
         : { position: { referencePanel: 'timeline', direction: 'within' as const }, inactive: true }),
