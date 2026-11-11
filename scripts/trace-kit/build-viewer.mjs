@@ -3,7 +3,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Vue from 'unplugin-vue/esbuild'
-import { createGenerator, presetIcons, presetWind3 } from 'unocss'
+import { createGenerator, presetAttributify, presetIcons, presetWind3 } from 'unocss'
 import { parse } from 'yaml'
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -53,11 +53,14 @@ const template = await readFile(join(root, 'viewer-template.html'), 'utf8')
 const wind = presetWind3()
 const uno = await createGenerator({
   presets: [
+    presetAttributify(),
     wind,
     presetIcons({
       collections: {
         mingcute: () =>
           import('@iconify-json/mingcute/icons.json', { with: { type: 'json' } }).then((module) => module.default),
+        solar: () =>
+          import('@iconify-json/solar/icons.json', { with: { type: 'json' } }).then((module) => module.default),
       },
     }),
   ],
@@ -100,6 +103,8 @@ const packages = new Set(
     .map((path) => path.match(/(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)/)?.[1])
     .filter(Boolean),
 )
+packages.add('@iconify-json/mingcute')
+packages.add('@iconify-json/solar')
 const licenses = await Promise.all(
   [...packages].sort().map(async (name) => {
     const directory = resolve(root, 'node_modules', name)
@@ -107,6 +112,10 @@ const licenses = await Promise.all(
     if (name === '@iconify-json/mingcute') {
       const info = JSON.parse(await readFile(join(directory, 'info.json'), 'utf8'))
       return `${name}\n${info.author.name}\n${info.author.url}\n${info.license.url}\n${await readFile(join(root, 'node_modules/comlink/LICENSE'), 'utf8')}`
+    }
+    if (name === '@iconify-json/solar') {
+      const info = JSON.parse(await readFile(join(directory, 'info.json'), 'utf8'))
+      return `${name}\n${info.author.name}\n${info.author.url}\n${info.license.title}\n${info.license.url}\nIcons rendered as CSS masks.`
     }
     if (name === 'vaul-vue')
       return `${name}\nhttps://github.com/unovue/vaul-vue\n${await readFile(join(root, 'LICENSE.vaul-vue'), 'utf8')}`

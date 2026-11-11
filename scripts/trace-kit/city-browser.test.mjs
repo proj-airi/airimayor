@@ -22,7 +22,9 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
     })
   add({ type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] })
   for (const turn of ['first', 'second']) {
-    const text = JSON.stringify({ user: `Build ${turn} district` })
+    const text = JSON.stringify({
+      user: `Build ${turn} district. ${'Keep essential services, city finances and traffic working as the population grows. '.repeat(20)}`,
+    })
     await writeFile(join(directory, 'assets', turn), text)
     const ids = { turn, agent: 'mayor' }
     add({
@@ -118,8 +120,21 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto(pathToFileURL(fileURLToPath(new URL('./viewer.html', import.meta.url))).href)
   await page.getByLabel('Select session record folder').setInputFiles(directory)
-  await page.getByLabel('Recording scope').waitFor()
-  assert.equal(await page.getByLabel('Recording scope').inputValue(), 'second')
+  const scope = page.getByRole('combobox', { name: /Recording scope/ })
+  await scope.waitFor()
+  assert.equal(await scope.innerText(), 'Turn 2')
+  assert.notEqual(
+    await scope.locator('[aria-hidden="true"]').evaluate((element) => getComputedStyle(element).maskImage),
+    'none',
+    'the shared select arrow must be included in the offline build',
+  )
+  await scope.click()
+  const scopeMenu = page.getByRole('listbox')
+  await scopeMenu.waitFor()
+  const scopeBox = await scopeMenu.boundingBox()
+  assert.ok(scopeBox.x >= 0 && scopeBox.x + scopeBox.width <= 1280, 'the turn menu must fit inside the page')
+  assert.equal(await scopeMenu.getByText('Keep essential services', { exact: false }).count(), 0)
+  await page.keyboard.press('Escape')
   await page.getByText('Mayor turns', { exact: true }).waitFor()
   await page.getByText('Session events', { exact: true }).waitFor()
   const inspector = page.getByRole('region', { name: 'Selected call', exact: true })
@@ -137,13 +152,12 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   await page.getByRole('img', { name: 'Monthly balance trend', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Open trend evidence', exact: true }).click()
   await inspector.waitFor()
-  assert.equal(await page.getByLabel('Recording scope').inputValue(), '')
+  assert.equal(await scope.innerText(), 'Whole session')
   await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
-  await page.waitForFunction(
-    () => document.querySelector('[aria-label="Recording scope"]').value === 'second',
-  )
+  await scope.filter({ hasText: 'Turn 2' }).waitFor()
   await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
-  await page.getByLabel('Recording scope').selectOption('first')
+  await scope.click()
+  await scopeMenu.getByRole('option', { name: 'Turn 1', exact: true }).click()
   await page.getByRole('button', { name: /chat first-model/ }).waitFor()
   assert.equal(await page.getByRole('button', { name: /chat second-model/ }).count(), 0)
   // The late child belongs to the first turn; intervening second-turn events never enter its playback positions.
@@ -152,9 +166,16 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   await page.getByRole('tab', { name: 'Metrics', exact: true }).click()
   await page.getByText('2 model calls', { exact: true }).waitFor()
   await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
-  await page.getByLabel('Recording scope').selectOption('')
+  await scope.click()
+  await scopeMenu.getByRole('option', { name: 'Whole session', exact: true }).click()
   await page.getByRole('button', { name: /chat second-model/ }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
+  await scope.press('Enter')
+  await scopeMenu.waitFor()
+  const narrowScopeBox = await scopeMenu.boundingBox()
+  assert.ok(narrowScopeBox.x >= 0 && narrowScopeBox.x + narrowScopeBox.width <= 390)
+  await page.keyboard.press('Escape')
+  assert.equal(await scope.innerText(), 'Whole session')
   await page.getByRole('button', { name: /chat second-model/ }).press('Enter')
   await inspector.waitFor()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

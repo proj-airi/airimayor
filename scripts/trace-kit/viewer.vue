@@ -12,7 +12,7 @@ import {
   ViewPresetMenu,
   useTracerView,
 } from '@proj-airi/ui-trace'
-import { useTheme } from '@proj-airi/ui'
+import { Select, useTheme } from '@proj-airi/ui'
 import { proxy } from 'comlink'
 import { sortedLastIndex } from 'es-toolkit/compat'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
@@ -115,6 +115,21 @@ const phases = {
 const number = (value: number) => value.toLocaleString()
 const traceNow = () => (summary.value && frame.value ? summary.value.origin + frame.value.time : undefined)
 const statusLabels: Record<string, string> = { ok: 'Completed', error: 'Failed', cancelled: 'Cancelled' }
+const scopeOptions = computed(() => [
+  { value: 0, label: 'Whole session' },
+  ...(summary.value?.turns.map((turn, index) => ({
+    value: turn.id,
+    label: `Turn ${index + 1}`,
+    description: `${statusLabels[turn.status] ?? turn.status} · ${elapsed(turn.end - turn.start)}`,
+  })) ?? []),
+])
+const scopeValue = computed<string | number>({
+  get: () => activeTurn.value || 0,
+  set: (value: string | number) => {
+    activeTurn.value = typeof value === 'string' ? value : ''
+    void changeTurn()
+  },
+})
 
 function fitTimeline() {
   follow.value = false
@@ -587,18 +602,19 @@ watch([view, activeTurn], async ([value, turn]) => {
     <template v-if="summary && frame && client">
       <div class="flex shrink-0 flex-wrap items-center gap-3 px-2 py-2">
         <label class="flex min-w-0 flex-1 items-center gap-2 text-neutral-400">
-          <span class="shrink-0">Focus</span>
-          <select
-            v-model="activeTurn"
-            aria-label="Recording scope"
-            class="min-w-0 max-w-xl flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-neutral-200"
-            @change="changeTurn"
+          <span class="shrink-0" aria-hidden="true">Focus</span>
+          <span class="sr-only">Recording scope</span>
+          <Select
+            v-model="scopeValue"
+            :options="scopeOptions"
+            :content-min-width="0"
+            :disabled="scopeLoading"
+            class="min-w-0 max-w-xl flex-1"
           >
-            <option value="">Whole session</option>
-            <option v-for="(turn, index) in summary.turns" :key="turn.id" :value="turn.id">
-              Turn {{ index + 1 }} · {{ turn.label.slice(0, 100) }}
-            </option>
-          </select>
+            <template #value="{ option }">
+              <span class="block truncate">{{ option?.label }}</span>
+            </template>
+          </Select>
         </label>
         <span class="text-xs text-neutral-400">
           {{ focusedTurn?.models ?? summary.models }} model calls ·

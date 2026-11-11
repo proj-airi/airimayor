@@ -9,6 +9,8 @@ import { Script } from 'node:vm'
 test('the final offline HTML contains one syntactically valid viewer script', async () => {
   await promisify(execFile)(process.execPath, [fileURLToPath(new URL('./build-viewer.mjs', import.meta.url))])
   const html = await readFile(new URL('./viewer.html', import.meta.url), 'utf8')
+  assert.match(html, /480 Design/)
+  assert.match(html, /https:\/\/creativecommons.org\/licenses\/by\/4.0\//)
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script\s*>/gi)]
   assert.equal(scripts.length, 1)
   try {
