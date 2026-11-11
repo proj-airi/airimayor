@@ -46,12 +46,17 @@ useResizeObserver(content, updateActive)
 <template>
   <div class="report h-full min-h-0 min-w-0">
     <div class="report-layout">
-      <nav class="report-nav" :aria-label="`${label} sections`">
+      <nav class="report-nav border-b border-neutral-800" :aria-label="`${label} sections`">
         <a
           v-for="section in props.sections"
           :key="section.id"
           :href="`#${section.id}`"
-          class="report-link viewer-button justify-start px-3 py-2 text-xs"
+          class="flex shrink-0 items-center rounded-lg px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-primary-400/50"
+          :class="
+            active === section.id
+              ? 'bg-primary-900/40 text-primary-200 hover:bg-primary-900/50'
+              : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
+          "
           :aria-current="active === section.id ? 'location' : undefined"
           @click.prevent="goTo(section.id)"
         >
@@ -103,11 +108,6 @@ useResizeObserver(content, updateActive)
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.5rem;
-  border-bottom: 1px solid #262626;
-}
-.report-link[aria-current='location'] {
-  color: #f9a8d4;
-  background: rgb(249 168 212 / 10%);
 }
 @container (min-width: 640px) {
   .report-layout {
@@ -118,8 +118,8 @@ useResizeObserver(content, updateActive)
     flex-wrap: nowrap;
     width: 9rem;
     overflow-y: auto;
-    border-right: 1px solid #262626;
-    border-bottom: 0;
+    border-right-width: 1px;
+    border-bottom-width: 0;
   }
 }
 </style>

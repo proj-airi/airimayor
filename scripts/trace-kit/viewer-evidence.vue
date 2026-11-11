@@ -159,7 +159,7 @@ function changeRecord(event: Event) {
             />
             <figcaption class="mt-3 break-words">
               <a
-                class="text-pink-300 hover:underline"
+                class="text-primary-300 hover:underline"
                 :href="attachment.url"
                 :download="attachment.name"
                 :title="attachment.name"

@@ -85,7 +85,7 @@ const chart = computed(() => {
           <div
             v-for="key in ['input', 'output', 'cache', 'reasoning'] as const"
             :key="key"
-            class="rounded bg-neutral-900 px-3 py-2"
+            class="rounded-lg bg-neutral-800 px-3 py-2"
           >
             <div class="text-xs capitalize text-neutral-400">
               {{ key === 'cache' ? 'Cache-read' : key }} tokens
@@ -95,7 +95,7 @@ const chart = computed(() => {
               {{ result.usage[key].calls }} / {{ result.calls }} calls reported
             </div>
           </div>
-          <div class="rounded bg-neutral-900 px-3 py-2">
+          <div class="rounded-lg bg-neutral-800 px-3 py-2">
             <div class="text-xs text-neutral-400">Weighted cache reuse</div>
             <div class="mt-1">{{ percent(result.cacheRate) }}</div>
             <div class="text-xs text-neutral-500">{{ result.cacheCalls }} calls with input + cache usage</div>
@@ -168,19 +168,19 @@ const chart = computed(() => {
       <template v-if="result">
         <p class="text-xs text-neutral-400">
           Input
-          <span class="text-pink-300">●</span>
+          <span class="text-primary-300">●</span>
           · cache-read
-          <span class="text-emerald-300">●</span>
+          <span class="text-complementary-300">●</span>
           · current page
         </p>
         <svg
           v-if="chart.length"
           viewBox="0 0 800 165"
-          class="w-full rounded bg-neutral-900"
+          class="w-full rounded-lg bg-neutral-800/40"
           role="img"
           aria-label="Input and cache-read tokens for the current page of model calls"
         >
-          <line x1="20" y1="145" x2="780" y2="145" stroke="#525252" />
+          <line x1="20" y1="145" x2="780" y2="145" class="stroke-neutral-600" />
           <g
             v-for="call in chart"
             :key="call.key"
@@ -202,11 +202,23 @@ const chart = computed(() => {
               y1="145"
               :x2="call.x"
               :y2="call.inputY"
-              stroke="#f9a8d4"
+              class="stroke-primary-300"
               stroke-opacity="0.5"
             />
-            <circle v-if="call.inputY !== undefined" :cx="call.x" :cy="call.inputY" r="3" fill="#f9a8d4" />
-            <circle v-if="call.cacheY !== undefined" :cx="call.x" :cy="call.cacheY" r="2.5" fill="#6ee7b7" />
+            <circle
+              v-if="call.inputY !== undefined"
+              :cx="call.x"
+              :cy="call.inputY"
+              r="3"
+              class="fill-primary-300"
+            />
+            <circle
+              v-if="call.cacheY !== undefined"
+              :cx="call.x"
+              :cy="call.cacheY"
+              r="2.5"
+              class="fill-complementary-300"
+            />
           </g>
         </svg>
         <div class="overflow-x-auto">
@@ -227,7 +239,7 @@ const chart = computed(() => {
               <tr v-for="(call, index) in result.models" :key="call.key" class="border-t border-neutral-800">
                 <td class="p-2">
                   <button
-                    class="text-pink-300 hover:underline"
+                    class="text-primary-300 hover:underline"
                     @click="$emit('select', { kind: 'span', key: call.key })"
                   >
                     {{ offset + index + 1 }} · {{ call.agent }}
@@ -287,7 +299,7 @@ const chart = computed(() => {
             <tbody>
               <tr v-for="call in result.compactions" :key="call.index" class="border-t border-neutral-800">
                 <td class="p-2">
-                  <button class="text-pink-300 hover:underline" @click="$emit('seek', call.time)">
+                  <button class="text-primary-300 hover:underline" @click="$emit('seek', call.time)">
                     {{ (call.time / 1000).toFixed(1) }}s · {{ call.agent }}
                   </button>
                 </td>

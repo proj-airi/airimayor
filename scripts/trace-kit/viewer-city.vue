@@ -264,7 +264,7 @@ function chooseFrame(index: number) {
           v-for="card in cards"
           :key="card.key"
           class="min-w-0 rounded-md border bg-neutral-900/50 px-3 py-2 text-left hover:bg-neutral-800 disabled:cursor-default disabled:opacity-50"
-          :class="metric === card.key ? 'border-pink-300/50' : 'border-neutral-800'"
+          :class="metric === card.key ? 'border-primary-300/50' : 'border-neutral-800'"
           :aria-label="card.label"
           :aria-description="`${cityValue(card.latest?.value, card.unit)} · ${cityDate(card.latest)}`"
           :aria-pressed="metric === card.key"
@@ -289,7 +289,7 @@ function chooseFrame(index: number) {
           class="flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2 text-xs"
           :class="
             category === topic.key
-              ? 'border-pink-300 text-pink-300'
+              ? 'border-primary-300 text-primary-300'
               : 'border-transparent text-neutral-400 hover:text-neutral-200'
           "
           @click="category = topic.key"
@@ -337,7 +337,7 @@ function chooseFrame(index: number) {
             :min="0"
             :max="result.frames.length - 1"
             :value="selectedFramePosition"
-            class="min-w-0 flex-1 accent-pink-300"
+            class="min-w-0 flex-1 accent-primary-300"
             @input="chooseFrame(Number(($event.target as HTMLInputElement).value))"
         /></label>
         <button
@@ -385,7 +385,7 @@ function chooseFrame(index: number) {
               >
                 <td class="p-2">
                   <button
-                    class="hover:text-pink-300"
+                    class="hover:text-primary-300"
                     :title="`Simulation frame ${point.frame}`"
                     @click="frame = point.frame"
                   >
@@ -396,7 +396,7 @@ function chooseFrame(index: number) {
                 <td class="px-2">{{ cityValue(point.value, result.selected.unit) }}</td>
                 <td class="px-2">{{ sourceNames[point.kind] }}</td>
                 <td class="px-2">
-                  <button class="text-pink-300 hover:underline" @click="emit('record', point.index)">
+                  <button class="text-primary-300 hover:underline" @click="emit('record', point.index)">
                     Open source
                   </button>
                 </td>
@@ -420,7 +420,7 @@ function chooseFrame(index: number) {
         <div class="max-h-80 space-y-2 overflow-y-auto">
           <div v-for="event in result.events" :key="event.index" class="rounded bg-neutral-900 p-3">
             <div class="flex flex-wrap justify-between gap-2">
-              <button class="text-left text-xs text-pink-300 hover:underline" @click="emit('record', event.index)">
+              <button class="text-left text-xs text-primary-300 hover:underline" @click="emit('record', event.index)">
                 {{ event.label }}</button
               ><span class="text-xs text-neutral-500"
                 >{{ event.status }}{{ event.verdict ? ` · ${event.verdict}` : '' }}</span
@@ -459,7 +459,7 @@ function chooseFrame(index: number) {
       >
         <div class="flex flex-wrap justify-between gap-2 text-xs text-neutral-500">
           <span>{{ cityDate(result.notifications) }} · {{ cityNumber(result.notifications.total) }} citywide</span
-          ><button class="text-pink-300 hover:underline" @click="emit('record', result.notifications.index)">
+          ><button class="text-primary-300 hover:underline" @click="emit('record', result.notifications.index)">
             Open notification source
           </button>
         </div>
@@ -505,7 +505,7 @@ function chooseFrame(index: number) {
             </option></select
           ><button
             v-if="imageIndex !== undefined"
-            class="text-xs text-pink-300 hover:underline"
+            class="text-xs text-primary-300 hover:underline"
             @click="emit('record', imageIndex)"
           >
             Open image source

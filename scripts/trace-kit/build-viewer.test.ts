@@ -11,6 +11,8 @@ test('the final offline HTML contains one syntactically valid viewer script', as
   const html = await readFile(new URL('./viewer.html', import.meta.url), 'utf8')
   assert.match(html, /480 Design/)
   assert.match(html, /https:\/\/creativecommons.org\/licenses\/by\/4.0\//)
+  const css = html.match(/<style>([\s\S]*?)<\/style>/)![1]
+  assert.doesNotMatch(css, /theme\(|%alpha/)
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script\s*>/gi)]
   assert.equal(scripts.length, 1)
   try {

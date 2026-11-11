@@ -473,7 +473,7 @@ watch([view, activeTurn], async ([value, turn]) => {
       AIRI Mayor
     </a>
     <span class="text-neutral-600" aria-hidden="true">/</span>
-    <h1 class="text-sm font-medium text-pink-300">Trace</h1>
+    <h1 class="text-sm font-medium text-primary-300">Trace</h1>
     <span
       v-if="summary"
       class="order-last w-full truncate text-neutral-400 md:order-none md:w-auto md:min-w-0 md:flex-1"
@@ -493,11 +493,7 @@ watch([view, activeTurn], async ([value, turn]) => {
         <span class="viewer-icon i-mingcute:file-import-line" aria-hidden="true" />
         <span class="hidden sm:inline">Open file</span>
       </button>
-      <button
-        class="viewer-button bg-pink-300 text-neutral-950 hover:bg-pink-200"
-        :disabled="loading"
-        @click="chooseFolder"
-      >
+      <button class="viewer-button viewer-accent-button" :disabled="loading" @click="chooseFolder">
         <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />
         Open session
       </button>
@@ -540,16 +536,16 @@ watch([view, activeTurn], async ([value, turn]) => {
               <span class="border-l border-neutral-800/40" />
             </div>
             <span
-              class="absolute left-[4%] top-[15px] h-3 w-[90%] rounded border border-pink-300/45 bg-pink-300/15"
+              class="absolute left-[4%] top-[15px] h-3 w-[90%] rounded border border-primary-300/45 bg-primary-300/15"
             />
             <span
-              class="absolute left-[9%] top-[27px] h-[21px] w-[6%] rounded-bl-md border-b border-l border-pink-300/25"
+              class="absolute left-[9%] top-[27px] h-[21px] w-[6%] rounded-bl-md border-b border-l border-primary-300/25"
             />
-            <span class="absolute left-[16%] top-[41px] h-3 w-[33%] rounded bg-pink-300/50" />
+            <span class="absolute left-[16%] top-[41px] h-3 w-[33%] rounded bg-primary-300/50" />
             <span class="absolute left-[51%] top-[66px] h-3 w-[13%] rounded bg-emerald-200/40" />
-            <span class="absolute left-[66%] top-[91px] h-3 w-[26%] rounded bg-pink-300/30" />
-            <span class="absolute bottom-[-7px] left-[72%] top-[-3px] w-px bg-pink-300">
-              <span class="absolute left-[-2px] top-[-2px] size-[5px] rounded-full bg-pink-300" />
+            <span class="absolute left-[66%] top-[91px] h-3 w-[26%] rounded bg-primary-300/30" />
+            <span class="absolute bottom-[-7px] left-[72%] top-[-3px] w-px bg-primary-300">
+              <span class="absolute left-[-2px] top-[-2px] size-[5px] rounded-full bg-primary-300" />
             </span>
           </div>
         </div>
@@ -560,10 +556,7 @@ watch([view, activeTurn], async ([value, turn]) => {
         </h2>
         <p class="mt-3.5 text-sm text-neutral-400">Open a session record.</p>
         <div class="mt-8 flex flex-wrap justify-center gap-2.5">
-          <button
-            class="viewer-button rounded-lg bg-pink-300 px-[18px] py-3 text-neutral-950 hover:bg-pink-200"
-            @click="chooseFolder"
-          >
+          <button class="viewer-button viewer-accent-button rounded-lg px-[18px] py-3" @click="chooseFolder">
             <span class="viewer-icon i-mingcute:folder-open-line" aria-hidden="true" />
             Open session folder
           </button>
@@ -584,13 +577,13 @@ watch([view, activeTurn], async ([value, turn]) => {
     </p>
     <section v-if="loading" class="viewer-empty" role="status">
       <span
-        class="i-mingcute:loading-line size-6 animate-spin text-pink-300 motion-reduce:animate-none"
+        class="i-mingcute:loading-line size-6 animate-spin text-primary-300 motion-reduce:animate-none"
         aria-hidden="true"
       />
       <h2 class="text-sm font-medium">{{ progress ? phases[progress.phase] : 'Opening session…' }}</h2>
       <progress
         id="import-progress"
-        class="h-1 w-64 max-w-full accent-pink-300"
+        class="h-1 w-64 max-w-full accent-primary-300"
         :max="progress?.total || 1"
         :value="progress?.completed ?? 0"
       />
@@ -883,7 +876,7 @@ watch([view, activeTurn], async ([value, turn]) => {
             <span class="viewer-icon i-mingcute:left-line" aria-hidden="true" />
           </button>
           <button
-            class="viewer-icon-button mx-1 bg-pink-300 text-neutral-950 hover:bg-pink-200"
+            class="viewer-icon-button viewer-accent-button mx-1"
             :aria-label="playing ? 'Pause' : 'Play'"
             :title="playing ? 'Pause' : 'Play'"
             @click="togglePlay"
@@ -930,7 +923,7 @@ watch([view, activeTurn], async ([value, turn]) => {
         <div class="flex w-full items-center gap-3 md:w-auto md:min-w-0 md:flex-1">
           <span>{{ elapsed(frame.time - rangeStart) }}</span>
           <input
-            class="min-w-0 flex-1 cursor-pointer accent-pink-300"
+            class="min-w-0 flex-1 cursor-pointer accent-primary-300"
             type="range"
             min="0"
             :max="positions.length - 1"

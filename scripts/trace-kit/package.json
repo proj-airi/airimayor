@@ -33,10 +33,12 @@
     "vue-json-pretty": "2.6.0"
   },
   "devDependencies": {
+    "@proj-airi/unocss-preset-chromatic": "2.0.1",
     "@types/culori": "4.0.1",
     "@types/node": "22.19.0",
     "@unocss/reset": "66.7.5",
     "esbuild": "0.27.7",
+    "magic-string": "0.30.21",
     "playwright": "1.62.1",
     "typescript": "5.9.3",
     "unocss": "66.7.5",

@@ -109,7 +109,7 @@ watch(
         @click="$emit('record', hit.index)"
       >
         <div class="flex flex-wrap gap-2">
-          <span class="text-pink-300">{{ hit.name }}</span
+          <span class="text-primary-300">{{ hit.name }}</span
           ><span class="text-xs text-neutral-500"
             >{{ (hit.time / 1000).toFixed(1) }}s · {{ hit.status ?? 'event' }}</span
           >

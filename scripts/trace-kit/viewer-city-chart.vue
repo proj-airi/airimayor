@@ -108,7 +108,7 @@ function step(direction: number) {
       tabindex="0"
       role="group"
       :aria-label="`${cityMetricLabel(metric)} chart controls`"
-      class="relative h-44 w-full rounded-md border border-neutral-800 bg-neutral-900/40 outline-none focus-visible:border-pink-300 sm:h-56 xl:h-64"
+      class="relative h-44 w-full rounded-md border border-neutral-800 bg-neutral-900/40 outline-none focus-visible:border-primary-300 sm:h-56 xl:h-64"
       @keydown.left.prevent="step(-1)"
       @keydown.right.prevent="step(1)"
       @keydown.enter.prevent="current && emit('frame', current.frame)"
@@ -126,8 +126,8 @@ function step(direction: number) {
         <title>{{ cityMetricLabel(metric) }} over recorded city time</title>
         <desc>Line connects recorded readings. Hover or use Left and Right to inspect; Enter selects a city time.</desc>
         <g v-for="tick in chart.yTicks" :key="tick.value">
-          <line :x1="chart.left" :y1="tick.y" :x2="chart.right" :y2="tick.y" stroke="#262626" />
-          <text :x="chart.left - 10" :y="tick.y + 4" text-anchor="end" fill="#737373" font-size="10">
+          <line :x1="chart.left" :y1="tick.y" :x2="chart.right" :y2="tick.y" class="stroke-neutral-800" />
+          <text :x="chart.left - 10" :y="tick.y + 4" text-anchor="end" class="fill-neutral-500" font-size="10">
             {{ cityNumber(tick.value, true) }}
           </text>
         </g>
@@ -136,7 +136,7 @@ function step(direction: number) {
           data-city-line
           :points="chart.polyline"
           fill="none"
-          stroke="#f9a8d4"
+          class="stroke-primary-300"
           stroke-width="2"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -147,7 +147,7 @@ function step(direction: number) {
           :cx="point.x"
           :cy="point.y"
           r="2.5"
-          fill="#f9a8d4"
+          class="fill-primary-300"
         />
         <g v-if="cursor">
           <line
@@ -155,10 +155,10 @@ function step(direction: number) {
             :y1="chart.top"
             :x2="cursor.x"
             :y2="chart.bottom"
-            stroke="#a3a3a3"
+            class="stroke-neutral-400"
             stroke-dasharray="3 4"
           />
-          <circle :cx="cursor.x" :cy="cursor.y" r="4" fill="#f9a8d4" stroke="#171717" stroke-width="2" />
+          <circle :cx="cursor.x" :cy="cursor.y" r="4" class="fill-primary-300 stroke-neutral-900" stroke-width="2" />
         </g>
         <text
           v-for="(tick, index) in chart.xTicks"
@@ -166,7 +166,7 @@ function step(direction: number) {
           :x="tick.x"
           :y="chart.bottom + 21"
           :text-anchor="index === 0 ? 'start' : index === chart.xTicks.length - 1 ? 'end' : 'middle'"
-          fill="#737373"
+          class="fill-neutral-500"
           font-size="10"
         >
           {{ tick.label }}
@@ -182,7 +182,7 @@ function step(direction: number) {
           @keydown.enter.stop="emit('record', action.index)"
         >
           <title>{{ action.label }}{{ action.count > 1 ? ` and ${action.count - 1} more` : '' }}</title>
-          <circle :cx="action.x" :cy="chart.bottom - 8" r="6" fill="#fbbf24" stroke="#171717" stroke-width="2" />
+          <circle :cx="action.x" :cy="chart.bottom - 8" r="6" class="fill-amber-400 stroke-neutral-900" stroke-width="2" />
         </g>
       </svg>
     </div>
@@ -210,7 +210,7 @@ function step(direction: number) {
         </button>
       </div>
       <button
-        class="flex items-center gap-1 rounded px-1.5 py-1 text-pink-300 hover:bg-neutral-800 disabled:text-neutral-600"
+        class="flex items-center gap-1 rounded px-1.5 py-1 text-primary-300 hover:bg-neutral-800 disabled:text-neutral-600"
         aria-label="Open trend evidence"
         :disabled="!current"
         @click="current && emit('record', current.index)"

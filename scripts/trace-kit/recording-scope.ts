@@ -91,6 +91,7 @@ export function presentRecords(records: readonly TraceRecord[]): TraceRecord[] {
       order: 10,
       render: ['spans'],
       label: 'Mayor turns',
+      color: '#64748b',
     },
     {
       path: 'agents/{agent}/execution',
@@ -99,6 +100,7 @@ export function presentRecords(records: readonly TraceRecord[]): TraceRecord[] {
       order: 20,
       render: ['spans'],
       label: 'Agent execution',
+      color: '#64748b',
     },
     { path: 'city/events', group: 'session', order: 0, render: ['instants'], label: 'Session events' },
     { path: 'city/diagnostics', group: 'session', order: 10, render: ['instants'], label: 'Diagnostics' },

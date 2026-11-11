@@ -92,7 +92,7 @@ async function move(direction: number) {
           :aria-selected="item.key === value"
           class="block w-full rounded px-2 py-2 text-left text-sm hover:bg-neutral-800"
           :class="[
-            item.key === value ? 'text-pink-300' : 'text-neutral-300',
+            item.key === value ? 'text-primary-300' : 'text-neutral-300',
             page * 30 + index === active ? 'bg-neutral-800' : '',
           ]"
           @click="choose(item.key)"

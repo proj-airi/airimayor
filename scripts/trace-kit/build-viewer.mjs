@@ -2,8 +2,10 @@ import { build } from 'esbuild'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { presetChromatic } from '@proj-airi/unocss-preset-chromatic'
+import MagicString from 'magic-string'
 import Vue from 'unplugin-vue/esbuild'
-import { createGenerator, presetAttributify, presetIcons, presetWind3 } from 'unocss'
+import { createGenerator, presetAttributify, presetIcons, presetWind3, transformerDirectives } from 'unocss'
 import { parse } from 'yaml'
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -50,11 +52,10 @@ const result = await build({
   },
 })
 const template = await readFile(join(root, 'viewer-template.html'), 'utf8')
-const wind = presetWind3()
 const uno = await createGenerator({
   presets: [
     presetAttributify(),
-    wind,
+    presetWind3(),
     presetIcons({
       collections: {
         mingcute: () =>
@@ -63,15 +64,17 @@ const uno = await createGenerator({
           import('@iconify-json/solar/icons.json', { with: { type: 'json' } }).then((module) => module.default),
       },
     }),
+    presetChromatic({ baseHue: 220.44, colors: { primary: 0, complementary: 180 } }),
   ],
-  theme: { colors: { primary: wind.theme.colors.pink } },
+  transformers: [transformerDirectives()],
   shortcuts: {
     'viewer-button':
-      'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal text-neutral-300 hover:bg-neutral-800 disabled:cursor-default disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-pink-300',
+      'inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-normal text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100 disabled:cursor-default disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-primary-400/50',
+    'viewer-accent-button': 'bg-primary-800/75 text-primary-200 hover:bg-primary-800 hover:text-primary-100',
     'viewer-icon-button': 'viewer-button size-8 p-0',
     'viewer-icon': 'inline-block size-4 shrink-0',
     'viewer-tab':
-      'viewer-button rounded-none border-b-2 border-transparent px-1 aria-selected:border-pink-300 aria-selected:text-pink-300',
+      'viewer-button rounded-none border-b-2 border-transparent px-1 aria-selected:border-primary-300 aria-selected:text-primary-200',
     'viewer-empty':
       'flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-neutral-400',
   },
@@ -82,13 +85,18 @@ const sourceFiles = (await readdir(root, { recursive: true })).filter(
 const utilities = await uno.generate(
   [template, ...(await Promise.all(sourceFiles.map((file) => readFile(join(root, file), 'utf8'))))].join('\n'),
 )
-const css =
-  utilities.css +
-  '\n' +
-  result.outputFiles
-    .filter((file) => file.path.endsWith('.css'))
-    .map((file) => file.text)
-    .join('\n')
+let componentStyles = result.outputFiles
+  .filter((file) => file.path.endsWith('.css'))
+  .map((file) => file.text)
+  .join('\n')
+for (const enforce of ['pre', undefined, 'post']) {
+  for (const transformer of uno.config.transformers.filter((item) => item.enforce === enforce)) {
+    const source = new MagicString(componentStyles)
+    await transformer.transform(source, join(root, 'viewer.css'), { uno })
+    componentStyles = source.toString()
+  }
+}
+const css = utilities.css + '\n' + componentStyles
 const license = await readFile(join(root, 'LICENSE.upstream'), 'utf8')
 const upstream = JSON.parse(await readFile(join(root, 'upstream.json'), 'utf8'))
 const script = result.outputFiles.find((file) => file.path.endsWith('.js')).text.replaceAll('</script', '<\\/script')
