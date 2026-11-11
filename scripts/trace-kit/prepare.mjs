@@ -7,7 +7,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 const upstream = JSON.parse(await readFile(join(root, 'upstream.json'), 'utf8'))
 const destination = join(root, '.upstream')
 const stamp = join(destination, 'commit')
-const packages = ['trace-kit', 'stream-kit', 'timeline-canvas', 'ui-timeline', 'ui-trace', 'ui']
+const packages = ['trace-kit', 'stream-kit', 'timeline-canvas', 'ui-timeline', 'ui-trace', 'ui-panes', 'ui']
 const expected = `${upstream.commit}\n${packages.join(',')}`
 if ((await readFile(stamp, 'utf8').catch(() => '')) === expected) {
   console.log(`AIRI trace packages ${upstream.commit} already prepared`)

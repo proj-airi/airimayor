@@ -90,7 +90,7 @@ test('long streamed sessions retain every update while the overview scales with 
   const replay = new Replay(recording)
   replay.seek(recording.records.length - 1)
   assert.equal(recording.full.reader.indexes.byKey.size, trace.records.length)
-  assert.equal(replay.view.reader.indexes.byKey.size, trace.records.length)
+  assert.equal(replay.view.reader.indexes.byKey.size, 402, 'replay state reads structural events, not 40,000 output chunks')
   assert.equal(replay.view.timelineView().spans.size, 200)
   assert.equal(replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' }).chunks, 200)
   assert.ok(recording.full.timelineView().tracks.get('agents/mayor/llm')!.instants.length <= 200)
@@ -101,6 +101,9 @@ test('long streamed sessions retain every update while the overview scales with 
   } })
   replay.output({ kind: 'model', source: 'cs2:game', epoch: 'record', spanId: 'model-199' })
   assert.ok(historyReads <= 400, `one model output must not rescan unrelated history; read ${historyReads} records`)
+  historyReads = 0
+  replay.seek(recording.records.length - 10)
+  assert.ok(historyReads <= 402, `rewind must read structural events only; read ${historyReads} records`)
 })
 
 test('reconstructs ACP output separately for root and owned conversations', async () => {

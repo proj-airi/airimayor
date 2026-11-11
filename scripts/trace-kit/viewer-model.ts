@@ -2,7 +2,7 @@ import type { TraceAssetRef, TraceRecord } from '@proj-airi/trace-kit'
 import { spanKeyOf, TRACE_FORMAT, traceRecordSchema } from '@proj-airi/trace-kit'
 import { sortedLastIndex } from 'es-toolkit/compat'
 import { safeParse } from 'valibot'
-import { createSessionViewReader } from './session-view'
+import { createSessionViewReader, isOverviewRecord } from './session-view'
 
 export interface LocalFile {
   path: string
@@ -283,15 +283,25 @@ export function payload(recording: Recording, record: TraceRecord): Record<strin
 export class Replay {
   readonly view: ViewReader
   cursor = -1
+  private structural: number[]
+  private applied = 0
 
   constructor(readonly recording: Recording) {
     this.view = createSessionViewReader(recording.records[0].clock)
+    this.structural = recording.records.flatMap((record, index) => (isOverviewRecord(record) ? [index] : []))
   }
 
   seek(index: number) {
     const next = Math.max(-1, Math.min(this.recording.records.length - 1, Math.floor(index)))
-    if (next < this.cursor) { this.view.reader.reset(); this.cursor = -1 }
-    this.view.reader.handleRecords(this.recording.records.slice(this.cursor + 1, next + 1))
+    if (next < this.cursor) {
+      this.view.reader.reset()
+      this.applied = 0
+    }
+    const end = sortedLastIndex(this.structural, next)
+    this.view.reader.handleRecords(
+      this.structural.slice(this.applied, end).map((index) => this.recording.records[index]),
+    )
+    this.applied = end
     this.cursor = next
     return this.view.timelineView()
   }

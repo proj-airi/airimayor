@@ -15,6 +15,7 @@
       "@proj-airi/trace-kit/views": [".upstream/packages/trace-kit/src/views/index.ts"],
       "@proj-airi/trace-kit/voice": [".upstream/packages/trace-kit/src/profiles/voice.ts"],
       "@proj-airi/ui-trace": [".upstream/packages/ui-trace/src/index.ts"],
+      "@proj-airi/ui-panes": [".upstream/packages/ui-panes/src/index.ts"],
       "@proj-airi/ui-timeline": [".upstream/packages/ui-timeline/src/index.ts"],
       "@proj-airi/ui-timeline/headless": [".upstream/packages/ui-timeline/src/headless/index.ts"],
       "@proj-airi/timeline-canvas": [".upstream/packages/timeline-canvas/src/index.ts"],

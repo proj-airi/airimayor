@@ -66,6 +66,14 @@ test('AIRI view readers receive native nesting and cursor-scoped evidence withou
   const spans = [...view.timelineView().spans.values()]
   assert.equal(spans.length, 4)
   const run = spans.find((span) => span.name === 'invoke_agent mayor')!
+  assert.equal(run.track, 'agents/mayor/execution')
+  assert.equal(spans.filter((span) => span.track === 'agents/mayor/turn').length, 1)
+  assert.equal(summary.turns.length, 1)
+  assert.equal(summary.turns[0].models, 1)
+  assert.equal(summary.turns[0].tools, 1)
+  const rawRun = session.rawRecords([2])[0]
+  assert.ok('track' in rawRun)
+  assert.equal(rawRun.track, 'agents/mayor/turn', 'raw evidence keeps its native track')
   const model = spans.find((span) => span.track.endsWith('/llm'))!
   assert.equal(model.parentKey, run.key)
   const selection = summary.defaultSelection!
@@ -118,6 +126,99 @@ test('inline deltas keep nested attachments, typed updates and search available 
   assert.equal(found.hits[0].index, 2)
 })
 
+test('request scopes keep background origins and native links while separating session events and execution', async () => {
+  const records: object[] = []
+  const files: { path: string; file: Blob }[] = []
+  const asset = (value: object) => {
+    const file = new Blob([JSON.stringify(value)])
+    const path = `assets/${files.length}`
+    files.push({ path: `session/${path}`, file })
+    return { $asset: path, mediaType: 'application/json', bytes: file.size }
+  }
+  const add = (value: object) =>
+    records.push({
+      source: 'game',
+      epoch: 'scope',
+      clock: 'mono:scope',
+      seq: records.length,
+      ts: records.length * 10,
+      ...value,
+    })
+  add({ type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] })
+  for (const turn of ['roads', 'power']) {
+    const ids = { turn }
+    add({
+      type: 'span.begin',
+      spanId: turn,
+      track: 'agents/mayor/turn',
+      name: 'chat-turn',
+      ids,
+      attrs: { 'airimayor.data': asset({ user: `Build ${turn}` }) },
+    })
+    add({
+      type: 'span.begin',
+      spanId: `${turn}-run`,
+      track: 'agents/mayor/turn',
+      name: 'invoke_agent mayor',
+      ids,
+    })
+    add({
+      type: 'span.complete',
+      spanId: `${turn}-model`,
+      parentSpanId: `${turn}-run`,
+      track: 'agents/mayor/llm',
+      name: 'chat',
+      durationMs: 1,
+      status: 'ok',
+      ids,
+    })
+    add({ type: 'instant', name: 'stop.requested', track: 'city/events', ids })
+    add({ type: 'span.end', spanId: `${turn}-run`, track: 'agents/mayor/turn', status: 'ok', ids })
+    add({ type: 'span.end', spanId: turn, track: 'agents/mayor/turn', status: 'ok', ids })
+  }
+  add({
+    type: 'span.complete',
+    spanId: 'child',
+    track: 'agents/inspector/llm',
+    name: 'chat',
+    durationMs: 1,
+    status: 'ok',
+    ids: { originTurn: 'roads' },
+  })
+  add({ type: 'source.stopped' })
+  const session = new ViewerSession()
+  const summary = await session.openFiles(
+    [{ path: 'session/records.jsonl', file: new Blob([records.map((record) => JSON.stringify(record)).join('\n')]) }, ...files],
+    () => {},
+  )
+  assert.deepEqual(
+    summary.turns.map(({ label, models }) => ({ label, models })),
+    [
+      { label: 'Build roads', models: 2 },
+      { label: 'Build power', models: 1 },
+    ],
+  )
+  const reader = createTraceViewReader(summary.clock)
+  reader.reader.handleRecords(session.overview('roads'))
+  const state = reader.timelineView()
+  assert.equal(state.spans.size, 4)
+  assert.equal(
+    [...state.spans.values()].some((span) => span.spanId.startsWith('power')),
+    false,
+  )
+  assert.equal(state.tracks.get('city/events')!.definition!.group, 'session')
+  assert.equal(state.tracks.get('agents/mayor/turn')!.spans.length, 1)
+  assert.equal(state.spans.get('game/scope/roads-model')!.parentKey, 'game/scope/roads-run')
+  assert.equal(
+    session.eventLog('roads').entries.some((entry) => entry.record.ids?.turn === 'power'),
+    false,
+  )
+  assert.equal(session.analyze({ turn: 'roads' }).calls, 2)
+  const rawRun = session.rawRecords([2])[0]
+  assert.ok('track' in rawRun)
+  assert.equal(rawRun.track, 'agents/mayor/turn')
+})
+
 test('offline AIRI event log retains records beyond the live projection limit without filling canvas rows with output chunks', async () => {
   const count = 20_001
   const records: object[] = [
@@ -152,6 +253,6 @@ test('offline AIRI event log retains records beyond the live projection limit wi
   const log = session.eventLog()
   assert.equal(log.entries.length, count + 4)
   assert.equal(log.dropped, 0)
-  assert.equal(summary.overview.length, 4)
+  assert.equal(summary.overview.filter((record) => record.source !== 'viewer').length, 4)
   assert.equal(session.frame(summary.events.length - 1, summary.defaultSelection, false).chunks, count)
 })

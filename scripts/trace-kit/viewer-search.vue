@@ -3,7 +3,7 @@ import type { ViewerClient } from './viewer-client'
 import type { AnalysisFilter, AnalysisResult, SearchResult } from './recording-analysis'
 import { ref, shallowRef, watch } from 'vue'
 import Filters from './viewer-filters.vue'
-const props = defineProps<{ client: ViewerClient }>()
+const props = defineProps<{ client: ViewerClient; turn?: string }>()
 defineEmits<{ record: [index: number] }>()
 const filter = ref<AnalysisFilter>({}),
   text = ref(''),
@@ -29,21 +29,26 @@ watch(
   { immediate: true },
 )
 watch(
-  [filter, text],
+  [filter, text, () => props.turn],
   () => {
     offset.value = 0
   },
   { flush: 'sync' },
 )
 watch(
-  () => [props.client, filter.value, text.value, offset.value] as const,
+  () => [props.client, filter.value, text.value, offset.value, props.turn] as const,
   ([client, query, phrase, start], _old, onCleanup) => {
     let current = true
     loading.value = true
     error.value = ''
     const timer = setTimeout(async () => {
       try {
-        const next = await client.remote.search({ ...query, text: phrase, offset: start })
+        const next = await client.remote.search({
+          ...query,
+          ...(props.turn ? { turn: props.turn } : {}),
+          text: phrase,
+          offset: start,
+        })
         if (current) result.value = next
       } catch (value) {
         if (current) error.value = String(value)
@@ -69,10 +74,14 @@ watch(
       placeholder="Search prompts, tool arguments, results, output…"
       class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2"
     />
-    <Filters v-if="options" v-model="filter" :options="options" tools />
+    <details v-if="options" class="text-xs text-neutral-400">
+      <summary class="mb-2 cursor-pointer">Advanced filters</summary>
+      <Filters v-model="filter" :options="options" tools :scoped="!!turn" />
+    </details>
     <p class="text-xs text-neutral-500">
-      Whole recording · case-insensitive phrase search across records and referenced JSON/text attachments. Images and
-      binary files are not searched. Run and turn filters include background origins.
+      {{ turn ? 'Selected turn' : 'Whole session' }} · case-insensitive phrase search across records and
+      referenced JSON/text attachments. Images and binary files are not searched. Run and turn filters include
+      background origins.
     </p>
     <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
     <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
@@ -80,7 +89,8 @@ watch(
         loading ? 'Searching…' : `${result?.total.toLocaleString() ?? 0} matching records`
       }}</span>
       <div class="flex items-center gap-2">
-        <button class="viewer-button py-1" :disabled="loading || offset === 0" @click="offset -= 50">Previous</button
+        <button class="viewer-button py-1" :disabled="loading || offset === 0" @click="offset -= 50">
+          Previous</button
         ><span>{{ result?.total ? offset + 1 : 0 }}–{{ Math.min(offset + 50, result?.total ?? 0) }}</span
         ><button
           class="viewer-button py-1"

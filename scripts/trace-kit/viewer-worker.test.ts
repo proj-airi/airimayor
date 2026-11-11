@@ -64,7 +64,7 @@ test('the production recording worker imports cloned files, reports progress, an
     assert.deepEqual(summary.issues, [])
     assert.equal(summary.models, 1)
     assert.equal(
-      summary.overview.length,
+      summary.overview.filter((record) => record.source !== 'viewer').length,
       4,
       'output chunks stay in replay and the complete log, rather than the overview',
     )

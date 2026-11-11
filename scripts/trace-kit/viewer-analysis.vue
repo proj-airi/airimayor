@@ -5,7 +5,7 @@ import type { AnalysisFilter, AnalysisResult } from './recording-analysis'
 import { computed, ref, shallowRef, watch } from 'vue'
 import Filters from './viewer-filters.vue'
 
-const props = defineProps<{ client: ViewerClient }>()
+const props = defineProps<{ client: ViewerClient; turn?: string }>()
 defineEmits<{ select: [item: TraceItemRef]; seek: [time: number] }>()
 const filter = ref<AnalysisFilter>({}),
   offset = ref(0),
@@ -13,14 +13,14 @@ const filter = ref<AnalysisFilter>({}),
   error = ref(''),
   loading = ref(false)
 watch(
-  filter,
+  [filter, () => props.turn],
   () => {
     offset.value = 0
   },
   { flush: 'sync' },
 )
 watch(
-  () => [props.client, filter.value, offset.value] as const,
+  () => [props.client, filter.value, offset.value, props.turn] as const,
   async ([client, query, start], _old, onCleanup) => {
     let current = true
     onCleanup(() => {
@@ -29,7 +29,10 @@ watch(
     loading.value = true
     error.value = ''
     try {
-      const next = await client.remote.analyze({ ...query }, start)
+      const next = await client.remote.analyze(
+        { ...query, ...(props.turn ? { turn: props.turn } : {}) },
+        start,
+      )
       if (current) result.value = next
     } catch (value) {
       if (current) error.value = String(value)
@@ -58,10 +61,14 @@ const chart = computed(() => {
 <template>
   <div class="space-y-5 p-3 text-sm">
     <p class="text-xs text-neutral-400">
-      Whole recording · filters apply to the analysis below. Latency percentiles use successful calls; token totals
-      include every reported usage, including failed or cancelled calls. Missing usage stays unavailable.
+      {{ turn ? 'Selected turn' : 'Whole session' }} · latency percentiles use successful calls; token
+      totals include every reported usage, including failed or cancelled calls. Missing usage stays
+      unavailable.
     </p>
-    <Filters v-if="result" v-model="filter" :options="result.options" />
+    <details v-if="result" class="text-xs text-neutral-400">
+      <summary class="mb-2 cursor-pointer">Advanced filters</summary>
+      <Filters v-model="filter" :options="result.options" :scoped="!!turn" />
+    </details>
     <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
     <p v-if="loading" class="text-neutral-400" role="status">Calculating…</p>
     <template v-if="result">
@@ -71,9 +78,13 @@ const chart = computed(() => {
           :key="key"
           class="rounded bg-neutral-900 px-3 py-2"
         >
-          <div class="text-xs capitalize text-neutral-400">{{ key === 'cache' ? 'Cache-read' : key }} tokens</div>
+          <div class="text-xs capitalize text-neutral-400">
+            {{ key === 'cache' ? 'Cache-read' : key }} tokens
+          </div>
           <div class="mt-1 tabular-nums">{{ number(result.usage[key].total) }}</div>
-          <div class="text-xs text-neutral-500">{{ result.usage[key].calls }} / {{ result.calls }} calls reported</div>
+          <div class="text-xs text-neutral-500">
+            {{ result.usage[key].calls }} / {{ result.calls }} calls reported
+          </div>
         </div>
         <div class="rounded bg-neutral-900 px-3 py-2">
           <div class="text-xs text-neutral-400">Weighted cache reuse</div>
@@ -114,9 +125,9 @@ const chart = computed(() => {
         </table>
       </div>
       <p class="text-xs text-neutral-500">
-        First content ignores empty and usage-only updates. Timing uses recorded attributes or observed content
-        timestamps; unstreamed content becomes observable at completion. Reasoning and cache counts are subsets of
-        output and input respectively.
+        First content ignores empty and usage-only updates. Timing uses recorded attributes or observed
+        content timestamps; unstreamed content becomes observable at completion. Reasoning and cache counts
+        are subsets of output and input respectively. AIRI leaves p95 unavailable below 100 valid samples.
       </p>
       <div v-if="result.agents.length" class="overflow-x-auto">
         <table class="w-full text-left text-xs tabular-nums">
@@ -142,8 +153,8 @@ const chart = computed(() => {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-medium">Context and cache by request</h3>
           <span class="text-xs text-neutral-400"
-            >Input <span class="text-pink-300">●</span> · cache-read <span class="text-emerald-300">●</span> · current
-            page</span
+            >Input <span class="text-pink-300">●</span> · cache-read <span class="text-emerald-300">●</span> ·
+            current page</span
           >
         </div>
         <svg
@@ -165,7 +176,8 @@ const chart = computed(() => {
             @keydown.enter="$emit('select', { kind: 'span', key: call.key })"
           >
             <title>
-              {{ call.agent }} · {{ call.status }} · input {{ number(call.input) }} · cache {{ number(call.cache) }} ·
+              {{ call.agent }} · {{ call.status }} · input {{ number(call.input) }} · cache
+              {{ number(call.cache) }} ·
               {{ percent(call.cacheRate) }}
             </title>
             <line
@@ -186,7 +198,7 @@ const chart = computed(() => {
             <thead class="text-neutral-400">
               <tr>
                 <th class="p-2">Call</th>
-                <th class="px-2">Outcome</th>
+                <th class="px-2">Recorded outcome</th>
                 <th class="px-2">Input</th>
                 <th class="px-2">Δ input¹</th>
                 <th class="px-2">Cache %</th>
@@ -217,13 +229,20 @@ const chart = computed(() => {
           </table>
         </div>
         <div class="flex items-center justify-between text-xs">
-          <span class="text-neutral-500">¹ Change from the preceding reported request in the same agent session.</span>
+          <span class="text-neutral-500"
+            >¹ Change from the preceding reported request in the same agent session.</span
+          >
           <div class="flex items-center gap-2">
-            <button class="viewer-button py-1" :disabled="offset === 0" @click="offset -= 100">Previous</button
+            <button class="viewer-button py-1" :disabled="offset === 0" @click="offset -= 100">
+              Previous</button
             ><span
               >{{ result.modelTotal ? offset + 1 : 0 }}–{{ Math.min(offset + 100, result.modelTotal) }} /
               {{ result.modelTotal }}</span
-            ><button class="viewer-button py-1" :disabled="offset + 100 >= result.modelTotal" @click="offset += 100">
+            ><button
+              class="viewer-button py-1"
+              :disabled="offset + 100 >= result.modelTotal"
+              @click="offset += 100"
+            >
               Next
             </button>
           </div>
@@ -232,8 +251,8 @@ const chart = computed(() => {
       <section class="space-y-2">
         <h3 class="font-medium">Compaction checkpoints</h3>
         <p class="text-xs text-neutral-400">
-          {{ result.compactionTotal }} recorded operations · showing the last 100. Counts here are history token
-          estimates; request usage above is provider-reported.
+          {{ result.compactionTotal }} recorded operations · showing the last 100. Counts here are history
+          token estimates; request usage above is provider-reported.
         </p>
         <div class="max-h-72 overflow-auto">
           <table class="w-full whitespace-nowrap text-left text-xs tabular-nums">
@@ -265,8 +284,8 @@ const chart = computed(() => {
       <section class="space-y-2">
         <h3 class="font-medium">Tool execution</h3>
         <p class="text-xs text-neutral-400">
-          Duration p50/p95 uses successful calls. Queue p50/p95 uses all reported samples. Write verdicts describe
-          ledger evidence, independently of the tool outcome.
+          Duration p50/p95 uses successful calls. Queue p50/p95 uses all reported samples. Write verdicts
+          describe ledger evidence, independently of the tool outcome.
         </p>
         <div class="overflow-x-auto">
           <table class="w-full whitespace-nowrap text-left text-xs tabular-nums">
@@ -284,11 +303,15 @@ const chart = computed(() => {
               <tr v-for="tool in result.tools" :key="tool.name" class="border-t border-neutral-800">
                 <td class="p-2">{{ tool.name }}</td>
                 <td class="px-2">{{ tool.calls }}</td>
-                <td class="px-2">{{ tool.ok }} / {{ tool.error }} / {{ tool.cancelled }} / {{ tool.incomplete }}</td>
+                <td class="px-2">
+                  {{ tool.ok }} / {{ tool.error }} / {{ tool.cancelled }} / {{ tool.incomplete }}
+                </td>
                 <td class="px-2">
                   {{ ms(tool.duration.p50) }} / {{ ms(tool.duration.p95) }} ({{ tool.duration.count }})
                 </td>
-                <td class="px-2">{{ ms(tool.queued.p50) }} / {{ ms(tool.queued.p95) }} ({{ tool.queued.count }})</td>
+                <td class="px-2">
+                  {{ ms(tool.queued.p50) }} / {{ ms(tool.queued.p95) }} ({{ tool.queued.count }})
+                </td>
                 <td class="px-2">
                   {{ tool.confirmed }} / {{ tool.diverged }} / {{ tool.undetermined }} / {{ tool.invalid }}
                 </td>

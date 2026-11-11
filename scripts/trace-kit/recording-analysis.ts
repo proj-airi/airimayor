@@ -1,5 +1,6 @@
 import type { Recording, Span } from './viewer-model'
 import { spanKeyOf } from '@proj-airi/trace-kit'
+import { summarizeMetric } from '@proj-airi/trace-kit/projections'
 import { isAsset, isObject, payload } from './viewer-model'
 import { judgeWrite, type Verdict } from './write-evidence'
 
@@ -128,9 +129,9 @@ const outcome = (span?: Span): Outcome =>
         ? 'cancelled'
         : 'error'
 const distribution = (values: (number | undefined)[]): Distribution => {
-  const sorted = values.filter((value): value is number => value !== undefined).sort((a, b) => a - b)
-  const percentile = (p: number) => (sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] : undefined)
-  return { count: sorted.length, p50: percentile(0.5), p95: percentile(0.95) }
+  const samples = values.flatMap((value, time) => (value === undefined ? [] : [{ value, time }]))
+  const summary = summarizeMetric('recording', samples)
+  return { count: summary.count, p50: summary.values.p50, p95: summary.values.p95 }
 }
 function matches(
   ids: Record<string, string | number>,

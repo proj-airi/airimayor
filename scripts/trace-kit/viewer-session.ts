@@ -10,6 +10,7 @@ import { isOverviewRecord } from './session-view'
 import { isAsset, isObject, loadDirectory, loadRecording, payload, Replay } from './viewer-model'
 import { RecordingAnalysis, type AnalysisFilter, type SearchQuery } from './recording-analysis'
 import { CityRecording, type CityQuery } from './city-view'
+import { RecordingScope, presentRecords, type RecordedTurn } from './recording-scope'
 
 export type Selection =
   | { kind: 'span'; key: string }
@@ -32,9 +33,9 @@ export interface SessionSummary {
   events: { index: number; time: number }[]
   overview: TraceRecord[]
   defaultSelection?: Selection
-  playTimes: number[]
   seekTimes: number[]
   seekPositions: number[]
+  turns: RecordedTurn[]
 }
 export interface Frame {
   position: number
@@ -75,6 +76,7 @@ export class ViewerSession {
   private structural: number[] = []
   private analysis?: RecordingAnalysis
   private cityRecording?: CityRecording
+  private scope?: RecordingScope
 
   async openFiles(files: SelectedFile[], progress: Progress) {
     return this.loaded(
@@ -100,6 +102,7 @@ export class ViewerSession {
     this.analysis = new RecordingAnalysis(recording)
     this.cityRecording = new CityRecording(recording)
     this.replay = new Replay(recording)
+    this.scope = new RecordingScope(recording)
     this.positions = new Map(recording.events.map((index, position) => [index, position]))
     this.recordKeys = new Map(recording.records.map((record, index) => [recordKey(record), index]))
     this.structural = recording.records.flatMap((record, index) => (isOverviewRecord(record) ? [index] : []))
@@ -111,9 +114,6 @@ export class ViewerSession {
       time: recording.full.reader.timeOf(recording.records[index]).time - origin,
     }))
     const duration = events.reduce((end, event) => Math.max(end, event.time), 0)
-    const playTimes = events.map(() => 0)
-    for (let index = 1; index < events.length; index++)
-      playTimes[index] = playTimes[index - 1] + Math.min(1500, Math.max(0, events[index].time - events[index - 1].time))
     const ordered = events
       .map((event, position) => ({ ...event, position }))
       .sort((a, b) => a.time - b.time || a.position - b.position)
@@ -130,33 +130,40 @@ export class ViewerSession {
       clock: recording.records[0].clock,
       issues: recording.issues.map((issue) => issue.message),
       events,
-      overview: this.structural.map((index) => recording.records[index]),
+      overview: this.overview(),
+      turns: this.scope.turns,
       defaultSelection: lastModel
         ? { kind: 'span', key: lastModel.key }
         : lastOutput === undefined
           ? undefined
           : this.selectionAt(lastOutput),
-      playTimes,
       seekTimes: ordered.map((event) => event.time),
       seekPositions: ordered.map((event) => event.position),
     })
   }
 
+  overview(turn?: string) {
+    return presentRecords(this.scope!.records(turn).filter(isOverviewRecord))
+  }
+
   locate(item: TraceItemRef) {
-    const index = item.kind === 'span' ? this.recording!.index.spans.get(item.key)?.[0] : this.recordKeys.get(item.key)
+    const index =
+      item.kind === 'span' ? this.recording!.index.spans.get(item.key)?.[0] : this.recordKeys.get(item.key)
     if (index === undefined) throw new Error('The selected item is absent from this recording.')
     return { position: this.positions.get(index) ?? 0, selection: this.selectionAt(index) }
   }
 
   snapshot(position: number) {
     const cursor = this.summary!.events[position].index
-    return this.recording!.index.through(this.structural, cursor).map((index) => this.recording!.records[index])
+    return presentRecords(
+      this.recording!.index.through(this.structural, cursor).map((index) => this.recording!.records[index]),
+    )
   }
 
-  eventLog(): EventLogState {
+  eventLog(turn?: string): EventLogState {
     const projection = createEventLogProjection({ limit: Infinity })
     const reader = new TraceReader([projection], this.summary!.clock)
-    reader.handleRecords(this.recording!.records)
+    reader.handleRecords(this.scope!.records(turn))
     return reader.view(projection)
   }
 
@@ -182,10 +189,12 @@ export class ViewerSession {
 
   private async attachment(ref: TraceAssetRef): Promise<Attachment | undefined> {
     const file = await this.recording!.assets.file(ref)
-    if (file) return {
-      name: ref.$asset.split('/').at(-1)!, type: ref.mediaType,
-      blob: new Blob([(await file.read()) as Uint8Array<ArrayBuffer>], { type: ref.mediaType }),
-    }
+    if (file)
+      return {
+        name: ref.$asset.split('/').at(-1)!,
+        type: ref.mediaType,
+        blob: new Blob([(await file.read()) as Uint8Array<ArrayBuffer>], { type: ref.mediaType }),
+      }
   }
 
   private selectionAt(index: number): Selection | undefined {
@@ -200,7 +209,8 @@ export class ViewerSession {
       const key = spanKeyOf(record.source, record.epoch, record.spanId)
       if (recording.full.timelineView().spans.has(key)) return { kind: 'span', key }
     }
-    if (record.type === 'instant' || record.type === 'log' || record.type === 'state') return { kind: 'record', index }
+    if (record.type === 'instant' || record.type === 'log' || record.type === 'state')
+      return { kind: 'record', index }
   }
 
   private context(selection: Selection | undefined, cursor: number) {
@@ -304,7 +314,11 @@ export class ViewerSession {
     }
     for (const index of context.indices) {
       const record = recording.records[index]
-      if (record.type === 'instant' && record.name !== 'model.output.delta' && record.name !== 'acp.output.delta')
+      if (
+        record.type === 'instant' &&
+        record.name !== 'model.output.delta' &&
+        record.name !== 'acp.output.delta'
+      )
         add(record.name, payload(recording, record))
       if (record.type === 'log') add(`${record.level} · ${record.message}`, record)
     }

@@ -6,6 +6,165 @@ import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { chromium } from 'playwright'
 
+test('request focus scopes interleaved replay and metrics, with an inspector that opens only when selected', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'airimayor-viewer-browser-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await mkdir(join(directory, 'assets'))
+  const records = []
+  const add = (value) =>
+    records.push({
+      source: 'game',
+      epoch: 'turns',
+      clock: 'mono:turns',
+      seq: records.length,
+      ts: records.length * 100,
+      ...value,
+    })
+  add({ type: 'source.started', format: 1, runtime: 'dotnet', profiles: [] })
+  for (const turn of ['first', 'second']) {
+    const text = JSON.stringify({ user: `Build ${turn} district` })
+    await writeFile(join(directory, 'assets', turn), text)
+    const ids = { turn, agent: 'mayor' }
+    add({
+      type: 'span.begin',
+      spanId: turn,
+      name: 'chat-turn',
+      track: 'agents/mayor/turn',
+      ids,
+      attrs: {
+        'airimayor.data': {
+          $asset: `assets/${turn}`,
+          mediaType: 'application/json',
+          bytes: Buffer.byteLength(text),
+        },
+      },
+    })
+    add({
+      type: 'span.begin',
+      spanId: `${turn}-run`,
+      name: 'invoke_agent mayor',
+      track: 'agents/mayor/turn',
+      ids,
+    })
+    add({
+      type: 'span.begin',
+      spanId: `${turn}-model`,
+      parentSpanId: `${turn}-run`,
+      name: `chat ${turn}-model`,
+      track: 'agents/mayor/llm',
+      ids,
+    })
+    add({
+      type: 'instant',
+      spanId: `${turn}-model`,
+      name: 'model.output.delta',
+      track: 'agents/mayor/llm',
+      ids,
+      attrs: { 'airimayor.data': JSON.stringify({ index: 0, text: `${turn} answer` }) },
+    })
+    add({
+      type: 'span.end',
+      spanId: `${turn}-model`,
+      track: 'agents/mayor/llm',
+      status: 'ok',
+      ids,
+      attrs: { 'gen_ai.usage.input_tokens': turn === 'first' ? 100 : 200 },
+    })
+    if (turn === 'first') {
+      const data = JSON.stringify({
+        tool: 'get_budget',
+        success: true,
+        result: JSON.stringify({ balance: 10000, totalIncome: 200, totalExpenses: 100 }),
+        timeline: { applied: { frame: 100, gameTime: '2026-01-01 00:00' } },
+      })
+      await writeFile(join(directory, 'assets', 'budget'), data)
+      add({
+        type: 'instant',
+        name: 'city.tool.result',
+        track: 'agents/mayor/tools',
+        ids,
+        attrs: {
+          'airimayor.data': {
+            $asset: 'assets/budget',
+            mediaType: 'application/json',
+            bytes: Buffer.byteLength(data),
+          },
+        },
+      })
+    }
+    add({ type: 'instant', name: 'stop.requested', track: 'city/events', ids })
+    add({ type: 'span.end', spanId: `${turn}-run`, track: 'agents/mayor/turn', status: 'ok', ids })
+    add({ type: 'span.end', spanId: turn, track: 'agents/mayor/turn', status: 'ok', ids })
+  }
+  add({
+    type: 'span.complete',
+    spanId: 'child',
+    name: 'background inspection',
+    track: 'agents/inspector/llm',
+    durationMs: 1,
+    status: 'ok',
+    ids: { originTurn: 'first', agent: 'inspector' },
+  })
+  add({ type: 'source.stopped' })
+  await writeFile(
+    join(directory, 'records.jsonl'),
+    records.map((record) => JSON.stringify(record)).join('\n'),
+  )
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+  page.setDefaultTimeout(10000)
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto(pathToFileURL(fileURLToPath(new URL('./viewer.html', import.meta.url))).href)
+  await page.getByLabel('Select session record folder').setInputFiles(directory)
+  await page.getByLabel('Recording scope').waitFor()
+  assert.equal(await page.getByLabel('Recording scope').inputValue(), 'second')
+  await page.getByText('Mayor turns', { exact: true }).waitFor()
+  await page.getByText('Session events', { exact: true }).waitFor()
+  const inspector = page.getByRole('region', { name: 'Selected call', exact: true })
+  assert.equal(await inspector.count(), 0)
+  const timeline = page.getByRole('region', { name: 'Session trace', exact: true })
+  const fullWidth = (await timeline.boundingBox()).width
+  await page.getByRole('button', { name: /chat second-model/ }).press('Enter')
+  await inspector.waitFor()
+  assert.ok((await timeline.boundingBox()).width < fullWidth)
+  await page.getByText('second answer', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
+  assert.equal(await inspector.count(), 0)
+  await page.getByRole('tab', { name: 'City', exact: true }).click()
+  await page.getByRole('tab', { name: 'Finances', exact: true }).click()
+  await page.getByRole('img', { name: 'Monthly balance trend', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Open trend evidence', exact: true }).click()
+  await inspector.waitFor()
+  assert.equal(await page.getByLabel('Recording scope').inputValue(), '')
+  await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="Recording scope"]').value === 'second',
+  )
+  await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
+  await page.getByLabel('Recording scope').selectOption('first')
+  await page.getByRole('button', { name: /chat first-model/ }).waitFor()
+  assert.equal(await page.getByRole('button', { name: /chat second-model/ }).count(), 0)
+  // The late child belongs to the first turn; intervening second-turn events never enter its playback positions.
+  const slider = page.getByLabel('Replay event position')
+  assert.equal(await slider.getAttribute('max'), '9')
+  await page.getByRole('tab', { name: 'Metrics', exact: true }).click()
+  await page.getByText('2 model calls', { exact: true }).waitFor()
+  await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
+  await page.getByLabel('Recording scope').selectOption('')
+  await page.getByRole('button', { name: /chat second-model/ }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: /chat second-model/ }).press('Enter')
+  await inspector.waitFor()
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  const footer = await page.getByRole('region', { name: 'Replay controls' }).boundingBox()
+  assert.ok(footer.y + footer.height <= 844, 'playback stays in the viewport while inspecting a call')
+  await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
+  await timeline.waitFor()
+  assert.deepEqual(errors, [])
+})
+
 test('City prioritizes a line trend and supports road search, evidence, rewind and a narrow viewport', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'airimayor-city-browser-'))
   await mkdir(join(directory, 'assets'))
@@ -75,7 +234,10 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   tool('list_notifications', 10000, { total: 2, countsByType: { Traffic: 2 }, notifications: [] })
   add({ type: 'source.stopped' })
   await Promise.all(files)
-  await writeFile(join(directory, 'records.jsonl'), records.map((record) => JSON.stringify(record)).join('\n'))
+  await writeFile(
+    join(directory, 'records.jsonl'),
+    records.map((record) => JSON.stringify(record)).join('\n'),
+  )
   const browser = await chromium.launch({ headless: true })
   t.after(() => browser.close())
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
@@ -87,7 +249,10 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await page.getByRole('tab', { name: 'City', exact: true }).click()
   const trend = page.getByRole('img', { name: 'Population trend', exact: true })
   await trend.waitFor()
-  assert.ok(await trend.locator('polyline[data-city-line]').count(), 'City trends must join readings with a line')
+  assert.ok(
+    await trend.locator('polyline[data-city-line]').count(),
+    'City trends must join readings with a line',
+  )
   assert.equal(
     await page.getByRole('region', { name: 'Selected call', exact: true }).count(),
     0,
@@ -104,7 +269,11 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   const value = page.locator('[data-city-active-value]')
   await page.getByRole('group', { name: 'Population chart controls', exact: true }).focus()
   await page.keyboard.press('ArrowLeft')
-  assert.notEqual(await value.innerText(), '18,000', 'keyboard inspection reaches the previous recorded reading')
+  assert.notEqual(
+    await value.innerText(),
+    '18,000',
+    'keyboard inspection reaches the previous recorded reading',
+  )
   await page.getByRole('combobox', { name: 'City measure', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Search city measure', exact: true }).fill('unemployment')
   await page.keyboard.press('Enter')
@@ -120,7 +289,7 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await page.getByRole('tab', { name: 'Traffic', exact: true }).click()
   await page.getByRole('combobox', { name: 'Road', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Search road', exact: true }).fill('72928:1')
-  await page.getByRole('option').first().click()
+  await page.getByRole('listbox').getByRole('option').first().click()
   assert.match(await page.getByRole('combobox', { name: 'Road', exact: true }).innerText(), /72928:1/)
   await page.getByRole('combobox', { name: 'Road', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Search road', exact: true }).fill('7292')
@@ -138,7 +307,9 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   )
   await page.getByLabel('City time', { exact: true }).focus()
   await page.keyboard.press('Home')
-  await page.waitForFunction(() => document.querySelector('[data-city-active-value]').textContent.trim() === '10,000')
+  await page.waitForFunction(
+    () => document.querySelector('[data-city-active-value]').textContent.trim() === '10,000',
+  )
   await page.getByText('· outside the shown range', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Return to replay', exact: true }).click()
   await page.getByLabel('Trend range', { exact: true }).selectOption('all')
@@ -148,7 +319,7 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await page.getByRole('button', { name: 'Previous city time', exact: true }).click()
   await page.getByRole('button', { name: 'Return to replay', exact: true }).click()
   await page.getByRole('button', { name: 'Open trend evidence', exact: true }).click()
-  await page.getByRole('button', { name: 'Close city evidence', exact: true }).click()
+  await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
   assert.equal(await page.getByRole('region', { name: 'Selected call', exact: true }).count(), 0)
   await page.waitForFunction(
     () =>
