@@ -411,6 +411,27 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await page.getByRole('tab', { name: 'City', exact: true }).click()
   const trend = page.getByRole('img', { name: 'Population trend', exact: true })
   await trend.waitFor()
+  async function assertAxisLabelsFit() {
+    const labels = await trend.locator('text').evaluateAll((elements) =>
+      elements.map((element) => {
+        const bounds = element.getBoundingClientRect()
+        const chart = element.ownerSVGElement.getBoundingClientRect()
+        return {
+          text: element.textContent.trim(),
+          fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+          fits:
+            bounds.left >= chart.left && bounds.right <= chart.right &&
+            bounds.top >= chart.top && bounds.bottom <= chart.bottom,
+        }
+      }),
+    )
+    assert.ok(labels.length > 0)
+    for (const label of labels) {
+      assert.ok(label.fontSize <= 12, `Axis label "${label.text}" is too large at ${label.fontSize}px`)
+      assert.ok(label.fits, `Axis label "${label.text}" must fit inside the chart`)
+    }
+  }
+  await assertAxisLabelsFit()
   assert.ok(
     await trend.locator('polyline[data-city-line]').count(),
     'City trends must join readings with a line',
@@ -494,6 +515,7 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await trend.waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('tab', { name: 'City', exact: true }).click()
+  await assertAxisLabelsFit()
   const mobileChart = await trend.boundingBox(),
     mobileFooter = await page.getByLabel('Replay event position').boundingBox()
   assert.ok(

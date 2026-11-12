@@ -127,7 +127,7 @@ function step(direction: number) {
         <desc>Line connects recorded readings. Hover or use Left and Right to inspect; Enter selects a city time.</desc>
         <g v-for="tick in chart.yTicks" :key="tick.value">
           <line :x1="chart.left" :y1="tick.y" :x2="chart.right" :y2="tick.y" class="stroke-neutral-800" />
-          <text :x="chart.left - 10" :y="tick.y + 4" text-anchor="end" class="fill-neutral-500" font-size="10">
+          <text :x="chart.left - 10" :y="tick.y + 4" text-anchor="end" class="fill-neutral-500 text-[10px]">
             {{ cityNumber(tick.value, true) }}
           </text>
         </g>
@@ -166,8 +166,7 @@ function step(direction: number) {
           :x="tick.x"
           :y="chart.bottom + 21"
           :text-anchor="index === 0 ? 'start' : index === chart.xTicks.length - 1 ? 'end' : 'middle'"
-          class="fill-neutral-500"
-          font-size="10"
+          class="fill-neutral-500 text-[10px]"
         >
           {{ tick.label }}
         </text>
