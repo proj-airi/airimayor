@@ -21,6 +21,7 @@
     "comlink": "4.4.2",
     "culori": "4.0.2",
     "dockview-vue": "8.2.0",
+    "echarts": "6.1.0",
     "es-toolkit": "1.51.0",
     "floating-vue": "5.2.2",
     "reka-ui": "2.10.3",

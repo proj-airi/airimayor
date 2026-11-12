@@ -92,34 +92,17 @@ export function cityDate(stamp?: CityStamp) {
   return stamp?.gameTime ?? (stamp ? 'Historical sample' : 'No reading yet')
 }
 
-export function cityChart(points: CityPoint[], clocks: CityStamp[], width: number, height: number) {
-  const left = 60,
-    right = Math.max(left + 1, width - 18),
-    top = 14,
-    bottom = height - 30
-  const start = points[0]?.frame ?? 0,
-    end = points.at(-1)?.frame ?? start
-  const values = points.map((point) => point.value)
-  let min = values.length ? Math.min(...values) : 0,
-    max = values.length ? Math.max(...values) : 1
-  if (min === max) {
-    const padding = Math.max(1, Math.abs(min) * 0.05)
-    min -= padding
-    max += padding
-  }
-  const raw = (max - min) / 4,
-    power = 10 ** Math.floor(Math.log10(raw))
-  const step = [1, 2, 5, 10].find((value) => value * power >= raw)! * power
-  min = Math.floor(min / step) * step
-  max = Math.ceil(max / step) * step
-  const x = (frame: number) =>
-    end === start ? (left + right) / 2 : left + ((frame - start) / (end - start)) * (right - left)
-  const y = (value: number) => bottom - ((value - min) / (max - min)) * (bottom - top)
-  const plotted = points.map((point) => ({ ...point, x: x(point.frame), y: y(point.value) }))
+export function cityTrendRange(points: CityPoint[], clocks: CityStamp[]) {
+  const start = points[0]?.frame ?? clocks[0]?.frame ?? 0
+  return { start, end: Math.max(start, points.at(-1)?.frame ?? start, clocks.at(-1)?.frame ?? start) }
+}
+
+export function cityTrendTicks(points: CityPoint[], clocks: CityStamp[], width: number) {
+  const { start, end } = cityTrendRange(points, clocks)
   const dated = clocks.filter((clock) => clock.gameTime && clock.frame >= start && clock.frame <= end)
   const showYear = new Set(dated.map((clock) => clock.gameTime!.slice(0, 4))).size > 1
   const desired = width < 550 ? [0, 1] : [0, 0.5, 1]
-  const ticks = [
+  return [
     ...new Map(
       desired.map((fraction) => {
         const frame = start + (end - start) * fraction
@@ -131,7 +114,6 @@ export function cityChart(points: CityPoint[], clocks: CityStamp[], width: numbe
         return [
           stamp.frame,
           {
-            x: x(stamp.frame),
             frame: stamp.frame,
             label:
               (showYear ? stamp.gameTime : stamp.gameTime?.replace(/^\d{4}-/, '')) ??
@@ -141,22 +123,6 @@ export function cityChart(points: CityPoint[], clocks: CityStamp[], width: numbe
       }),
     ).values(),
   ]
-  return {
-    points: plotted,
-    polyline: plotted.map((point) => `${point.x},${point.y}`).join(' '),
-    left,
-    right,
-    top,
-    bottom,
-    start,
-    end,
-    yTicks: Array.from({ length: Math.round((max - min) / step) + 1 }, (_, index) => ({
-      value: min + index * step,
-      y: y(min + index * step),
-    })),
-    xTicks: ticks,
-    x,
-  }
 }
 
 export function sampleCityPoints(points: CityPoint[], limit = 600) {

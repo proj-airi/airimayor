@@ -243,24 +243,32 @@ function seekTime(time: number | undefined) {
   void seek(summary.value.seekPositions[position])
 }
 
-async function inspectRecord(index: number) {
+async function seekRecord(index: number) {
   if (!summary.value) return
   const position = summary.value.events.findIndex((event) => event.index === index)
   if (position < 0) return
-  if (view.value === 'city') {
-    if (!cityInspect.value) {
-      cityReturnPosition.value = frame.value?.position
-      cityReturnTurn.value = activeTurn.value
-    }
-  }
   if (!positions.value.includes(position)) {
     activeTurn.value = ''
     await changeTurn()
   }
-  if (view.value === 'city') cityInspect.value = true
+  await seek(position)
+}
+
+async function inspectRecord(index: number) {
+  const cityOrigin = view.value === 'city'
+    ? {
+        position: cityInspect.value ? cityReturnPosition.value : frame.value?.position,
+        turn: cityInspect.value ? cityReturnTurn.value : activeTurn.value,
+      }
+    : undefined
+  await seekRecord(index)
+  if (cityOrigin) {
+    cityReturnPosition.value = cityOrigin.position
+    cityReturnTurn.value = cityOrigin.turn
+    cityInspect.value = true
+  }
   inspecting.value = true
   tab.value = 'evidence'
-  await seek(position)
 }
 
 async function closeCityEvidence() {
@@ -749,6 +757,7 @@ watch([view, activeTurn], async ([value, turn]) => {
                 :client="client"
                 :position="frame.position"
                 @record="inspectRecord"
+                @seek="seekRecord"
               />
             </KeepAlive>
           </template>

@@ -50,10 +50,17 @@ export interface CityMedia {
 }
 export interface CityQuery {
   metric?: string
-  frame?: number
   offset?: number
   eventOffset?: number
   chartLimit?: number
+}
+export interface CityOverview {
+  key: string
+  metrics: CityMetric[]
+  selected?: CityMetric
+  chart: CityPoint[]
+  frames: CityStamp[]
+  markers: Pick<CityEvent, 'index' | 'label' | 'status' | 'frame'>[]
 }
 export interface CityNotifications extends CityStamp {
   index: number
@@ -63,20 +70,20 @@ export interface CityNotifications extends CityStamp {
   items: { type: string; priority?: number; target: string; location: string }[]
 }
 export interface CityView {
+  index: number
+  overview: CityOverview
   cursor?: CityStamp
   frames: CityStamp[]
   metrics: CityMetric[]
   selected?: CityMetric
   points: CityPoint[]
   pointTotal: number
-  chart: CityPoint[]
   events: CityEvent[]
   eventTotal: number
   media: CityMedia[]
   warnings: string[]
   observations: number
   untimed: number
-  markers: Pick<CityEvent, 'index' | 'label' | 'status' | 'frame'>[]
   notifications?: CityNotifications
 }
 
@@ -138,6 +145,7 @@ export class CityRecording {
   private warnings: { index: number; message: string }[] = []
   private notificationTypes = new Set<string>()
   private notifications: CityNotifications[] = []
+  private overviewCache?: CityOverview
 
   constructor(recording: Recording) {
     recording.records.forEach((record, index) => {
@@ -491,10 +499,39 @@ export class CityRecording {
     }
   }
 
+  private overview(query: CityQuery): CityOverview {
+    const selected =
+      this.series.get(query.metric ?? '') ?? this.series.get('population') ?? this.series.values().next().value
+    const key = `${selected?.key ?? ''}:${query.chartLimit ?? 'all'}`
+    if (this.overviewCache?.key === key) return this.overviewCache
+    const frames = new Map<number, CityStamp>()
+    for (const { stamp } of this.anchors) if (!frames.get(stamp.frame)?.gameTime) frames.set(stamp.frame, stamp)
+    const points = new Map<number, CityPoint>()
+    for (const point of selected?.points ?? [])
+      points.set(point.frame, { ...point, gameTime: point.gameTime ?? frames.get(point.frame)?.gameTime })
+    const all = [...points.values()].sort((a, b) => a.frame - b.frame)
+    const metric = ({ points, ...definition }: Series): CityMetric => ({
+      ...definition,
+      samples: new Set(points.map((point) => point.frame)).size,
+    })
+    const markers = this.events.filter((event) => event.frame !== undefined)
+    return (this.overviewCache = {
+      key,
+      metrics: [...this.series.values()].map(metric),
+      selected: selected && metric(selected),
+      chart: sampleCityPoints(query.chartLimit ? all.slice(-query.chartLimit) : all, 600),
+      frames: [...frames.values()].sort((a, b) => a.frame - b.frame),
+      markers: markers
+        .filter((_event, index) => markers.length <= 300 || index % Math.ceil(markers.length / 300) === 0)
+        .map(({ index, label, status, frame }) => ({ index, label, status, frame })),
+    })
+  }
+
   view(cursor: number, query: CityQuery = {}): CityView {
+    const overview = this.overview(query)
     const anchors = this.anchors.filter((anchor) => anchor.index <= cursor)
     const latestAnchor = anchors.at(-1)?.stamp
-    const frame = latestAnchor ? Math.min(query.frame ?? latestAnchor.frame, latestAnchor.frame) : undefined
+    const frame = latestAnchor?.frame
     const frames = new Map<number, CityStamp>()
     for (const anchor of anchors)
       if (!frames.get(anchor.stamp.frame)?.gameTime) frames.set(anchor.stamp.frame, anchor.stamp)
@@ -515,23 +552,9 @@ export class CityRecording {
       return { ...definition, latest: points.at(-1), previous: points.at(-2), samples: series.points.length }
     }
     const metrics = series.map(metric)
-    const selected =
-      series.find((series) => series.key === query.metric) ??
-      series.find((series) => series.key === 'population') ??
-      series[0]
+    const selected = series.find((series) => series.key === overview.selected?.key)
     const points = selected?.points ?? []
     const selectedMetric = metrics.find((metric) => metric.key === selected?.key)
-    const chartPoints = query.chartLimit ? points.slice(-query.chartLimit) : points
-    const chart = sampleCityPoints(chartPoints, 599)
-    const current = selectedMetric?.latest
-    if (
-      current &&
-      current.frame >= (chartPoints[0]?.frame ?? 0) &&
-      !chart.some((point) => point.frame === current.frame)
-    ) {
-      chart.push(current)
-      chart.sort((a, b) => a.frame - b.frame)
-    }
     const events = this.events
       .filter(
         (event) => event.index <= cursor && (frame === undefined || event.frame === undefined || event.frame <= frame),
@@ -548,19 +571,16 @@ export class CityRecording {
         .slice(-1),
     )
     return {
+      index: cursor,
+      overview,
       cursor: frame === undefined ? undefined : (frames.get(frame) ?? { frame }),
       frames: [...frames.values()].sort((a, b) => a.frame - b.frame),
       metrics,
       selected: selectedMetric,
       points: points.slice(query.offset ?? 0, (query.offset ?? 0) + 50),
       pointTotal: points.length,
-      chart,
       events: events.slice(query.eventOffset ?? 0, (query.eventOffset ?? 0) + 30),
       eventTotal: events.length,
-      markers: events
-        .filter((event) => event.frame !== undefined)
-        .filter((_event, index, all) => all.length <= 300 || index % Math.ceil(all.length / 300) === 0)
-        .map(({ index, label, status, frame }) => ({ index, label, status, frame })),
       media,
       warnings: this.warnings.filter((warning) => warning.index <= cursor).map((warning) => warning.message),
       observations: this.observations.filter((observation) => observation.index <= cursor).length,

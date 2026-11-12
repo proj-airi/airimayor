@@ -396,46 +396,61 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   tool('list_notifications', 10000, { total: 2, countsByType: { Traffic: 2 }, notifications: [] })
   add({ type: 'source.stopped' })
   await Promise.all(files)
-  await writeFile(
-    join(directory, 'records.jsonl'),
-    records.map((record) => JSON.stringify(record)).join('\n'),
-  )
+  await writeFile(join(directory, 'records.jsonl'), records.map((record) => JSON.stringify(record)).join('\n'))
   const browser = await chromium.launch({ headless: true })
   t.after(() => browser.close())
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
   page.setDefaultTimeout(10000)
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
+  await page.addInitScript(() => {
+    window.cityChartFonts = new Map()
+    const prototype = CanvasRenderingContext2D.prototype
+    const clear = prototype.clearRect,
+      fill = prototype.fillText
+    prototype.clearRect = function (...args) {
+      window.cityChartFonts.set(this.canvas, [])
+      return clear.apply(this, args)
+    }
+    prototype.fillText = function (...args) {
+      window.cityChartFonts.get(this.canvas)?.push(this.font)
+      return fill.apply(this, args)
+    }
+  })
   await page.goto(pathToFileURL(fileURLToPath(new URL('./viewer.html', import.meta.url))).href)
   await page.getByLabel('Select session record folder').setInputFiles(directory)
   await page.getByRole('tab', { name: 'City', exact: true }).click()
   const trend = page.getByRole('img', { name: 'Population trend', exact: true })
   await trend.waitFor()
+  const canvas = trend.locator('canvas').first()
+  await canvas.waitFor()
+  assert.equal(await trend.locator('svg').count(), 0)
+  assert.equal(await page.getByRole('slider', { name: 'City time', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Return to replay', exact: true }).count(), 0)
   async function assertAxisLabelsFit() {
-    const labels = await trend.locator('text').evaluateAll((elements) =>
-      elements.map((element) => {
-        const bounds = element.getBoundingClientRect()
-        const chart = element.ownerSVGElement.getBoundingClientRect()
-        return {
-          text: element.textContent.trim(),
-          fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
-          fits:
-            bounds.left >= chart.left && bounds.right <= chart.right &&
-            bounds.top >= chart.top && bounds.bottom <= chart.bottom,
-        }
-      }),
-    )
-    assert.ok(labels.length > 0)
-    for (const label of labels) {
-      assert.ok(label.fontSize <= 12, `Axis label "${label.text}" is too large at ${label.fontSize}px`)
-      assert.ok(label.fits, `Axis label "${label.text}" must fit inside the chart`)
-    }
+    const fonts = await canvas.evaluate((element) => window.cityChartFonts.get(element))
+    assert.ok(fonts.length > 0, 'the chart library must render its axis labels')
+    for (const font of fonts) assert.ok(Number.parseFloat(font.match(/([\d.]+)px/)[1]) <= 12, font)
   }
+  const curvePixels = () =>
+    canvas.evaluate((element) => {
+      const { width, height } = element
+      const pixels = element.getContext('2d').getImageData(0, 0, width, height).data
+      const line = []
+      for (let y = 0; y < height; y++) {
+        for (let x = Math.floor(width * 0.5); x < width * 0.8; x++) {
+          const at = (y * width + x) * 4
+          if (pixels[at + 1] > pixels[at] + 20 && pixels[at + 2] > pixels[at] + 20 && pixels[at + 1] > 90) line.push(at)
+        }
+      }
+      return line
+    })
   await assertAxisLabelsFit()
-  assert.ok(
-    await trend.locator('polyline[data-city-line]').count(),
-    'City trends must join readings with a line',
-  )
+  const fullCurve = await curvePixels()
+  assert.ok(fullCurve.length > 0, 'the complete curve must remain visible ahead of replay')
+  await canvas.evaluate((element) => {
+    window.cityReplayCanvas = element
+  })
   assert.equal(
     await page.getByRole('region', { name: 'Selected call', exact: true }).count(),
     0,
@@ -452,11 +467,7 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   const value = page.locator('[data-city-active-value]')
   await page.getByRole('group', { name: 'Population chart controls', exact: true }).focus()
   await page.keyboard.press('ArrowLeft')
-  assert.notEqual(
-    await value.innerText(),
-    '18,000',
-    'keyboard inspection reaches the previous recorded reading',
-  )
+  assert.notEqual(await value.innerText(), '18,000', 'keyboard inspection reaches the previous recorded reading')
   await page.getByRole('combobox', { name: 'City measure', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Search city measure', exact: true }).fill('unemployment')
   await page.keyboard.press('Enter')
@@ -485,22 +496,44 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
   await page.getByRole('button', { name: 'Population', exact: true }).click()
   await trend.waitFor()
   await page.getByLabel('Trend range', { exact: true }).selectOption('50')
-  await page.waitForFunction(
-    () => document.querySelector('[data-city-line]').getAttribute('points').split(' ').length === 50,
+  await page.waitForFunction(() =>
+    document.querySelector('[aria-label="Population trend"]').getAttribute('aria-description').startsWith('50 plotted'),
   )
-  await page.getByLabel('City time', { exact: true }).focus()
-  await page.keyboard.press('Home')
-  await page.waitForFunction(
-    () => document.querySelector('[data-city-active-value]').textContent.trim() === '10,000',
-  )
-  await page.getByText('· outside the shown range', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Return to replay', exact: true }).click()
   await page.getByLabel('Trend range', { exact: true }).selectOption('all')
-  await page.waitForFunction(
-    () => document.querySelector('[data-city-line]').getAttribute('points').split(' ').length === 81,
+  await page.waitForFunction(() =>
+    document.querySelector('[aria-label="Population trend"]').getAttribute('aria-description').startsWith('81 plotted'),
   )
-  await page.getByRole('button', { name: 'Previous city time', exact: true }).click()
-  await page.getByRole('button', { name: 'Return to replay', exact: true }).click()
+  await canvas.evaluate((element) => {
+    window.cityReplayCanvas = element
+  })
+  const fixedCurve = await curvePixels()
+  await page.getByRole('button', { name: 'First event', exact: true }).click()
+  await page.getByText('No reading reached at replay position', { exact: true }).waitFor()
+  assert.equal(await value.innerText(), '—', 'future readings must not populate the current value')
+  assert.deepEqual(await curvePixels(), fixedCurve, 'rewinding must preserve the complete curve and fixed axes')
+  assert.equal(await canvas.evaluate((element) => element === window.cityReplayCanvas), true)
+  await page.getByRole('group', { name: 'Population chart controls', exact: true }).press('ArrowRight')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Replay event position"]').value !== '0')
+  assert.equal(
+    await page.getByRole('region', { name: 'Selected call', exact: true }).count(),
+    0,
+    'chart seeking must not open evidence',
+  )
+  await page.getByRole('button', { name: 'First event', exact: true }).click()
+  await page.getByText('No reading reached at replay position', { exact: true }).waitFor()
+  await canvas.click({ position: { x: 120, y: 40 } })
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Replay event position"]').value !== '0')
+  assert.equal(await page.getByRole('region', { name: 'Selected call', exact: true }).count(), 0)
+  await page.getByRole('button', { name: 'First event', exact: true }).click()
+  await page.getByLabel('Playback speed', { exact: true }).selectOption('0.5')
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('[data-city-active-value]').textContent.trim() === '18,000')
+  const pause = page.getByRole('button', { name: 'Pause', exact: true })
+  if (await pause.count()) await pause.click()
+  assert.deepEqual(await curvePixels(), fixedCurve, 'playing must move the playhead without replacing the curve')
+  assert.equal(await canvas.evaluate((element) => element === window.cityReplayCanvas), true)
+  await page.getByRole('button', { name: 'Last event', exact: true }).click()
   await page.getByRole('button', { name: 'Open trend evidence', exact: true }).click()
   await page.getByRole('button', { name: 'Close selected call', exact: true }).click()
   assert.equal(await page.getByRole('region', { name: 'Selected call', exact: true }).count(), 0)
@@ -510,7 +543,7 @@ test('City prioritizes a line trend and supports road search, evidence, rewind a
       document.querySelector('input[aria-label="Replay event position"]').max,
   )
   await page.getByRole('button', { name: 'First event', exact: true }).click()
-  await page.getByText('No city observations yet.', { exact: true }).waitFor()
+  await page.getByText('No reading reached at replay position', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Last event', exact: true }).click()
   await trend.waitFor()
   await page.setViewportSize({ width: 390, height: 844 })

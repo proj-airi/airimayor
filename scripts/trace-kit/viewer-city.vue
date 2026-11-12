@@ -15,13 +15,12 @@ import Trend from './viewer-city-chart.vue'
 import Picker from './viewer-city-picker.vue'
 
 const props = defineProps<{ client: ViewerClient; position: number }>()
-const emit = defineEmits<{ record: [index: number] }>()
+const emit = defineEmits<{ record: [index: number]; seek: [index: number] }>()
 const result = shallowRef<CityView>(),
   category = ref<CityCategory>('Population'),
   metric = ref(''),
   road = ref(''),
   trafficField = ref('flowPercent'),
-  frame = ref<number>(),
   offset = ref(0),
   eventOffset = ref(0),
   panel = ref(''),
@@ -42,13 +41,6 @@ watch(
   { flush: 'sync' },
 )
 watch(
-  frame,
-  () => {
-    eventOffset.value = 0
-  },
-  { flush: 'sync' },
-)
-watch(
   () => props.position,
   (next, previous) => {
     if (next < previous) {
@@ -58,21 +50,12 @@ watch(
   },
 )
 watch(
-  () =>
-    [
-      props.client,
-      props.position,
-      metric.value,
-      frame.value,
-      offset.value,
-      eventOffset.value,
-      chartLimit.value,
-    ] as const,
-  async ([client, position, key, at, start, eventStart, chartLimit]) => {
+  () => [props.client, props.position, metric.value, offset.value, eventOffset.value, chartLimit.value] as const,
+  async ([client, position, key, start, eventStart, chartLimit]) => {
     desired = {
       client,
       position,
-      query: { metric: key, frame: at, offset: start, eventOffset: eventStart, chartLimit },
+      query: { metric: key, offset: start, eventOffset: eventStart, chartLimit },
       serial: ++serial,
     }
     if (pending) return
@@ -113,22 +96,22 @@ const topics: { key: CityCategory; label: string; icon: string }[] = [
   { key: 'Statistics', label: 'Statistics', icon: 'i-mingcute:chart-line-line' },
 ]
 const availableTopics = computed(() =>
-  topics.filter((topic) => result.value?.metrics.some((item) => item.category === topic.key)),
+  topics.filter((topic) => result.value?.overview.metrics.some((item) => item.category === topic.key)),
 )
 const measures = computed(
   () =>
-    result.value?.metrics
+    result.value?.overview.metrics
       .filter((item) => item.category === category.value)
       .map((item) => ({ key: item.key, label: cityMetricLabel(item) })) ?? [],
 )
-const roads = computed(() => cityRoads(result.value?.metrics ?? []))
+const roads = computed(() => cityRoads(result.value?.overview.metrics ?? []))
 const preferred = new Map<CityCategory, string>()
 watch(metric, (key) => {
   const item = result.value?.metrics.find((item) => item.key === key)
   if (item) preferred.set(item.category, key)
 })
-watch([category, road, trafficField, () => result.value?.metrics], () => {
-  const metrics = result.value?.metrics ?? []
+watch([category, road, trafficField, () => result.value?.overview.metrics], () => {
+  const metrics = result.value?.overview.metrics ?? []
   if (!metrics.length) return
   if (!metrics.some((item) => item.category === category.value)) category.value = availableTopics.value[0].key
   if (category.value === 'Traffic') {
@@ -155,12 +138,6 @@ const cards = computed(() =>
     icon,
   })),
 )
-const selectedFramePosition = computed(() => {
-  const frames = result.value?.frames ?? [],
-    current = result.value?.cursor?.frame
-  const found = frames.findIndex((stamp) => stamp.frame === current)
-  return found < 0 ? Math.max(0, frames.length - 1) : found
-})
 const sourceNames = {
   read: 'City reading',
   history: 'Game history',
@@ -228,9 +205,6 @@ function chooseMetric(card: CityMetric) {
   category.value = card.category
   metric.value = card.key
 }
-function chooseFrame(index: number) {
-  frame.value = result.value?.frames[index]?.frame
-}
 </script>
 
 <template>
@@ -239,18 +213,12 @@ function chooseFrame(index: number) {
       <h2 class="flex items-center gap-2 font-medium">
         <span class="i-mingcute:time-line size-4 text-neutral-500" aria-hidden="true" />{{ cityDate(result?.cursor) }}
       </h2>
-      <button
-        class="rounded px-2 py-1 text-neutral-400 hover:bg-neutral-800 disabled:text-neutral-500"
-        :disabled="frame === undefined"
-        @click="frame = undefined"
-      >
-        {{ frame === undefined ? 'Following replay' : 'Return to replay' }}
-      </button>
+      <span class="text-neutral-500">Following replay</span>
     </div>
     <p v-if="error" class="text-red-400" role="alert">{{ error }}</p>
     <p v-if="loading && !result" class="text-neutral-400" role="status">Reading city observations…</p>
     <div
-      v-if="result && !result.metrics.length"
+      v-if="result && !result.overview.metrics.length"
       class="flex flex-col items-center gap-3 py-16 text-neutral-500"
       role="status"
     >
@@ -258,7 +226,7 @@ function chooseFrame(index: number) {
       <p>No city observations yet.</p>
       <p class="text-xs">Move the replay forward to a recorded city reading.</p>
     </div>
-    <template v-if="result?.metrics.length">
+    <template v-if="result?.overview.metrics.length">
       <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <button
           v-for="card in cards"
@@ -309,46 +277,21 @@ function chooseFrame(index: number) {
       </div>
       <Picker v-else v-model="metric" label="City measure" :items="measures" />
       <Trend
-        v-if="result.selected"
-        :metric="result.selected"
-        :points="result.chart"
-        :total="result.pointTotal"
-        :clocks="result.frames"
+        v-if="result.overview.selected"
+        :key="result.overview.key"
+        :metric="result.overview.selected"
+        :current="result.selected"
+        :points="result.overview.chart"
+        :total="result.overview.selected.samples"
+        :clocks="result.overview.frames"
         :frame="result.cursor?.frame"
-        :markers="result.markers"
-        @frame="frame = $event"
+        :markers="result.overview.markers"
+        :index="result.index"
+        :limit="chartLimit"
+        @seek="emit('seek', $event)"
         @range="chartLimit = $event"
         @record="emit('record', $event)"
       />
-      <div v-if="result.frames.length" class="flex items-center gap-2 border-b border-neutral-800 pb-3">
-        <button
-          class="viewer-icon-button"
-          aria-label="Previous city time"
-          :disabled="selectedFramePosition === 0"
-          @click="chooseFrame(selectedFramePosition - 1)"
-        >
-          <span class="i-mingcute:left-line size-4" aria-hidden="true" />
-        </button>
-        <label class="flex min-w-0 flex-1 items-center gap-3 text-xs text-neutral-500"
-          ><span class="shrink-0">City time</span
-          ><input
-            type="range"
-            aria-label="City time"
-            :min="0"
-            :max="result.frames.length - 1"
-            :value="selectedFramePosition"
-            class="min-w-0 flex-1 accent-primary-300"
-            @input="chooseFrame(Number(($event.target as HTMLInputElement).value))"
-        /></label>
-        <button
-          class="viewer-icon-button"
-          aria-label="Next city time"
-          :disabled="selectedFramePosition === result.frames.length - 1"
-          @click="chooseFrame(selectedFramePosition + 1)"
-        >
-          <span class="i-mingcute:right-line size-4" aria-hidden="true" />
-        </button>
-      </div>
       <div class="flex flex-wrap gap-1">
         <button
           v-for="item in panels"
@@ -387,7 +330,7 @@ function chooseFrame(index: number) {
                   <button
                     class="hover:text-primary-300"
                     :title="`Simulation frame ${point.frame}`"
-                    @click="frame = point.frame"
+                    @click="emit('seek', point.index)"
                   >
                     {{ cityDate(point) }}
                     <span v-if="!point.gameTime" class="text-neutral-500"> · frame {{ cityNumber(point.frame) }}</span>
@@ -526,13 +469,13 @@ function chooseFrame(index: number) {
           >
         </summary>
         <p class="mt-2">
-          Lines join recorded readings; no readings are added between them. Each measure uses its last observation at
-          the selected city time. Only data acquired by the replay is available.
+          The line previews the full recording. The playhead and current values follow the main replay; readings,
+          actions and images become available when their source is reached. No intermediate readings are invented.
         </p>
         <p v-if="result.selected?.scope" class="mt-2">{{ result.selected.scope }}</p>
-        <p v-if="result.chart.length < result.pointTotal" class="mt-2">
-          {{ result.chart.length }} points shown in this range. Long series retain local highs and lows. All
-          {{ result.pointTotal }} readings remain in the table.
+        <p v-if="result.overview.chart.length < (result.overview.selected?.samples ?? 0)" class="mt-2">
+          {{ result.overview.chart.length }} points shown in this range. Long series retain local highs and lows.
+          Acquired readings remain in the table.
         </p>
         <p class="mt-2">
           {{ result.observations }} successful city reads. {{ result.untimed }} without city time remain available in
