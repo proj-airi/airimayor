@@ -21,6 +21,9 @@ export interface CityPoint extends CityStamp {
   index: number
   kind: 'read' | 'history' | 'before' | 'after'
 }
+export interface CityReplayPoint extends CityPoint {
+  time: number
+}
 export interface CityMetric {
   key: string
   label: string
@@ -58,9 +61,9 @@ export interface CityOverview {
   key: string
   metrics: CityMetric[]
   selected?: CityMetric
-  chart: CityPoint[]
-  frames: CityStamp[]
-  markers: Pick<CityEvent, 'index' | 'label' | 'status' | 'frame'>[]
+  chart: CityReplayPoint[]
+  observations: number
+  markers: (Pick<CityEvent, 'index' | 'label' | 'status'> & { time: number })[]
 }
 export interface CityNotifications extends CityStamp {
   index: number
@@ -146,8 +149,10 @@ export class CityRecording {
   private notificationTypes = new Set<string>()
   private notifications: CityNotifications[] = []
   private overviewCache?: CityOverview
+  private times: number[]
 
   constructor(recording: Recording) {
+    this.times = recording.records.map((record) => recording.full.reader.timeOf(record).time)
     recording.records.forEach((record, index) => {
       if (record.type !== 'instant' || record.name !== 'city.tool.result') return
       const data = payload(recording, record)
@@ -506,24 +511,31 @@ export class CityRecording {
     if (this.overviewCache?.key === key) return this.overviewCache
     const frames = new Map<number, CityStamp>()
     for (const { stamp } of this.anchors) if (!frames.get(stamp.frame)?.gameTime) frames.set(stamp.frame, stamp)
-    const points = new Map<number, CityPoint>()
-    for (const point of selected?.points ?? [])
-      points.set(point.frame, { ...point, gameTime: point.gameTime ?? frames.get(point.frame)?.gameTime })
-    const all = [...points.values()].sort((a, b) => a.frame - b.frame)
+    const points = new Map<number, CityReplayPoint>()
+    for (const point of selected?.points ?? []) {
+      const previous = points.get(point.index)
+      if (!previous || point.frame >= previous.frame)
+        points.set(point.index, {
+          ...point,
+          time: this.times[point.index],
+          gameTime: point.gameTime ?? frames.get(point.frame)?.gameTime,
+        })
+    }
+    const all = [...points.values()].sort((a, b) => a.time - b.time || a.index - b.index)
     const metric = ({ points, ...definition }: Series): CityMetric => ({
       ...definition,
       samples: new Set(points.map((point) => point.frame)).size,
     })
-    const markers = this.events.filter((event) => event.frame !== undefined)
+    const markers = this.events
     return (this.overviewCache = {
       key,
       metrics: [...this.series.values()].map(metric),
       selected: selected && metric(selected),
       chart: sampleCityPoints(query.chartLimit ? all.slice(-query.chartLimit) : all, 600),
-      frames: [...frames.values()].sort((a, b) => a.frame - b.frame),
+      observations: all.length,
       markers: markers
         .filter((_event, index) => markers.length <= 300 || index % Math.ceil(markers.length / 300) === 0)
-        .map(({ index, label, status, frame }) => ({ index, label, status, frame })),
+        .map(({ index, label, status }) => ({ index, label, status, time: this.times[index] })),
     })
   }
 

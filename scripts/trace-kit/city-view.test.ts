@@ -89,7 +89,13 @@ test('historical city samples become visible only when acquired, deduplicate ove
   assert.deepEqual(session.city(trace.start).overview.chart, full.overview.chart)
   assert.deepEqual(session.city(first).overview.chart, full.overview.chart)
   assert.equal(session.city(first).points.find((point) => point.frame === 5)?.value, 100)
-  assert.equal(full.overview.chart.find((point) => point.frame === 5)?.value, 101)
+  assert.deepEqual(
+    full.overview.chart.map((point) => [point.index, point.time, point.value]),
+    [
+      [first, first * 10, 110],
+      [second, second * 10, 140],
+    ],
+  )
   assert.ok(session.city(trace.start).overview.metrics.every((metric) => metric.latest === undefined))
 })
 

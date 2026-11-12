@@ -58,6 +58,7 @@ const loading = ref(false),
   progress = shallowRef<LoadProgress>(),
   error = ref(''),
   playing = ref(false),
+  cursorTime = ref(0),
   follow = ref(true),
   speed = ref(1)
 const tab = ref<'replay' | 'detail' | 'evidence' | 'raw'>('replay')
@@ -74,23 +75,8 @@ const last = computed(() => positions.value.at(-1)!)
 const replayPosition = computed(() =>
   Math.max(0, sortedLastIndex(positions.value, frame.value?.position ?? 0) - 1),
 )
-const playTimes = computed(() => {
-  const times = [0]
-  for (let index = 1; index < positions.value.length; index++)
-    times[index] =
-      times[index - 1] +
-      Math.min(
-        1500,
-        Math.max(
-          0,
-          summary.value!.events[positions.value[index]].time -
-            summary.value!.events[positions.value[index - 1]].time,
-        ),
-      )
-  return times
-})
-const rangeStart = computed(() => focusedTurn.value?.start ?? 0)
-const rangeEnd = computed(() => focusedTurn.value?.end ?? summary.value?.duration ?? 0)
+const rangeStart = computed(() => summary.value?.events[first.value]?.time ?? 0)
+const rangeEnd = computed(() => summary.value?.events[last.value]?.time ?? 0)
 const cityInspect = ref(false)
 const cityReturnPosition = ref<number>()
 const cityReturnTurn = ref('')
@@ -105,7 +91,7 @@ let activeClient: ViewerClient | undefined,
   requestSerial = 0,
   scopeSerial = 0,
   seeking = false
-let desiredSeek: { position: number; selection?: Selection; serial: number } | undefined
+let desiredSeek: { position: number; selection?: Selection; cursor: number; serial: number } | undefined
 const phases = {
   read: 'Reading records',
   records: 'Validating records',
@@ -113,7 +99,7 @@ const phases = {
   timeline: 'Building timeline',
 }
 const number = (value: number) => value.toLocaleString()
-const traceNow = () => (summary.value && frame.value ? summary.value.origin + frame.value.time : undefined)
+const traceNow = () => (summary.value && frame.value ? summary.value.origin + cursorTime.value : undefined)
 const statusLabels: Record<string, string> = { ok: 'Completed', error: 'Failed', cancelled: 'Cancelled' }
 const scopeOptions = computed(() => [
   { value: 0, label: 'Whole session' },
@@ -140,7 +126,8 @@ watch([client, summary, activeTurn], ([client, summary]) => {
   player?.pause()
   player =
     client && summary
-      ? new Playback(playTimes.value, {
+      ? new Playback(positions.value.map((position) => summary.events[position].time), {
+          cursor: (time) => { cursorTime.value = time },
           read: (position) => client.remote.frame(positions.value[position], frame.value?.selection, true),
           commit: (value) => {
             frame.value = value
@@ -159,7 +146,7 @@ onBeforeUnmount(() => {
   activeClient?.dispose()
 })
 
-async function seek(position: number, selection?: Selection) {
+async function seek(position: number, selection?: Selection, cursor?: number) {
   const current = client.value
   if (!current || scopeLoading.value) return
   player?.pause()
@@ -167,8 +154,10 @@ async function seek(position: number, selection?: Selection) {
     position:
       positions.value[Math.max(0, sortedLastIndex(positions.value, Math.min(last.value, position)) - 1)],
     selection,
+    cursor: Math.max(rangeStart.value, Math.min(rangeEnd.value, cursor ?? summary.value!.events[position].time)),
     serial: ++requestSerial,
   }
+  cursorTime.value = desiredSeek.cursor
   if (seeking) return
   seeking = true
   try {
@@ -180,7 +169,10 @@ async function seek(position: number, selection?: Selection) {
         desired.selection ?? frame.value?.selection,
         !desired.selection,
       )
-      if (desired.serial === requestSerial && activeClient === current) frame.value = next
+      if (desired.serial === requestSerial && activeClient === current) {
+        frame.value = next
+        cursorTime.value = desired.cursor
+      }
     }
   } catch (value) {
     if (activeClient === current) error.value = String(value)
@@ -240,7 +232,7 @@ async function select(item: TraceItemRef | undefined) {
 function seekTime(time: number | undefined) {
   if (time === undefined || !summary.value) return
   const position = Math.max(0, sortedLastIndex(summary.value.seekTimes, time - summary.value.origin) - 1)
-  void seek(summary.value.seekPositions[position])
+  void seek(summary.value.seekPositions[position], undefined, time - summary.value.origin)
 }
 
 async function seekRecord(index: number) {
@@ -334,6 +326,7 @@ async function open(
     summary.value = result
     activeTurn.value = turn?.id ?? ''
     frame.value = initial
+    cursorTime.value = initial.time
     client.value = next
     follow.value = false
     tab.value = 'replay'
@@ -390,7 +383,7 @@ function togglePlay() {
   if (playing.value) player.pause()
   else {
     tab.value = 'replay'
-    player.play(frame.value.position >= last.value ? 0 : replayPosition.value, speed.value)
+    player.play(frame.value.position >= last.value ? 0 : replayPosition.value, speed.value, frame.value.position >= last.value ? undefined : cursorTime.value)
   }
 }
 async function replaySelection() {
@@ -418,7 +411,7 @@ function inspect(value: typeof tab.value) {
   tab.value = value
 }
 function changeSpeed() {
-  if (playing.value && frame.value) player?.play(replayPosition.value, speed.value)
+  if (playing.value && frame.value) player?.play(replayPosition.value, speed.value, cursorTime.value)
 }
 
 async function changeTurn() {
@@ -442,6 +435,7 @@ async function changeTurn() {
     state.value = reader.timelineView()
     version.value++
     frame.value = next
+    cursorTime.value = next.time
     follow.value = false
     await nextTick()
     timeline.value?.fit()
@@ -693,7 +687,7 @@ watch([view, activeTurn], async ([value, turn]) => {
                 :connectors="entities.connectors"
                 :details="details"
                 :selection="selection"
-                :cursor="summary.origin + frame.time"
+                :cursor="summary.origin + cursorTime"
                 :follow="follow"
                 :now="traceNow"
                 :hidden="hiddenTracks"
@@ -756,6 +750,10 @@ watch([view, activeTurn], async ([value, turn]) => {
                 :key="summary.name"
                 :client="client"
                 :position="frame.position"
+                :cursor="summary.origin + cursorTime"
+                :start="summary.origin + rangeStart"
+                :end="summary.origin + rangeEnd"
+                @time="seekTime"
                 @record="inspectRecord"
                 @seek="seekRecord"
               />
@@ -930,16 +928,17 @@ watch([view, activeTurn], async ([value, turn]) => {
           {{ number(replayPosition + 1) }} / {{ number(positions.length) }}
         </span>
         <div class="flex w-full items-center gap-3 md:w-auto md:min-w-0 md:flex-1">
-          <span>{{ elapsed(frame.time - rangeStart) }}</span>
+          <span>{{ elapsed(cursorTime - rangeStart) }}</span>
           <input
             class="min-w-0 flex-1 cursor-pointer accent-primary-300"
             type="range"
-            min="0"
-            :max="positions.length - 1"
-            :value="replayPosition"
-            aria-label="Replay event position"
+            :min="rangeStart"
+            :max="rangeEnd"
+            step="any"
+            :value="cursorTime"
+            aria-label="Replay time"
             title="Replay in recorded order; gaps longer than 1.5 seconds are shortened."
-            @input="seekPosition(Number(($event.target as HTMLInputElement).value))"
+            @input="seekTime(summary.origin + Number(($event.target as HTMLInputElement).value))"
           />
           <span class="text-neutral-400">{{ elapsed(rangeEnd - rangeStart) }}</span>
         </div>

@@ -92,40 +92,7 @@ export function cityDate(stamp?: CityStamp) {
   return stamp?.gameTime ?? (stamp ? 'Historical sample' : 'No reading yet')
 }
 
-export function cityTrendRange(points: CityPoint[], clocks: CityStamp[]) {
-  const start = points[0]?.frame ?? clocks[0]?.frame ?? 0
-  return { start, end: Math.max(start, points.at(-1)?.frame ?? start, clocks.at(-1)?.frame ?? start) }
-}
-
-export function cityTrendTicks(points: CityPoint[], clocks: CityStamp[], width: number) {
-  const { start, end } = cityTrendRange(points, clocks)
-  const dated = clocks.filter((clock) => clock.gameTime && clock.frame >= start && clock.frame <= end)
-  const showYear = new Set(dated.map((clock) => clock.gameTime!.slice(0, 4))).size > 1
-  const desired = width < 550 ? [0, 1] : [0, 0.5, 1]
-  return [
-    ...new Map(
-      desired.map((fraction) => {
-        const frame = start + (end - start) * fraction
-        const clock = dated.reduce<CityStamp | undefined>(
-          (best, clock) => (!best || Math.abs(clock.frame - frame) < Math.abs(best.frame - frame) ? clock : best),
-          undefined,
-        )
-        const stamp = clock ?? { frame }
-        return [
-          stamp.frame,
-          {
-            frame: stamp.frame,
-            label:
-              (showYear ? stamp.gameTime : stamp.gameTime?.replace(/^\d{4}-/, '')) ??
-              (fraction === 0 ? 'First sample' : 'Latest sample'),
-          },
-        ]
-      }),
-    ).values(),
-  ]
-}
-
-export function sampleCityPoints(points: CityPoint[], limit = 600) {
+export function sampleCityPoints<T extends CityPoint>(points: T[], limit = 600): T[] {
   if (points.length <= limit) return points
   const result = [points[0]],
     buckets = Math.floor((limit - 2) / 2),

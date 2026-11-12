@@ -27,6 +27,64 @@ function clock() {
   }
 }
 
+test('the shared cursor advances between records and through shortened gaps while a worker read is pending', () => {
+  const time = clock(),
+    cursors: number[] = []
+  const player = new Playback<number>(
+    [0, 1000, 10000],
+    {
+      read: () => new Promise(() => {}),
+      commit: () => {},
+      state: () => {},
+      cursor: (value: number) => cursors.push(value),
+      error: (error) => {
+        throw error
+      },
+    },
+    time.scheduler,
+  )
+  player.play(0, 1)
+  time.tick(16)
+  time.tick(984)
+  time.tick(750)
+  assert.deepEqual(cursors, [16, 1000, 5500])
+  player.pause()
+  time.tick(100)
+  assert.equal(cursors.length, 3)
+})
+
+test('resuming keeps the cursor between records instead of jumping back to the last committed record', () => {
+  const time = clock(),
+    cursors: number[] = []
+  const player = new Playback(
+    [0, 1000, 10000],
+    {
+      read: async (position) => position,
+      commit: () => {},
+      state: () => {},
+      cursor: (value) => cursors.push(value),
+      error: (error) => {
+        throw error
+      },
+    },
+    time.scheduler,
+  )
+  player.play(0, 1)
+  time.tick(400)
+  player.pause()
+  time.tick(1000)
+  player.play(0, 1, 400)
+  time.tick(100)
+  assert.equal(cursors.at(-1), 500)
+  time.tick(1000)
+  assert.equal(cursors.at(-1), 4000)
+  player.pause()
+  player.play(0, 1, 4000)
+  time.tick(100)
+  assert.equal(cursors.at(-1), 4600)
+  player.pause()
+})
+
 test('pause is immediate while a worker result is pending and ignores that stale result', async () => {
   const time = clock(),
     states: boolean[] = [],

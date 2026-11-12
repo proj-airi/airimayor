@@ -14,8 +14,8 @@ import {
 import Trend from './viewer-city-chart.vue'
 import Picker from './viewer-city-picker.vue'
 
-const props = defineProps<{ client: ViewerClient; position: number }>()
-const emit = defineEmits<{ record: [index: number]; seek: [index: number] }>()
+const props = defineProps<{ client: ViewerClient; position: number; cursor: number; start: number; end: number }>()
+const emit = defineEmits<{ record: [index: number]; seek: [index: number]; time: [time: number] }>()
 const result = shallowRef<CityView>(),
   category = ref<CityCategory>('Population'),
   metric = ref(''),
@@ -278,17 +278,18 @@ function chooseMetric(card: CityMetric) {
       <Picker v-else v-model="metric" label="City measure" :items="measures" />
       <Trend
         v-if="result.overview.selected"
-        :key="result.overview.key"
+        :key="`${result.overview.key}:${start}:${end}`"
         :metric="result.overview.selected"
         :current="result.selected"
         :points="result.overview.chart"
-        :total="result.overview.selected.samples"
-        :clocks="result.overview.frames"
-        :frame="result.cursor?.frame"
+        :total="result.overview.observations"
+        :cursor="cursor"
+        :start="start"
+        :end="end"
         :markers="result.overview.markers"
         :index="result.index"
         :limit="chartLimit"
-        @seek="emit('seek', $event)"
+        @time="emit('time', $event)"
         @range="chartLimit = $event"
         @record="emit('record', $event)"
       />
