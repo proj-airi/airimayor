@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(fileURLToPath(import.meta.url))
@@ -8,7 +9,9 @@ const upstream = JSON.parse(await readFile(join(root, 'upstream.json'), 'utf8'))
 const destination = join(root, '.upstream')
 const stamp = join(destination, 'commit')
 const packages = ['trace-kit', 'stream-kit', 'timeline-canvas', 'ui-timeline', 'ui-trace', 'ui-panes', 'ui']
-const expected = `${upstream.commit}\n${packages.join(',')}`
+const patch = join(root, 'patches/ui-timeline-selection-rings.patch')
+const patchHash = createHash('sha256').update(await readFile(patch)).digest('hex')
+const expected = `${upstream.commit}\n${packages.join(',')}\n${patchHash}`
 if ((await readFile(stamp, 'utf8').catch(() => '')) === expected) {
   console.log(`AIRI trace packages ${upstream.commit} already prepared`)
   process.exit(0)
@@ -54,5 +57,8 @@ await Promise.all(
     }
   }),
 )
+const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' }).trim()
+const patchDirectory = relative(gitRoot, destination).replaceAll('\\', '/')
+execFileSync('git', ['apply', `--directory=${patchDirectory}`, patch], { cwd: gitRoot, stdio: 'inherit' })
 await writeFile(stamp, expected)
 console.log(`Prepared ${sources.length} AIRI trace/UI sources at ${upstream.commit}`)

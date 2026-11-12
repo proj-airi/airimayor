@@ -252,6 +252,81 @@ test('request focus scopes interleaved replay and metrics, with an inspector tha
   assert.deepEqual(errors, [])
 })
 
+test('selecting a split model call draws one continuous summary ring and one detail ring', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'airimayor-ring-browser-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const records = [
+    { type: 'source.started', ts: 0, format: 1, runtime: 'dotnet', profiles: [] },
+    {
+      type: 'definition',
+      ts: 0,
+      kind: 'track',
+      key: 'agents/{agent}/llm',
+      data: {
+        path: 'agents/{agent}/llm',
+        entity: 'agent',
+        group: 'agents',
+        render: ['spans', 'instants'],
+        activity: 'thinking',
+        activitySplit: { instant: 'llm.first_chunk', activity: 'active' },
+        label: 'Model',
+        color: '#a855f7',
+      },
+    },
+    { type: 'span.begin', ts: 163855.931, spanId: 'model', name: 'chat split-model', track: 'agents/mayor/llm' },
+    { type: 'instant', ts: 167148.1694, spanId: 'model', name: 'llm.first_chunk', track: 'agents/mayor/llm' },
+    { type: 'span.end', ts: 209063.5076, spanId: 'model', track: 'agents/mayor/llm', status: 'ok' },
+    { type: 'source.stopped', ts: 576103.1 },
+  ].map((record, seq) => ({ source: 'game', epoch: 'rings', clock: 'mono:rings', seq, ...record }))
+  await writeFile(join(directory, 'records.jsonl'), records.map((record) => JSON.stringify(record)).join('\n'))
+  const browser = await chromium.launch({ headless: true })
+  t.after(() => browser.close())
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+  page.setDefaultTimeout(10000)
+  await page.addInitScript(() => {
+    const paths = new WeakMap()
+    const frames = new Map()
+    window.traceRingFrames = frames
+    const prototype = CanvasRenderingContext2D.prototype
+    const clear = prototype.clearRect,
+      begin = prototype.beginPath,
+      rounded = prototype.roundRect,
+      stroke = prototype.stroke
+    prototype.clearRect = function (...args) {
+      frames.set(this.canvas, [])
+      return clear.apply(this, args)
+    }
+    prototype.beginPath = function (...args) {
+      paths.delete(this)
+      return begin.apply(this, args)
+    }
+    prototype.roundRect = function (x, y, width, height, ...args) {
+      paths.set(this, { x, y, width, height })
+      return rounded.call(this, x, y, width, height, ...args)
+    }
+    prototype.stroke = function (...args) {
+      const path = paths.get(this)
+      if (path && this.strokeStyle === '#38bdf8' && this.lineWidth === 2)
+        frames.get(this.canvas)?.push({ ...path, alpha: this.globalAlpha })
+      return stroke.apply(this, args)
+    }
+  })
+  await page.goto(pathToFileURL(fileURLToPath(new URL('./viewer.html', import.meta.url))).href)
+  await page.getByLabel('Select session record folder').setInputFiles(directory)
+  await page.getByRole('button', { name: /chat split-model/ }).press('Enter')
+  await page.getByRole('button', { name: 'Fit timeline', exact: true }).click()
+  await page.waitForFunction(() =>
+    [...window.traceRingFrames.values()].flat().some((ring) => Math.abs(ring.alpha - 0.85) < 0.01),
+  )
+  const rings = await page.evaluate(() => [...window.traceRingFrames.values()].flat())
+  const summary = rings.filter((ring) => Math.abs(ring.alpha - 0.85) < 0.01)
+  const detail = rings.filter((ring) => Math.abs(ring.alpha - 1) < 0.01)
+  assert.equal(summary.length, 1, 'adjacent phases of the selected call must share one summary outline')
+  assert.equal(detail.length, 1, 'the detail row keeps its own selection outline')
+  assert.ok(Math.abs(summary[0].x - detail[0].x) < 1)
+  assert.ok(Math.abs(summary[0].width - detail[0].width) < 1, 'the summary outline covers the complete call')
+})
+
 test('City prioritizes a line trend and supports road search, evidence, rewind and a narrow viewport', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'airimayor-city-browser-'))
   await mkdir(join(directory, 'assets'))

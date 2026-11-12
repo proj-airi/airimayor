@@ -1,0 +1,59 @@
+diff --git a/packages/ui-timeline/src/components/timeline-lanes-layer.vue b/packages/ui-timeline/src/components/timeline-lanes-layer.vue
+index 2ae8de5..c32bf3c 100644
+--- a/packages/ui-timeline/src/components/timeline-lanes-layer.vue
++++ b/packages/ui-timeline/src/components/timeline-lanes-layer.vue
+@@ -82,7 +82,8 @@ const colors = computed(() => isDark.value
+
+ /** The drawn shapes of the selected item and of the hovered item, found during a frame. */
+ type MarkKind = 'selected' | 'related' | 'hovered' | 'focused'
+-let marks: { x0: number, x1: number, top: number, height: number, radius: number, color: string, kind: MarkKind }[] = []
++type ItemMark = { key: string, x0: number, x1: number, top: number, height: number, radius: number, color: string, kind: MarkKind }
++let marks: ItemMark[] = []
+
+ /** The hovered item, the key of its row, and where its hover card points. */
+ const hover = shallowRef<{ target: Item, row: string, clientX: number, clientY: number, top: number, height: number }>()
+@@ -183,7 +184,7 @@ function draw(ctx: CanvasRenderingContext2D, frame: TimelineCanvasFrame) {
+       hovered: { color: mark.color },
+       focused: { color: palette.focus },
+     }[mark.kind]
+-    strokeItemRing(ctx, mark, ring)
++    strokeItemRing(ctx, { ...mark, radius: itemRadius(mark.x1 - mark.x0, mark.height, mark.radius) }, ring)
+   }
+
+   if (props.provisional !== undefined) {
+@@ -205,18 +206,31 @@ function collectMarks(runs: IntervalRun[], targets: Item[], styles: readonly Ite
+     if (!key)
+       continue
+     // A ring keeps the corners of its item.
+-    pushMarks(key, { x0: run.x0, x1: run.x1, top: geometry.top, height: geometry.height, radius: itemRadius(run.x1 - run.x0, geometry.height, geometry.radius), color: styles[run.style]?.color ?? colors.value.hover }, keys, detail)
++    pushMarks(key, { x0: run.x0, x1: run.x1, top: geometry.top, height: geometry.height, radius: geometry.radius, color: styles[run.style]?.color ?? colors.value.hover }, keys, detail)
+   }
+ }
+
++/** Adjacent phases of one item share an outline, while gaps, rows, and interaction states stay separate. */
++function addMark(mark: ItemMark) {
++  for (let index = marks.length - 1; index >= 0; index--) {
++    const previous = marks[index]!
++    if (previous.key !== mark.key || previous.kind !== mark.kind || previous.top !== mark.top || previous.height !== mark.height || previous.radius !== mark.radius || previous.x1 < mark.x0 || previous.x0 > mark.x1)
++      continue
++    mark.x0 = Math.min(mark.x0, previous.x0)
++    mark.x1 = Math.max(mark.x1, previous.x1)
++    marks.splice(index, 1)
++  }
++  marks.push(mark)
++}
++
+ function pushMarks(key: string, item: { x0: number, x1: number, top: number, height: number, radius: number, color: string }, keys: { selected?: string, hovered?: string, focused?: string }, detail: boolean) {
+   if (key === keys.selected)
+-    marks.push({ ...item, kind: detail ? 'selected' : 'related' })
++    addMark({ ...item, key, kind: detail ? 'selected' : 'related' })
+   // A lane row repeats the item of a detail row, so hover and focus mark only the detail row, where the pointer is.
+   if (key === keys.hovered && key !== keys.selected && detail)
+-    marks.push({ ...item, kind: 'hovered' })
++    addMark({ ...item, key, kind: 'hovered' })
+   if (key === keys.focused && detail)
+-    marks.push({ ...item, kind: 'focused' })
++    addMark({ ...item, key, kind: 'focused' })
+ }
+
+ /** The rings of marked points. Points are hit and selected like items, so they get the same rings. */

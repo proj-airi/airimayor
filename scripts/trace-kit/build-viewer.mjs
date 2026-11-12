@@ -1,4 +1,5 @@
 import { build } from 'esbuild'
+import { execFileSync } from 'node:child_process'
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +10,7 @@ import { createGenerator, presetAttributify, presetIcons, presetWind3, transform
 import { parse } from 'yaml'
 
 const root = dirname(fileURLToPath(import.meta.url))
+execFileSync(process.execPath, [join(root, 'prepare.mjs')], { stdio: 'inherit' })
 const worker = await build({
   entryPoints: [join(root, 'viewer-worker.ts')],
   bundle: true,
