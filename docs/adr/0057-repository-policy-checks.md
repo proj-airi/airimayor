@@ -1,0 +1,3 @@
+# Repository contracts and semantic review have separate checks
+
+Repository policy uses a deterministic Node check for structural contracts and pinned alint declarative rules for judgments that require related code. This keeps ordinary checks independent of model availability and leaves model selection, filesystem review and diagnostics to alint instead of adding another runner. Local credentials and caches stay outside Git; CI runs the deterministic contracts and their behavioral fixtures. Semantic findings require target-line evidence and preserve localization, historical evidence, native validation, supported recovery and the distinct Gameface and offline-viewer style contracts. Neither check can close a live acceptance gate.

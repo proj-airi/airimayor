@@ -42,6 +42,16 @@ flowchart TD
 
 ## Build
 
+Repository checks use a separate root install:
+
+```bash
+npm ci
+npm run lint
+npm run test:lint
+```
+
+`lint` checks repository contracts without a model. Configure a local model once with `npm exec -- alint setup --local`; provider credentials stay in the ignored `.alint/` directory. `npm run lint:ai` reviews changed files with twelve semantic rules; `npm run lint:ai:all` reviews all applicable files. For a focused review, use `npm exec -- alint --rule airimayor/shared-pipeline Agent/ClientSession.cs`. Missing model configuration is a failed review, not a pass. These checks do not replace the build or new-city acceptance. See [ADR 0057](docs/adr/0057-repository-policy-checks.md).
+
 Windows + the game. Full setup: [Windows onboarding](docs/guide/2026-08-06-windows-onboarding.md).
 
 ```bash

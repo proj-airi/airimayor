@@ -57,6 +57,7 @@ Follow [docs/AGENTS.md](docs/AGENTS.md). `CONTEXT.md` is glossary only. ADRs are
 
 ## Verification
 
+- Repository policy: `npm ci`, then `npm run lint` and `npm run test:lint`. Run `npm run lint:ai` for semantic review of changed files; policy and exclusions live in [alint.config.json](alint.config.json). Lint does not establish in-game acceptance.
 - C#: `cd Mod && dotnet build` (close the game before redeploying the DLL).
 - UI-only: `cd Mod/UI && npm run build` (needs `CSII_USERDATAPATH`).
 - Prefer targeted checks over inventing large test suites unless asked.

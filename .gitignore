@@ -5,6 +5,9 @@ obj/
 .venv/
 notebooks/data/
 .DS_Store
+.alint/
+.alintcache
+.alintstats/
 *.log
 Mod/UI/node_modules/
 Mod/UI/build/

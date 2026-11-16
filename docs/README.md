@@ -62,6 +62,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0054-offline-recording-analysis.md](./adr/0054-offline-recording-analysis.md) | Worker-owned metrics, context/cache analysis, shared write judgments and paged content search |
 | [0055-city-observations-in-replay.md](./adr/0055-city-observations-in-replay.md) | Cursor-scoped city observations, native history, road identity, write changes and images |
 | [0056-turn-focused-recording-workspace.md](./adr/0056-turn-focused-recording-workspace.md) | Turn-scoped replay and analysis in AIRI docking panes; native execution stays distinct from mayor turns |
+| [0057-repository-policy-checks.md](./adr/0057-repository-policy-checks.md) | Deterministic repository contracts and evidence-based semantic review through alint |
 
 ## Guide
 

@@ -1,0 +1,157 @@
+{
+  "config": {
+    "group": [
+      {
+        "ignores": [
+          ".git/**",
+          ".alint/**",
+          ".cursor/**",
+          ".lody/**",
+          ".venv/**",
+          "**/node_modules/**",
+          "**/.upstream/**",
+          "**/bin/**",
+          "**/obj/**",
+          "**/build/**",
+          "**/dist/**",
+          "**/vendor/**",
+          "**/vendored/**",
+          "**/package-lock.json",
+          "Library/**",
+          "Mod/Library/**",
+          "Packages/**",
+          "ProjectSettings/**",
+          "Temp/**",
+          "Logs/**",
+          "UserSettings/**",
+          "archive/**",
+          "notebooks/**",
+          "docs/adr/**",
+          "docs/ops/**",
+          "docs/research/**",
+          "docs/guide/**/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*",
+          "docs/guide/**/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*/**",
+          "scripts/lint/rules/**"
+        ]
+      },
+      {
+        "files": [
+          "Agent/**/*.cs",
+          "Agent/**/*.csproj",
+          "Agent/**/*.json",
+          "Mod/**/*.cs",
+          "Mod/**/*.csproj",
+          "Mod/UI/src/**/*.ts",
+          "Mod/UI/src/**/*.tsx",
+          "Mod/UI/src/**/*.scss",
+          "Mod/UI/*.js",
+          "Mod/UI/*.json",
+          "Mod.Tests/**/*.cs",
+          "Mod.Tests/**/*.csproj",
+          "Mcp/**/*.cs",
+          "Mcp/**/*.csproj",
+          "scripts/**/*.mjs",
+          "scripts/**/*.ts",
+          "scripts/**/*.vue",
+          "scripts/**/*.html",
+          "scripts/**/package.json",
+          "package.json"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": {
+          "airimayor/root-cause": "error",
+          "airimayor/pre-release-shapes": "error",
+          "airimayor/shared-pipeline": "error",
+          "airimayor/deep-interface": "error",
+          "airimayor/reuse": "error",
+          "airimayor/current-contract": "error",
+          "airimayor/verification-authority": "error"
+        }
+      },
+      {
+        "files": [
+          "Agent/**/*.cs",
+          "Mod/Host/**/*.cs",
+          "Mod/Host/ToolCatalog.json",
+          "Mod/CS2MCP/**/*.cs",
+          "Mcp/**/*.cs"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": { "airimayor/complete-retirement": "error" }
+      },
+      {
+        "files": [
+          "Agent/**/*.cs",
+          "Mod/Host/**/*.cs",
+          "Mod/Host/ToolCatalog.json",
+          "Mod/CS2MCP/**/*.cs",
+          "Mod/Setting.cs",
+          "Mod/LocaleZhHans.cs",
+          "Mod/UI/src/**/*.ts",
+          "Mod/UI/src/**/*.tsx"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": { "airimayor/city-contract": "error" }
+      },
+      {
+        "files": [
+          "Mod/CS2MCP/**/*.cs",
+          "Mod/Host/AgentSystemPrompt.cs",
+          "Mod/Host/ToolCatalog.json"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": { "airimayor/native-facts": "error" }
+      },
+      {
+        "files": [
+          "Agent/**/*.cs",
+          "Mcp/**/*.cs",
+          "Mod/Host/AcpSession.cs",
+          "Mod/Host/AgentToolBridge.cs"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": { "airimayor/protocol-adapter": "error" }
+      },
+      {
+        "files": [
+          "Mod/UI/src/**/*.ts",
+          "Mod/UI/src/**/*.tsx",
+          "Mod/UI/src/**/*.scss",
+          "Mod/UI/src/images/*.svg",
+          "scripts/trace-kit/*.vue",
+          "scripts/trace-kit/*.ts",
+          "scripts/trace-kit/*.mjs",
+          "scripts/trace-kit/*.html"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": { "airimayor/ui-conventions": "error" }
+      },
+      {
+        "files": [
+          "*.md",
+          "docs/*.md",
+          "docs/guide/**/*.md"
+        ],
+        "language": "plaintext",
+        "ignore": { "gitignore": true },
+        "plugins": { "airimayor": "./scripts/lint/rules" },
+        "rules": {
+          "airimayor/current-contract": "error",
+          "airimayor/verification-authority": "error"
+        }
+      }
+    ]
+  }
+}
