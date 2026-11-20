@@ -1,0 +1,12 @@
+{
+  "name": "airimayor-road-edit-eval",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "vieval run --config vieval.config.mjs --experiment street-edits",
+    "test": "node --test streets.test.mjs"
+  },
+  "devDependencies": {
+    "vieval": "0.11.1"
+  }
+}

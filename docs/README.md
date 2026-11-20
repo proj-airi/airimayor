@@ -75,6 +75,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 
 | Doc | Topic |
 | --- | --- |
+| [2026-11-20-road-generation.md](./research/2026-11-20-road-generation.md) | Road editing representations and a Vieval comparison on synthetic districts |
 | [2026-11-10-maf-python-summarization.md](./research/2026-11-10-maf-python-summarization.md) | Frozen Python versus .NET summary request shape, failure handling and cache implications |
 | [2026-11-10-harness-compaction-comparison.md](./research/2026-11-10-harness-compaction-comparison.md) | Frozen OpenCode, Pi and Responses comparison: summary instructions, framing and cache reuse |
 | [2026-11-10-instruction-position-papers.md](./research/2026-11-10-instruction-position-papers.md) | Frozen paper evidence for instruction position effects and limits of the local summary diagnosis |
