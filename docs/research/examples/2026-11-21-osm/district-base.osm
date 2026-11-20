@@ -1,0 +1,14 @@
+<osm version="0.6" generator="AIRI Mayor local study" upload="never">
+  <node id="1" lon="0.0000000" lat="0.0000000" version="1" />
+  <node id="2" lon="0.0008983" lat="0.0000000" version="1" />
+  <node id="3" lon="0.0019763" lat="0.0000000" version="1" />
+  <node id="4" lon="0.0032339" lat="0.0000000" version="1" />
+  <way id="101" version="1">
+    <nd ref="1" />
+    <nd ref="2" />
+    <nd ref="3" />
+    <nd ref="4" />
+    <tag k="highway" v="secondary" />
+    <tag k="name" v="Market Street" />
+  </way>
+</osm>

@@ -1,0 +1,395 @@
+<?xml version='1.0' encoding='utf-8'?>
+<osm version="0.6" generator="AIRI Mayor local study" upload="never">
+  <node id="1" lat="-0.0000898" lon="-0.0040424" version="1" />
+  <node id="2" lat="-0.0000898" lon="-0.0032789" version="1" />
+  <node id="3" lat="-0.0000898" lon="-0.0005390" version="1" />
+  <node id="4" lat="-0.0000898" lon="-0.0002875" version="1" />
+  <node id="5" lat="-0.0000898" lon="0.0002875" version="1" />
+  <node id="6" lat="-0.0000898" lon="0.0005390" version="1" />
+  <node id="7" lat="-0.0000898" lon="0.0032789" version="1" />
+  <node id="8" lat="-0.0000898" lon="0.0040424" version="1" />
+  <node id="9" lat="-0.0040424" lon="0.0000898" version="1" />
+  <node id="10" lat="-0.0032789" lon="0.0000898" version="1" />
+  <node id="11" lat="-0.0005390" lon="0.0000898" version="1" />
+  <node id="12" lat="-0.0002875" lon="0.0000898" version="1" />
+  <node id="13" lat="0.0002875" lon="0.0000898" version="1" />
+  <node id="14" lat="0.0005390" lon="0.0000898" version="1" />
+  <node id="15" lat="0.0032789" lon="0.0000898" version="1" />
+  <node id="16" lat="0.0040424" lon="0.0000898" version="1" />
+  <node id="17" lat="0.0000898" lon="0.0040424" version="1" />
+  <node id="18" lat="0.0000898" lon="0.0032789" version="1" />
+  <node id="19" lat="0.0000898" lon="0.0005390" version="1" />
+  <node id="20" lat="0.0000898" lon="0.0002875" version="1" />
+  <node id="21" lat="0.0000898" lon="-0.0002875" version="1" />
+  <node id="22" lat="0.0000898" lon="-0.0005390" version="1" />
+  <node id="23" lat="0.0000898" lon="-0.0032789" version="1" />
+  <node id="24" lat="0.0000898" lon="-0.0040424" version="1" />
+  <node id="25" lat="0.0040424" lon="-0.0000898" version="1" />
+  <node id="26" lat="0.0032789" lon="-0.0000898" version="1" />
+  <node id="27" lat="0.0005390" lon="-0.0000898" version="1" />
+  <node id="28" lat="0.0002875" lon="-0.0000898" version="1" />
+  <node id="29" lat="-0.0002875" lon="-0.0000898" version="1" />
+  <node id="30" lat="-0.0005390" lon="-0.0000898" version="1" />
+  <node id="31" lat="-0.0032789" lon="-0.0000898" version="1" />
+  <node id="32" lat="-0.0040424" lon="-0.0000898" version="1" />
+  <node id="-1" lat="-0.0001171" lon="-0.0028626" />
+  <node id="-2" lat="-0.0001985" lon="-0.0024535" />
+  <node id="-3" lat="-0.0003326" lon="-0.0020585" />
+  <node id="-4" lat="-0.0005171" lon="-0.0016844" />
+  <node id="-5" lat="-0.0007488" lon="-0.0013375" />
+  <node id="-6" lat="-0.0010239" lon="-0.0010239" />
+  <node id="-7" lat="-0.0013375" lon="-0.0007488" />
+  <node id="-8" lat="-0.0016844" lon="-0.0005171" />
+  <node id="-9" lat="-0.0020585" lon="-0.0003326" />
+  <node id="-10" lat="-0.0024535" lon="-0.0001985" />
+  <node id="-11" lat="-0.0028626" lon="-0.0001171" />
+  <node id="-12" lat="-0.0006553" lon="-0.0001051" />
+  <node id="-13" lat="-0.0007636" lon="-0.0001500" />
+  <node id="-14" lat="-0.0008566" lon="-0.0002214" />
+  <node id="-15" lat="-0.0009280" lon="-0.0003144" />
+  <node id="-16" lat="-0.0009729" lon="-0.0004227" />
+  <node id="-17" lat="-0.0009882" lon="-0.0005390" />
+  <node id="-18" lat="-0.0009729" lon="-0.0006553" />
+  <node id="-19" lat="-0.0009280" lon="-0.0007636" />
+  <node id="-20" lat="-0.0008566" lon="-0.0008566" />
+  <node id="-21" lat="-0.0007636" lon="-0.0009280" />
+  <node id="-22" lat="-0.0006553" lon="-0.0009729" />
+  <node id="-23" lat="-0.0005390" lon="-0.0009882" />
+  <node id="-24" lat="-0.0004227" lon="-0.0009729" />
+  <node id="-25" lat="-0.0003144" lon="-0.0009280" />
+  <node id="-26" lat="-0.0002214" lon="-0.0008566" />
+  <node id="-27" lat="-0.0001500" lon="-0.0007636" />
+  <node id="-28" lat="-0.0001051" lon="-0.0006553" />
+  <node id="-29" lat="-0.0028626" lon="0.0001171" />
+  <node id="-30" lat="-0.0024535" lon="0.0001985" />
+  <node id="-31" lat="-0.0020585" lon="0.0003326" />
+  <node id="-32" lat="-0.0016844" lon="0.0005171" />
+  <node id="-33" lat="-0.0013375" lon="0.0007488" />
+  <node id="-34" lat="-0.0010239" lon="0.0010239" />
+  <node id="-35" lat="-0.0007488" lon="0.0013375" />
+  <node id="-36" lat="-0.0005171" lon="0.0016844" />
+  <node id="-37" lat="-0.0003326" lon="0.0020585" />
+  <node id="-38" lat="-0.0001985" lon="0.0024535" />
+  <node id="-39" lat="-0.0001171" lon="0.0028626" />
+  <node id="-40" lat="-0.0001051" lon="0.0006553" />
+  <node id="-41" lat="-0.0001500" lon="0.0007636" />
+  <node id="-42" lat="-0.0002214" lon="0.0008566" />
+  <node id="-43" lat="-0.0003144" lon="0.0009280" />
+  <node id="-44" lat="-0.0004227" lon="0.0009729" />
+  <node id="-45" lat="-0.0005390" lon="0.0009882" />
+  <node id="-46" lat="-0.0006553" lon="0.0009729" />
+  <node id="-47" lat="-0.0007636" lon="0.0009280" />
+  <node id="-48" lat="-0.0008566" lon="0.0008566" />
+  <node id="-49" lat="-0.0009280" lon="0.0007636" />
+  <node id="-50" lat="-0.0009729" lon="0.0006553" />
+  <node id="-51" lat="-0.0009882" lon="0.0005390" />
+  <node id="-52" lat="-0.0009729" lon="0.0004227" />
+  <node id="-53" lat="-0.0009280" lon="0.0003144" />
+  <node id="-54" lat="-0.0008566" lon="0.0002214" />
+  <node id="-55" lat="-0.0007636" lon="0.0001500" />
+  <node id="-56" lat="-0.0006553" lon="0.0001051" />
+  <node id="-57" lat="0.0001171" lon="0.0028626" />
+  <node id="-58" lat="0.0001985" lon="0.0024535" />
+  <node id="-59" lat="0.0003326" lon="0.0020585" />
+  <node id="-60" lat="0.0005171" lon="0.0016844" />
+  <node id="-61" lat="0.0007488" lon="0.0013375" />
+  <node id="-62" lat="0.0010239" lon="0.0010239" />
+  <node id="-63" lat="0.0013375" lon="0.0007488" />
+  <node id="-64" lat="0.0016844" lon="0.0005171" />
+  <node id="-65" lat="0.0020585" lon="0.0003326" />
+  <node id="-66" lat="0.0024535" lon="0.0001985" />
+  <node id="-67" lat="0.0028626" lon="0.0001171" />
+  <node id="-68" lat="0.0006553" lon="0.0001051" />
+  <node id="-69" lat="0.0007636" lon="0.0001500" />
+  <node id="-70" lat="0.0008566" lon="0.0002214" />
+  <node id="-71" lat="0.0009280" lon="0.0003144" />
+  <node id="-72" lat="0.0009729" lon="0.0004227" />
+  <node id="-73" lat="0.0009882" lon="0.0005390" />
+  <node id="-74" lat="0.0009729" lon="0.0006553" />
+  <node id="-75" lat="0.0009280" lon="0.0007636" />
+  <node id="-76" lat="0.0008566" lon="0.0008566" />
+  <node id="-77" lat="0.0007636" lon="0.0009280" />
+  <node id="-78" lat="0.0006553" lon="0.0009729" />
+  <node id="-79" lat="0.0005390" lon="0.0009882" />
+  <node id="-80" lat="0.0004227" lon="0.0009729" />
+  <node id="-81" lat="0.0003144" lon="0.0009280" />
+  <node id="-82" lat="0.0002214" lon="0.0008566" />
+  <node id="-83" lat="0.0001500" lon="0.0007636" />
+  <node id="-84" lat="0.0001051" lon="0.0006553" />
+  <node id="-85" lat="0.0028626" lon="-0.0001171" />
+  <node id="-86" lat="0.0024535" lon="-0.0001985" />
+  <node id="-87" lat="0.0020585" lon="-0.0003326" />
+  <node id="-88" lat="0.0016844" lon="-0.0005171" />
+  <node id="-89" lat="0.0013375" lon="-0.0007488" />
+  <node id="-90" lat="0.0010239" lon="-0.0010239" />
+  <node id="-91" lat="0.0007488" lon="-0.0013375" />
+  <node id="-92" lat="0.0005171" lon="-0.0016844" />
+  <node id="-93" lat="0.0003326" lon="-0.0020585" />
+  <node id="-94" lat="0.0001985" lon="-0.0024535" />
+  <node id="-95" lat="0.0001171" lon="-0.0028626" />
+  <node id="-96" lat="0.0001051" lon="-0.0006553" />
+  <node id="-97" lat="0.0001500" lon="-0.0007636" />
+  <node id="-98" lat="0.0002214" lon="-0.0008566" />
+  <node id="-99" lat="0.0003144" lon="-0.0009280" />
+  <node id="-100" lat="0.0004227" lon="-0.0009729" />
+  <node id="-101" lat="0.0005390" lon="-0.0009882" />
+  <node id="-102" lat="0.0006553" lon="-0.0009729" />
+  <node id="-103" lat="0.0007636" lon="-0.0009280" />
+  <node id="-104" lat="0.0008566" lon="-0.0008566" />
+  <node id="-105" lat="0.0009280" lon="-0.0007636" />
+  <node id="-106" lat="0.0009729" lon="-0.0006553" />
+  <node id="-107" lat="0.0009882" lon="-0.0005390" />
+  <node id="-108" lat="0.0009729" lon="-0.0004227" />
+  <node id="-109" lat="0.0009280" lon="-0.0003144" />
+  <node id="-110" lat="0.0008566" lon="-0.0002214" />
+  <node id="-111" lat="0.0007636" lon="-0.0001500" />
+  <node id="-112" lat="0.0006553" lon="-0.0001051" />
+  <way id="10001" version="1">
+    <nd ref="1" />
+    <nd ref="2" />
+    <nd ref="3" />
+    <nd ref="4" />
+    <nd ref="5" />
+    <nd ref="6" />
+    <nd ref="7" />
+    <nd ref="8" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Eastway" />
+  </way>
+  <way id="10002" version="1">
+    <nd ref="9" />
+    <nd ref="10" />
+    <nd ref="11" />
+    <nd ref="12" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10003" version="1">
+    <nd ref="12" />
+    <nd ref="13" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+    <tag k="bridge" v="yes" />
+    <tag k="layer" v="1" />
+  </way>
+  <way id="10004" version="1">
+    <nd ref="13" />
+    <nd ref="14" />
+    <nd ref="15" />
+    <nd ref="16" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10005" version="1">
+    <nd ref="17" />
+    <nd ref="18" />
+    <nd ref="19" />
+    <nd ref="20" />
+    <nd ref="21" />
+    <nd ref="22" />
+    <nd ref="23" />
+    <nd ref="24" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Eastway" />
+  </way>
+  <way id="10006" version="1">
+    <nd ref="25" />
+    <nd ref="26" />
+    <nd ref="27" />
+    <nd ref="28" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10007" version="1">
+    <nd ref="28" />
+    <nd ref="29" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+    <tag k="bridge" v="yes" />
+    <tag k="layer" v="1" />
+  </way>
+  <way id="10008" version="1">
+    <nd ref="29" />
+    <nd ref="30" />
+    <nd ref="31" />
+    <nd ref="32" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="-113">
+    <nd ref="2" />
+    <nd ref="-1" />
+    <nd ref="-2" />
+    <nd ref="-3" />
+    <nd ref="-4" />
+    <nd ref="-5" />
+    <nd ref="-6" />
+    <nd ref="-7" />
+    <nd ref="-8" />
+    <nd ref="-9" />
+    <nd ref="-10" />
+    <nd ref="-11" />
+    <nd ref="31" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-114">
+    <nd ref="30" />
+    <nd ref="-12" />
+    <nd ref="-13" />
+    <nd ref="-14" />
+    <nd ref="-15" />
+    <nd ref="-16" />
+    <nd ref="-17" />
+    <nd ref="-18" />
+    <nd ref="-19" />
+    <nd ref="-20" />
+    <nd ref="-21" />
+    <nd ref="-22" />
+    <nd ref="-23" />
+    <nd ref="-24" />
+    <nd ref="-25" />
+    <nd ref="-26" />
+    <nd ref="-27" />
+    <nd ref="-28" />
+    <nd ref="3" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-115">
+    <nd ref="10" />
+    <nd ref="-29" />
+    <nd ref="-30" />
+    <nd ref="-31" />
+    <nd ref="-32" />
+    <nd ref="-33" />
+    <nd ref="-34" />
+    <nd ref="-35" />
+    <nd ref="-36" />
+    <nd ref="-37" />
+    <nd ref="-38" />
+    <nd ref="-39" />
+    <nd ref="7" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-116">
+    <nd ref="6" />
+    <nd ref="-40" />
+    <nd ref="-41" />
+    <nd ref="-42" />
+    <nd ref="-43" />
+    <nd ref="-44" />
+    <nd ref="-45" />
+    <nd ref="-46" />
+    <nd ref="-47" />
+    <nd ref="-48" />
+    <nd ref="-49" />
+    <nd ref="-50" />
+    <nd ref="-51" />
+    <nd ref="-52" />
+    <nd ref="-53" />
+    <nd ref="-54" />
+    <nd ref="-55" />
+    <nd ref="-56" />
+    <nd ref="11" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-117">
+    <nd ref="18" />
+    <nd ref="-57" />
+    <nd ref="-58" />
+    <nd ref="-59" />
+    <nd ref="-60" />
+    <nd ref="-61" />
+    <nd ref="-62" />
+    <nd ref="-63" />
+    <nd ref="-64" />
+    <nd ref="-65" />
+    <nd ref="-66" />
+    <nd ref="-67" />
+    <nd ref="15" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-118">
+    <nd ref="14" />
+    <nd ref="-68" />
+    <nd ref="-69" />
+    <nd ref="-70" />
+    <nd ref="-71" />
+    <nd ref="-72" />
+    <nd ref="-73" />
+    <nd ref="-74" />
+    <nd ref="-75" />
+    <nd ref="-76" />
+    <nd ref="-77" />
+    <nd ref="-78" />
+    <nd ref="-79" />
+    <nd ref="-80" />
+    <nd ref="-81" />
+    <nd ref="-82" />
+    <nd ref="-83" />
+    <nd ref="-84" />
+    <nd ref="19" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-119">
+    <nd ref="26" />
+    <nd ref="-85" />
+    <nd ref="-86" />
+    <nd ref="-87" />
+    <nd ref="-88" />
+    <nd ref="-89" />
+    <nd ref="-90" />
+    <nd ref="-91" />
+    <nd ref="-92" />
+    <nd ref="-93" />
+    <nd ref="-94" />
+    <nd ref="-95" />
+    <nd ref="23" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+  <way id="-120">
+    <nd ref="22" />
+    <nd ref="-96" />
+    <nd ref="-97" />
+    <nd ref="-98" />
+    <nd ref="-99" />
+    <nd ref="-100" />
+    <nd ref="-101" />
+    <nd ref="-102" />
+    <nd ref="-103" />
+    <nd ref="-104" />
+    <nd ref="-105" />
+    <nd ref="-106" />
+    <nd ref="-107" />
+    <nd ref="-108" />
+    <nd ref="-109" />
+    <nd ref="-110" />
+    <nd ref="-111" />
+    <nd ref="-112" />
+    <nd ref="27" />
+    <tag k="highway" v="motorway_link" />
+    <tag k="oneway" v="yes" />
+  </way>
+</osm>

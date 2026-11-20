@@ -1,0 +1,119 @@
+{
+  "model": "gpt-6.2-sol",
+  "reasoning_effort": "medium",
+  "protocol": "One fresh context per task. Supply the instruction followed by the complete input XML. Take the first response. No tool calls, no visual input, no repair. All coordinates are local fictional data near the equator.",
+  "trials": [
+    {
+      "task": "Reserved ramp junctions",
+      "instruction": "Complete this local synthetic highway interchange with eight individual one-way motorway_link ramps. Right-hand traffic, two divided through highways, north/south already bridges east/west. From each approach allow a right and a left turn by exactly one dedicated ramp, no intersection at the centre, no ramp crossing another way at grade except a shared end. Prefer a recognisable flowing cloverleaf with smooth intermediate geometry. You can choose any unused mainline junctions from the baseline to attach at. Only the shown through roads exist. Preserve them. Use the orientation, road directions and node coordinates in the supplied file. Produce an OSMChange 0.6 create block with new nodes and ways; new IDs negative and existing node references positive. Explicitly mark one-way links. No tools, no scripts, no markdown, output the actual complete XML. Work in local geographic coordinates near the equator; 0.00001 degree is about 1.11 metres north/east. The terminal pairs in directed travel order are 1->8 eastbound, 9->16 northbound, 17->24 westbound, 25->32 southbound.",
+      "input": "interchange-base.osm",
+      "raw_answer": "interchange.osc",
+      "snapshot": "interchange.osm",
+      "observed": {
+        "nodes": 144,
+        "ways": 16,
+        "unnoded_at_grade_pairs": [],
+        "separated_crossing_pairs": [
+          [
+            "10001",
+            "10003"
+          ],
+          [
+            "10001",
+            "10007"
+          ],
+          [
+            "10003",
+            "10005"
+          ],
+          [
+            "10005",
+            "10007"
+          ]
+        ],
+        "unexpected_shared_grade": [],
+        "self_crossing_roads": [],
+        "ramps": 8,
+        "direct_movements": 12,
+        "maximum_heading_change": 15.0
+      }
+    },
+    {
+      "task": "Agent-selected ramp junctions",
+      "instruction": "Complete this local synthetic highway interchange with eight individual one-way motorway_link ramps. Right-hand traffic, two divided through highways, north/south already bridges east/west. From each approach allow a right and a left turn by exactly one dedicated ramp, no intersection at the centre, no ramp crossing another way at grade except a shared end. Prefer a recognisable flowing cloverleaf with smooth intermediate geometry. The baseline has no reserved merge or diverge nodes. Place them yourself, inserting each node reference in the existing way in travel order. Only the shown through roads exist. Preserve their centerlines, bridge, direction, IDs and tags. Use the orientation, road directions and node coordinates in the supplied file. Produce an OSMChange 0.6 document with create for new nodes and ways and modify for complete edited baseline ways; new IDs negative and existing node references positive. Explicitly mark one-way links. No tools, no scripts, no markdown, output the actual complete XML. Work in local geographic coordinates near the equator; 0.00001 degree is about 1.11 metres north/east. The terminal pairs in directed travel order are 1->8 eastbound, 9->16 northbound, 17->24 westbound, 25->32 southbound.",
+      "input": "interchange-unmarked-base.osm",
+      "raw_answer": "interchange-unmarked.osc",
+      "snapshot": "interchange-unmarked.osm",
+      "observed": {
+        "nodes": 92,
+        "ways": 16,
+        "unnoded_at_grade_pairs": [],
+        "separated_crossing_pairs": [
+          [
+            "10001",
+            "10003"
+          ],
+          [
+            "10001",
+            "10007"
+          ],
+          [
+            "10003",
+            "10005"
+          ],
+          [
+            "10005",
+            "10007"
+          ]
+        ],
+        "unexpected_shared_grade": [],
+        "self_crossing_roads": [],
+        "ramps": 8,
+        "direct_movements": 12,
+        "maximum_heading_change": 22.5,
+        "edited_mainline_ways": 6
+      }
+    },
+    {
+      "task": "Create a district",
+      "instruction": "Draw a connected mixed-use neighbourhood on the north side of Market Street in local OSM. Site bounds in metres 0 <= east <= 360 and 0 <= north <= 280. Create at least three independent enclosed street blocks, two distinct connections to the existing street, a recognizable curved residential street, a small park, a school building and at least five other individual building footprints. Streets should provide frontage. Keep building and park polygons closed and disjoint from roads and from each other. Keep the original street and all four nodes intact. Choose your own layout rather than tracing an existing map. Produce the actual OSMChange 0.6 XML create block with new nodes and ways, standard tags, negative IDs for new objects, positive references to the seed nodes. No tools, no scripts, no markdown. At this synthetic equatorial origin, 0.00001 degree is about 1.11 metres north/east; north means increasing latitude.",
+      "input": "district-base.osm",
+      "raw_answer": "district-create.osc",
+      "snapshot": "district.osm",
+      "observed": {
+        "nodes": 50,
+        "ways": 15,
+        "unnoded_at_grade_pairs": [],
+        "separated_crossing_pairs": [],
+        "unexpected_shared_grade": [],
+        "self_crossing_roads": [],
+        "block_cycles": 4,
+        "components": 1,
+        "attachments_to_market": 2,
+        "buildings": 7,
+        "schools": 1,
+        "parks": 1,
+        "parcel_conflicts": [],
+        "road_parcel_conflicts": [],
+        "invalid_polygons": [],
+        "outside": []
+      },
+      "snapshot_ids": "On applying the create, assign 1000 minus the provisional negative ID to each new node or way, update its references, and set all baseline versions to 1. Coordinates and other tags are unchanged."
+    },
+    {
+      "task": "Revise the district",
+      "instruction": "Edit the supplied local OSM district. Move the junction shared by School Street and Linden Street exactly 4 metres west. Move the entire Rowan Primary School footprint 3 metres east and set its building:levels to 2. Keep the school's shape and other tags, every existing road connection, every other building, and all unrelated coordinates and attributes. Return only a valid OSMChange 0.6 XML modify block with the changed objects, full retained fields and baseline versions. No tools, no scripts, no markdown. Near this synthetic equator 0.00001 geographic degree is about 1.113 metres.",
+      "input": "district.osm",
+      "raw_answer": "district-edit.osc",
+      "snapshot": "district-revised.osm",
+      "observed": {
+        "objects": 65,
+        "changed_objects": 6,
+        "junction_shift_west_m": 3.996,
+        "school_shift_east_m": 3.006,
+        "school_levels": 2,
+        "enclosed_blocks": 4
+      }
+    }
+  ]
+}

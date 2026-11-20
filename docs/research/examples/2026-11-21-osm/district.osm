@@ -1,0 +1,177 @@
+<osm version="0.6" generator="AIRI Mayor local study" upload="never">
+  <node id="1" lon="0.0000000" lat="0.0000000" version="1" />
+  <node id="2" lon="0.0008983" lat="0.0000000" version="1" />
+  <node id="3" lon="0.0019763" lat="0.0000000" version="1" />
+  <node id="4" lon="0.0032339" lat="0.0000000" version="1" />
+  <node id="1001" lon="0.0008983" lat="0.0007200" version="1" />
+  <node id="1002" lon="0.0019763" lat="0.0007200" version="1" />
+  <node id="1003" lon="0.0008983" lat="0.0014800" version="1" />
+  <node id="1004" lon="0.0019763" lat="0.0014800" version="1" />
+  <node id="1005" lon="0.0008983" lat="0.0019200" version="1" />
+  <node id="1006" lon="0.0019763" lat="0.0019200" version="1" />
+  <node id="1007" lon="0.0014300" lat="0.0007200" version="1" />
+  <node id="1008" lon="0.0014300" lat="0.0014800" version="1" />
+  <node id="1009" lon="0.0009970" lat="0.0021500" version="1" />
+  <node id="1010" lon="0.0011770" lat="0.0023380" version="1" />
+  <node id="1011" lon="0.0014373" lat="0.0024200" version="1" />
+  <node id="1012" lon="0.0016970" lat="0.0023380" version="1" />
+  <node id="1013" lon="0.0018770" lat="0.0021500" version="1" />
+  <node id="1014" lon="0.0010150" lat="0.0015750" version="1" />
+  <node id="1015" lon="0.0014650" lat="0.0015750" version="1" />
+  <node id="1016" lon="0.0014650" lat="0.0021250" version="1" />
+  <node id="1017" lon="0.0011500" lat="0.0021250" version="1" />
+  <node id="1018" lon="0.0010150" lat="0.0019500" version="1" />
+  <node id="1019" lon="0.0015750" lat="0.0015750" version="1" />
+  <node id="1020" lon="0.0018850" lat="0.0015750" version="1" />
+  <node id="1021" lon="0.0018850" lat="0.0019650" version="1" />
+  <node id="1022" lon="0.0015750" lat="0.0019650" version="1" />
+  <node id="1023" lon="0.0009850" lat="0.0001250" version="1" />
+  <node id="1024" lon="0.0013200" lat="0.0001250" version="1" />
+  <node id="1025" lon="0.0013200" lat="0.0003450" version="1" />
+  <node id="1026" lon="0.0009850" lat="0.0003450" version="1" />
+  <node id="1027" lon="0.0014900" lat="0.0001250" version="1" />
+  <node id="1028" lon="0.0018700" lat="0.0001250" version="1" />
+  <node id="1029" lon="0.0018700" lat="0.0003650" version="1" />
+  <node id="1030" lon="0.0014900" lat="0.0003650" version="1" />
+  <node id="1031" lon="0.0009850" lat="0.0008050" version="1" />
+  <node id="1032" lon="0.0012850" lat="0.0008050" version="1" />
+  <node id="1033" lon="0.0012850" lat="0.0010100" version="1" />
+  <node id="1034" lon="0.0009850" lat="0.0010100" version="1" />
+  <node id="1035" lon="0.0010450" lat="0.0012150" version="1" />
+  <node id="1036" lon="0.0013450" lat="0.0012150" version="1" />
+  <node id="1037" lon="0.0013450" lat="0.0013950" version="1" />
+  <node id="1038" lon="0.0010450" lat="0.0013950" version="1" />
+  <node id="1039" lon="0.0015200" lat="0.0008050" version="1" />
+  <node id="1040" lon="0.0018950" lat="0.0008050" version="1" />
+  <node id="1041" lon="0.0018950" lat="0.0010350" version="1" />
+  <node id="1042" lon="0.0015200" lat="0.0010350" version="1" />
+  <node id="1043" lon="0.0016000" lat="0.0011950" version="1" />
+  <node id="1044" lon="0.0018950" lat="0.0011950" version="1" />
+  <node id="1045" lon="0.0018950" lat="0.0013950" version="1" />
+  <node id="1046" lon="0.0016000" lat="0.0013950" version="1" />
+  <way id="101" version="1">
+    <nd ref="1" />
+    <nd ref="2" />
+    <nd ref="3" />
+    <nd ref="4" />
+    <tag k="highway" v="secondary" />
+    <tag k="name" v="Market Street" />
+  </way>
+  <way id="1101" version="1">
+    <nd ref="2" />
+    <nd ref="1001" />
+    <nd ref="1003" />
+    <nd ref="1005" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="Linden Street" />
+  </way>
+  <way id="1102" version="1">
+    <nd ref="3" />
+    <nd ref="1002" />
+    <nd ref="1004" />
+    <nd ref="1006" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="Alder Street" />
+  </way>
+  <way id="1103" version="1">
+    <nd ref="1001" />
+    <nd ref="1007" />
+    <nd ref="1002" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="Orchard Street" />
+  </way>
+  <way id="1104" version="1">
+    <nd ref="1003" />
+    <nd ref="1008" />
+    <nd ref="1004" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="School Street" />
+  </way>
+  <way id="1105" version="1">
+    <nd ref="1007" />
+    <nd ref="1008" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="Hazel Lane" />
+  </way>
+  <way id="1106" version="1">
+    <nd ref="1005" />
+    <nd ref="1009" />
+    <nd ref="1010" />
+    <nd ref="1011" />
+    <nd ref="1012" />
+    <nd ref="1013" />
+    <nd ref="1006" />
+    <tag k="highway" v="residential" />
+    <tag k="name" v="Rowan Crescent" />
+  </way>
+  <way id="1107" version="1">
+    <nd ref="1014" />
+    <nd ref="1015" />
+    <nd ref="1016" />
+    <nd ref="1017" />
+    <nd ref="1018" />
+    <nd ref="1014" />
+    <tag k="leisure" v="park" />
+    <tag k="name" v="Rowan Park" />
+  </way>
+  <way id="1108" version="1">
+    <nd ref="1019" />
+    <nd ref="1020" />
+    <nd ref="1021" />
+    <nd ref="1022" />
+    <nd ref="1019" />
+    <tag k="building" v="school" />
+    <tag k="amenity" v="school" />
+    <tag k="name" v="Rowan Primary School" />
+  </way>
+  <way id="1109" version="1">
+    <nd ref="1023" />
+    <nd ref="1024" />
+    <nd ref="1025" />
+    <nd ref="1026" />
+    <nd ref="1023" />
+    <tag k="building" v="retail" />
+    <tag k="shop" v="convenience" />
+  </way>
+  <way id="1110" version="1">
+    <nd ref="1027" />
+    <nd ref="1028" />
+    <nd ref="1029" />
+    <nd ref="1030" />
+    <nd ref="1027" />
+    <tag k="building" v="retail" />
+    <tag k="shop" v="bakery" />
+  </way>
+  <way id="1111" version="1">
+    <nd ref="1031" />
+    <nd ref="1032" />
+    <nd ref="1033" />
+    <nd ref="1034" />
+    <nd ref="1031" />
+    <tag k="building" v="apartments" />
+  </way>
+  <way id="1112" version="1">
+    <nd ref="1035" />
+    <nd ref="1036" />
+    <nd ref="1037" />
+    <nd ref="1038" />
+    <nd ref="1035" />
+    <tag k="building" v="apartments" />
+  </way>
+  <way id="1113" version="1">
+    <nd ref="1039" />
+    <nd ref="1040" />
+    <nd ref="1041" />
+    <nd ref="1042" />
+    <nd ref="1039" />
+    <tag k="building" v="apartments" />
+  </way>
+  <way id="1114" version="1">
+    <nd ref="1043" />
+    <nd ref="1044" />
+    <nd ref="1045" />
+    <nd ref="1046" />
+    <nd ref="1043" />
+    <tag k="building" v="apartments" />
+  </way>
+</osm>

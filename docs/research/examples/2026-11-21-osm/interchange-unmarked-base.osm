@@ -1,0 +1,82 @@
+<osm version="0.6" generator="AIRI Mayor local study" upload="never">
+  <node id="1" lat="-0.0000898" lon="-0.0040424" version="1" />
+  <node id="8" lat="-0.0000898" lon="0.0040424" version="1" />
+  <node id="9" lat="-0.0040424" lon="0.0000898" version="1" />
+  <node id="12" lat="-0.0002875" lon="0.0000898" version="1" />
+  <node id="13" lat="0.0002875" lon="0.0000898" version="1" />
+  <node id="16" lat="0.0040424" lon="0.0000898" version="1" />
+  <node id="17" lat="0.0000898" lon="0.0040424" version="1" />
+  <node id="24" lat="0.0000898" lon="-0.0040424" version="1" />
+  <node id="25" lat="0.0040424" lon="-0.0000898" version="1" />
+  <node id="28" lat="0.0002875" lon="-0.0000898" version="1" />
+  <node id="29" lat="-0.0002875" lon="-0.0000898" version="1" />
+  <node id="32" lat="-0.0040424" lon="-0.0000898" version="1" />
+  <way id="10001" version="1">
+    <nd ref="1" />
+    <nd ref="8" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Eastway" />
+  </way>
+  <way id="10002" version="1">
+    <nd ref="9" />
+    <nd ref="12" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10003" version="1">
+    <nd ref="12" />
+    <nd ref="13" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+    <tag k="bridge" v="yes" />
+    <tag k="layer" v="1" />
+  </way>
+  <way id="10004" version="1">
+    <nd ref="13" />
+    <nd ref="16" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10005" version="1">
+    <nd ref="17" />
+    <nd ref="24" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Eastway" />
+  </way>
+  <way id="10006" version="1">
+    <nd ref="25" />
+    <nd ref="28" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+  <way id="10007" version="1">
+    <nd ref="28" />
+    <nd ref="29" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+    <tag k="bridge" v="yes" />
+    <tag k="layer" v="1" />
+  </way>
+  <way id="10008" version="1">
+    <nd ref="29" />
+    <nd ref="32" />
+    <tag k="highway" v="motorway" />
+    <tag k="oneway" v="yes" />
+    <tag k="lanes" v="2" />
+    <tag k="name" v="Meridian" />
+  </way>
+</osm>

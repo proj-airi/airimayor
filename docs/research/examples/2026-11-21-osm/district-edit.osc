@@ -1,0 +1,20 @@
+<osmChange version="0.6" generator="AIRI Mayor local study">
+  <modify>
+    <node id="1003" lon="0.0008624" lat="0.0014800" version="1" />
+    <node id="1019" lon="0.0016020" lat="0.0015750" version="1" />
+    <node id="1020" lon="0.0019120" lat="0.0015750" version="1" />
+    <node id="1021" lon="0.0019120" lat="0.0019650" version="1" />
+    <node id="1022" lon="0.0016020" lat="0.0019650" version="1" />
+    <way id="1108" version="1">
+      <nd ref="1019" />
+      <nd ref="1020" />
+      <nd ref="1021" />
+      <nd ref="1022" />
+      <nd ref="1019" />
+      <tag k="building" v="school" />
+      <tag k="amenity" v="school" />
+      <tag k="name" v="Rowan Primary School" />
+      <tag k="building:levels" v="2" />
+    </way>
+  </modify>
+</osmChange>
