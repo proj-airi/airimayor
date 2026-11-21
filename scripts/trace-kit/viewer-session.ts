@@ -179,11 +179,11 @@ export class ViewerSession {
     return this.cityRecording!.view(this.summary!.events[position].index, query)
   }
 
-  async cityImage(index: number) {
+  async cityFile(index: number, name: string) {
     const files = payload(this.recording!, this.recording!.records[index]).files
     if (!Array.isArray(files)) return
     for (const file of files)
-      if (isObject(file) && isAsset(file.asset) && file.asset.mediaType.startsWith('image/'))
+      if (isObject(file) && file.name === name && isAsset(file.asset))
         return this.attachment(file.asset)
   }
 

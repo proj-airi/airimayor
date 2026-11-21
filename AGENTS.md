@@ -25,12 +25,12 @@ When a domain term is used, match [CONTEXT.md](CONTEXT.md). When a seam or modul
 - The product has not shipped. Prefer the correct foundation over compatibility: reject unknown on-disk shapes, do not write migrations, and do not add model-facing shims or aliases.
 - Use native validation. No Anarchy, `force`, or collision bypass. Construction recovery belongs inside the write tool.
 - Tools enqueue onto the simulation thread. Do not apply construction from the UI or chat thread.
-- Road and building geometry goes through the local OSM map. Follow [ADR 0058](docs/adr/0058-local-osm-city-geometry.md) when changing the conversion or the city tools.
+- Read and edit the local OSM map by city coordinates. Follow [ADR 0059](docs/adr/0059-coordinate-addressed-osm-editing.md) for district edits, native validation and readback.
 - Mayor-facing text is a city contract: prompts, tool descriptions, result notes, and chat chrome speak city terms. Engine, HTTP, ECS, and loop jargon stay in code.
 - Delete unused model-facing tools for real (catalog, HTTP, and handler together). Network is not a junk drawer.
 - The player owns the clock. Timed waits advance in-game time then restore speed and pause. Do not force pause as the product runtime.
 - The player runs live acceptance on a new city and pastes logs. Agents judge pass/fail from those logs.
-- Budgeted map text shrinks by character budget; list tools keep a row limit.
+- List tools keep a row limit. A district read returns complete mapped features within its coordinate selection.
 - Fix the cause; no defensive wrappers.
 - Repo language is English (comments, ADRs, README, commit subjects).
 - Design it twice and pick the cleaner design. No unsolicited docs.

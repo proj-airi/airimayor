@@ -21,9 +21,11 @@ namespace CS2MCP
         public List<XElement> Headers { get; } = new List<XElement>();
         public IEnumerable<OsmElement> Elements => Nodes.Values.Cast<OsmElement>().Concat(Ways.Values).Concat(Relations.Values);
 
-        public static OsmDocument Read(string xml)
+        public static OsmDocument Read(string xml) => Read(OsmXml.ReadRoot(xml));
+
+        private static OsmDocument Read(XElement root)
         {
-            XElement root = OsmXml.ReadRoot(xml, "osm");
+            OsmXml.RequireRoot(root, "osm");
             var document = new OsmDocument();
             document.Attributes.Clear();
             foreach (XAttribute attribute in root.Attributes())
@@ -74,6 +76,12 @@ namespace CS2MCP
         }
 
         public OsmDocument Apply(string osmChangeXml) => OsmChange.Read(osmChangeXml).ApplyTo(this);
+
+        public OsmDocument Edit(string content)
+        {
+            XElement root = OsmXml.ReadRoot(content);
+            return root.Name == "osmChange" ? OsmChange.Read(root).ApplyTo(this) : Read(root);
+        }
 
         public void Validate()
         {
@@ -172,7 +180,7 @@ namespace CS2MCP
 
     internal static class OsmXml
     {
-        public static XElement ReadRoot(string xml, string name)
+        internal static XElement ReadRoot(string xml)
         {
             if (string.IsNullOrWhiteSpace(xml))
             {
@@ -184,18 +192,21 @@ namespace CS2MCP
                 using (var input = new StringReader(xml))
                 using (var reader = XmlReader.Create(input, settings))
                 {
-                    XElement root = XDocument.Load(reader).Root;
-                    string version = (string)root.Attribute("version");
-                    if (root.Name != name || (version != "0.6" && !(name == "osmChange" && version == null)))
-                    {
-                        throw new FormatException($"Expected <{name} version=\"0.6\">.");
-                    }
-                    return root;
+                    return XDocument.Load(reader).Root;
                 }
             }
             catch (XmlException exception)
             {
                 throw new FormatException("Invalid OSM XML. " + exception.Message, exception);
+            }
+        }
+
+        internal static void RequireRoot(XElement root, string name)
+        {
+            string version = (string)root.Attribute("version");
+            if (root.Name != name || (version != "0.6" && !(name == "osmChange" && version == null)))
+            {
+                throw new FormatException($"Expected <{name} version=\"0.6\">.");
             }
         }
 

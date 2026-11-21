@@ -247,25 +247,25 @@ test('missing anchors, invalid results, failed reads and malformed history canno
   assert.equal(view.warnings.length, 2)
 })
 
-test('city images are selected by acquired cursor and city time and loaded as real attachment blobs', async () => {
+test('district maps and screenshots follow the replay cursor and open the original files', async () => {
   const trace = fixture()
-  const png = new Blob([new Uint8Array([137, 80, 78, 71])]),
-    ref = { $asset: 'assets/map.png', mediaType: 'image/png', bytes: png.size }
-  trace.assets.push({ path: 'city/assets/map.png', file: png })
-  const first = trace.tool('map_image', 10, null, { files: [{ name: 'image.png', asset: ref }] })
-  const second = trace.tool('screenshot', 20, null, { files: [{ name: 'image.png', asset: ref }] })
+  const xml = '<osm version="0.6"/>',
+    map = new Blob([xml]),
+    png = new Blob([new Uint8Array([137, 80, 78, 71])])
+  const district = { $asset: 'assets/district.osm', mediaType: 'application/xml', bytes: map.size },
+    image = { $asset: 'assets/city.png', mediaType: 'image/png', bytes: png.size }
+  trace.assets.push({ path: 'city/assets/district.osm', file: map }, { path: 'city/assets/city.png', file: png })
+  const first = trace.tool('read_osm', 10, { revision: 'first', content: xml }, { files: [{ name: 'district.osm', asset: district }] })
+  const second = trace.tool('screenshot', 20, null, { files: [{ name: 'image.png', asset: image }] })
+  const third = trace.tool('edit_osm', 30, { revision: 'edited', content: xml }, { files: [{ name: 'district.osm', asset: district }] })
   const { session, end } = await trace.open()
   assert.equal(session.city(trace.start).media.length, 0)
-  assert.equal(session.city(first).media.length, 1)
-  assert.equal(session.city(first).media.length, 1)
-  assert.deepEqual(
-    session.city(end).media.map((item) => item.index),
-    [first, second],
-  )
-  assert.deepEqual(
-    new Uint8Array(await (await session.cityImage(first))!.blob.arrayBuffer()),
-    new Uint8Array([137, 80, 78, 71]),
-  )
+  assert.equal(session.city(first).observations, 1)
+  assert.equal(session.city(first).media[0]?.name, 'district.osm')
+  assert.equal(session.city(end).events[0]?.tool, 'edit_osm')
+  assert.deepEqual(session.city(end).media.map((item) => item.index), [third, second])
+  assert.equal(await (await session.cityFile(first, 'district.osm'))!.blob.text(), xml)
+  assert.deepEqual(new Uint8Array(await (await session.cityFile(second, 'image.png'))!.blob.arrayBuffer()), new Uint8Array([137, 80, 78, 71]))
 })
 
 test('long city series keep all readings in bounded pages while chart points and action markers remain bounded', async () => {

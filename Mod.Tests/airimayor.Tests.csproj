@@ -23,12 +23,6 @@
     <Compile Include="..\Mod\CS2MCP\OsmDocument*.cs" LinkBase="Production" />
     <Compile Include="..\Mod\CS2MCP\CityOsm*.cs" LinkBase="Production" />
     <None Include="..\docs\research\examples\2026-11-21-osm\*.osm;..\docs\research\examples\2026-11-21-osm\*.osc" Link="OsmFixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Include="..\Mod\CS2MCP\MapRgb.cs" Link="Production\MapRgb.cs" />
-    <Compile Include="..\Mod\CS2MCP\MapImageModel.cs" Link="Production\MapImageModel.cs" />
-    <Compile Include="..\Mod\CS2MCP\MapStrokeRaster.cs" Link="Production\MapStrokeRaster.cs" />
-    <Compile Include="..\Mod\CS2MCP\TrackStrokePaint.cs" Link="Production\TrackStrokePaint.cs" />
-    <Compile Include="..\Mod\CS2MCP\MapImagePaint.cs" Link="Production\MapImagePaint.cs" />
-    <Compile Include="..\Mod\CS2MCP\MapStrokeJoin.cs" Link="Production\MapStrokeJoin.cs" />
     <Compile Include="..\Mod\CS2MCP\NetworkCourseMath.cs" Link="Production\NetworkCourseMath.cs" />
     <Compile Include="..\Mod\CS2MCP\OperationalAreaPlanningMath.cs" Link="Production\OperationalAreaPlanningMath.cs" />
     <Compile Include="..\Mod\CS2MCP\PrefabOperationalAreaGraph.cs" Link="Production\PrefabOperationalAreaGraph.cs" />
@@ -41,6 +35,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agent\airimayor.Agent.csproj" />
+    <Reference Include="Colossal.Mathematics" HintPath="$(GameManagedPath)\Colossal.Mathematics.dll" />
     <Reference Include="Unity.Entities" HintPath="$(GameManagedPath)\Unity.Entities.dll" />
     <Reference Include="Unity.Mathematics" HintPath="$(GameManagedPath)\Unity.Mathematics.dll" />
   </ItemGroup>

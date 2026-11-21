@@ -11,10 +11,10 @@ namespace airimayor.Agent
         public void Offer_then_claim_pairs_city_prefix()
         {
             var latch = new ToolPreviewLatch(null);
-            latch.Offer("map_image", "{}", Jpeg);
-            string uri = latch.Claim("call-1", "city_map_image", "{}");
+            latch.Offer("screenshot", "{}", Jpeg);
+            string uri = latch.Claim("call-1", "city_screenshot", "{}");
             Assert.Equal(ToolPreview.DataUri(Jpeg), uri);
-            Assert.Null(latch.Claim("call-2", "city_map_image", "{}"));
+            Assert.Null(latch.Claim("call-2", "city_screenshot", "{}"));
         }
 
         [Fact]
@@ -27,8 +27,8 @@ namespace airimayor.Agent
                 seenId = id;
                 seenUri = uri;
             });
-            Assert.Null(latch.Claim("call-1", "map_image", "{\"y\":2,\"x\":1}"));
-            latch.Offer("map_image", "{\"x\":1,\"y\":2}", Jpeg);
+            Assert.Null(latch.Claim("call-1", "screenshot", "{\"y\":2,\"x\":1}"));
+            latch.Offer("screenshot", "{\"x\":1,\"y\":2}", Jpeg);
             Assert.Equal("call-1", seenId);
             Assert.Equal(ToolPreview.DataUri(Jpeg), seenUri);
         }
@@ -38,11 +38,11 @@ namespace airimayor.Agent
         {
             string seenId = null;
             var latch = new ToolPreviewLatch((id, uri) => seenId = id);
-            Assert.Null(latch.Claim("a", "map_image", "{\"n\":1}"));
-            Assert.Null(latch.Claim("b", "map_image", "{\"n\":2}"));
-            latch.Offer("map_image", "{\"n\":2}", Jpeg);
+            Assert.Null(latch.Claim("a", "screenshot", "{\"n\":1}"));
+            Assert.Null(latch.Claim("b", "screenshot", "{\"n\":2}"));
+            latch.Offer("screenshot", "{\"n\":2}", Jpeg);
             Assert.Equal("b", seenId);
-            Assert.Null(latch.Claim("a", "map_image", "{\"n\":1}"));
+            Assert.Null(latch.Claim("a", "screenshot", "{\"n\":1}"));
         }
 
         [Fact]
@@ -50,8 +50,8 @@ namespace airimayor.Agent
         {
             var jpeg = new byte[(256 * 1024) + 1];
             var latch = new ToolPreviewLatch((id, uri) => throw new InvalidOperationException("matched"));
-            latch.Offer("map_image", "{}", jpeg);
-            Assert.Null(latch.Claim("call-1", "map_image", "{}"));
+            latch.Offer("screenshot", "{}", jpeg);
+            Assert.Null(latch.Claim("call-1", "screenshot", "{}"));
             Assert.Null(ToolPreview.DataUri(jpeg));
             Assert.Null(ToolPreview.DataUri(null));
             Assert.StartsWith("data:image/jpeg;base64,", ToolPreview.DataUri(Jpeg));

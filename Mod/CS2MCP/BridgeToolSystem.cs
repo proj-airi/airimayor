@@ -31,6 +31,7 @@ namespace CS2MCP
             Idle,
             CreateDefinitions,
             Apply,
+            Readback,
             Finish,
         }
 
@@ -80,6 +81,8 @@ namespace CS2MCP
 
         public bool IsBusy => m_Stage != Stage.Idle;
 
+        internal bool Handles(BridgeRequest request) => ReferenceEquals(m_PendingRequest, request);
+
         /// <summary>
         /// Resets a bridge operation that has not finished within the watchdog
         /// window. Must be called on the simulation thread.
@@ -90,9 +93,9 @@ namespace CS2MCP
             {
                 return;
             }
-            CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout,
-                "build operation aborted: it did not finish within the bridge watchdog window; " +
-                "stage=" + m_Stage));
+            CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout, m_Stage == Stage.Readback
+                ? "The city received the edit but its result could not be confirmed. Read the district again before editing."
+                : "Construction did not finish in time. Read the site before retrying."));
             applyMode = ApplyMode.None;
             Deactivate();
         }
@@ -101,6 +104,7 @@ namespace CS2MCP
         protected override void OnCreate()
         {
             base.OnCreate();
+            CreateOsmQueries();
             m_CityConfigurationSystem = base.World.GetOrCreateSystemManaged<CityConfigurationSystem>();
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
@@ -292,6 +296,11 @@ namespace CS2MCP
         {
             try
             {
+                if (m_OsmEdit != null)
+                {
+                    UpdateOsmEdit();
+                    return inputDeps;
+                }
                 switch (m_Stage)
                 {
                     case Stage.CreateDefinitions:
@@ -299,10 +308,10 @@ namespace CS2MCP
                         switch (m_PendingKind)
                         {
                             case OperationKind.Demolish:
-                                CreateModifyDefinitions(CreationFlags.Delete, default);
+                                CreateModifyDefinitions(m_PendingTarget, CreationFlags.Delete, default);
                                 break;
                             case OperationKind.Upgrade:
-                                CreateModifyDefinitions(CreationFlags.Upgrade, m_PendingUpgradeFlags);
+                                CreateModifyDefinitions(m_PendingTarget, CreationFlags.Upgrade, m_PendingUpgradeFlags);
                                 break;
                             case OperationKind.OperationalArea:
                                 CreateOperationalAreaDefinition();
@@ -311,7 +320,7 @@ namespace CS2MCP
                                 ApplyZoneCells();
                                 break;
                             case OperationKind.FacilityUpgrade:
-                                CreateFacilityUpgradeDefinitions();
+                                CreateObjectDefinition(m_PendingPrefabEntity, m_PendingPosition, m_PendingRotation, m_PendingTarget, Entity.Null, Entity.Null);
                                 break;
                             case OperationKind.TransitLine:
                                 BuildTransitLineDefinitions();
@@ -670,6 +679,7 @@ namespace CS2MCP
         private void Deactivate()
         {
             m_Stage = Stage.Idle;
+            m_OsmEdit = null;
             m_PendingRequest = null;
             m_PendingPrefab = null;
             m_PendingPrefabEntity = Entity.Null;
@@ -694,9 +704,8 @@ namespace CS2MCP
         /// all related cleanup/recreation — nodes, zone blocks, lanes — which a
         /// raw component edit would skip (and skipping corrupts state).
         /// </summary>
-        private void CreateModifyDefinitions(CreationFlags flags, CompositionFlags upgrades)
+        private void CreateModifyDefinitions(Entity target, CreationFlags flags, CompositionFlags upgrades)
         {
-            Entity target = m_PendingTarget;
             EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
             Entity e = commandBuffer.CreateEntity();
             var definition = new CreationDefinition
@@ -788,59 +797,6 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// <summary>
-        /// Schedules the native ObjectToolBaseSystem definition job with the
-        /// parent building as owner. Completes immediately so the following
-        /// Apply frame sees the same Temp entities as ObjectToolSystem.Mode.Upgrade.
-        /// </summary>
-        private void CreateFacilityUpgradeDefinitions()
-        {
-            var controlPoints = new NativeList<ControlPoint>(1, Allocator.TempJob);
-            try
-            {
-                controlPoints.Add(new ControlPoint
-                {
-                    m_Position = m_PendingPosition,
-                    m_HitPosition = m_PendingPosition,
-                    m_Rotation = m_PendingRotation,
-                });
-                NativeReference<AttachmentData> attachmentPrefab = default;
-                JobHandle handle = base.CreateDefinitions(
-                    m_PendingPrefabEntity,
-                    Entity.Null,
-                    Entity.Null,
-                    m_PendingTarget,
-                    Entity.Null,
-                    Entity.Null,
-                    m_CityConfigurationSystem.defaultTheme,
-                    controlPoints,
-                    attachmentPrefab,
-                    false,
-                    m_CityConfigurationSystem.leftHandTraffic,
-                    false,
-                    false,
-                    0f,
-                    0f,
-                    0f,
-                    0f,
-                    0f,
-                    RandomSeed.Next(),
-                    Snap.None,
-                    AgeMask.Mature,
-                    false,
-                    default(PlacementOverrides),
-                    default(JobHandle));
-                handle.Complete();
-            }
-            finally
-            {
-                if (controlPoints.IsCreated)
-                {
-                    controlPoints.Dispose();
-                }
-            }
-        }
-
         private void UpdateTransitLineApply()
         {
             if (!TransitLinePathfindReady())

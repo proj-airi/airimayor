@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Threading;
 using System.Threading.Tasks;
 using airimayor.Agent;
 using airimayor.Host;
@@ -47,6 +48,8 @@ namespace CS2MCP
         /// so lock states read from ECS can be stale.
         /// </summary>
         public bool SimulationHasTickedSinceLoad { get; private set; } = true;
+
+        internal Guid CityLoadId { get; private set; } = Guid.NewGuid();
 
         /// <summary>
         /// Latest simulation clock, published once per update on the
@@ -108,6 +111,7 @@ namespace CS2MCP
         protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
         {
             base.OnGameLoadingComplete(purpose, mode);
+            CityLoadId = Guid.NewGuid();
             m_FrameIndexAtLoad = m_SimulationSystem.frameIndex;
             SimulationHasTickedSinceLoad = false;
         }
@@ -171,6 +175,11 @@ namespace CS2MCP
             }
             while (m_Pending.TryDequeue(out BridgeRequest request))
             {
+                if (request.CancellationToken.IsCancellationRequested)
+                {
+                    request.Complete(BridgeResponse.Error(BridgeErrorKind.Conflict, "The request ended before the city received it."));
+                    continue;
+                }
                 request.Applied = m_Clock;
                 request.QueuedMs = (Stopwatch.GetTimestamp() - request.EnqueuedTimestamp) * 1000 / Stopwatch.Frequency;
                 BridgeResponse response;
@@ -195,7 +204,7 @@ namespace CS2MCP
                         m_AsyncRequest = null;
                     }
                 }
-                else if (m_AsyncRequest == null)
+                else if (World.GetExistingSystemManaged<BridgeToolSystem>()?.Handles(request) == true)
                 {
                     m_AsyncRequest = request;
                     m_AsyncStartedUtc = DateTime.UtcNow;
@@ -208,12 +217,14 @@ namespace CS2MCP
         /// on the simulation main thread; the returned task completes when the
         /// handler (and any multi-frame tool pipeline) is done.
         /// </summary>
-        public Task<BridgeResponse> InvokeAsync(string path, IReadOnlyDictionary<string, string> query = null, string body = null)
+        public Task<BridgeResponse> InvokeAsync(string path, IReadOnlyDictionary<string, string> query = null, string body = null,
+            CancellationToken cancellationToken = default)
         {
             var request = new BridgeRequest
             {
                 Path = path,
                 Body = body ?? string.Empty,
+                CancellationToken = cancellationToken,
                 EnqueuedTimestamp = Stopwatch.GetTimestamp(),
             };
             if (query != null)

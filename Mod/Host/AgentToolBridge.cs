@@ -14,7 +14,7 @@ namespace airimayor.Host
     {
         public bool Success;
         public string Text;       // JSON or deterministic plain-text tool result
-        public byte[] ImagePng;    // PNG bytes for the model, map or screenshot alike
+        public byte[] ImagePng;    // PNG bytes for the model
         public byte[] PreviewBytes; // UI-only JPEG thumbnail for the chat window
         public Dictionary<string, byte[]> Files; // diagnostic files kept in the session record
         public SimulationStamp Applied; // clock where the simulation thread took the request
@@ -48,9 +48,10 @@ namespace airimayor.Host
             }
 
             Dictionary<string, string> query;
+            string body;
             try
             {
-                query = BuildQuery(tool, argumentsJson);
+                (query, body) = BuildRequest(tool, argumentsJson);
             }
             catch (Exception e)
             {
@@ -65,20 +66,22 @@ namespace airimayor.Host
             Task<CS2MCP.BridgeResponse> before = write
                 ? bridge.InvokeAsync(CS2MCP.RequestHandlers.LedgerRoute)
                 : null;
-            Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query);
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            lifetime.CancelAfter(BridgeTimeoutMs);
+            Task<CS2MCP.BridgeResponse> bridgeTask = bridge.InvokeAsync(tool.Route, query, body, lifetime.Token);
             Task completed = await Task.WhenAny(bridgeTask, Task.Delay(BridgeTimeoutMs, cancellationToken));
             CS2MCP.BridgeResponse response = completed == bridgeTask
                 ? await bridgeTask
                 : null;
             if (response == null)
             {
+                lifetime.Cancel();
                 if (advance)
                 {
                     bridge.CancelTimedRun();
                 }
                 cancellationToken.ThrowIfCancellationRequested();
-                return Error($"tool '{tool.Name}' did not complete within {BridgeTimeoutMs / 1000}s; " +
-                             "the game may be busy, retry once or switch approach");
+                return Error($"The city did not confirm '{tool.Name}' within {BridgeTimeoutMs / 1000} seconds. Read the site before retrying.");
             }
             ToolInvocationResult result;
             if (!response.Success)
@@ -182,7 +185,7 @@ namespace airimayor.Host
             return Error(string.IsNullOrWhiteSpace(body) ? "bridge request failed" : body);
         }
 
-        private static Dictionary<string, string> BuildQuery(ToolDefinition tool, string argumentsJson)
+        private static (Dictionary<string, string> Query, string Body) BuildRequest(ToolDefinition tool, string argumentsJson)
         {
             var query = new Dictionary<string, string>(StringComparer.Ordinal);
             using (JsonDocument document = string.IsNullOrWhiteSpace(argumentsJson)
@@ -215,8 +218,17 @@ namespace airimayor.Host
                     }
                     query[spec.Key] = JsonValueToString(value);
                 }
+                string body = null;
+                if (tool.Body != null)
+                {
+                    if (!args.TryGetProperty(tool.Body, out JsonElement value) || value.ValueKind != JsonValueKind.String)
+                    {
+                        throw new FormatException($"Provide {tool.Body} as text.");
+                    }
+                    body = value.GetString();
+                }
+                return (query, body);
             }
-            return query;
         }
 
         private static string JsonValueToString(JsonElement value)

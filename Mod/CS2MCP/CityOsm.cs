@@ -6,6 +6,13 @@ using Unity.Mathematics;
 
 namespace CS2MCP
 {
+    internal enum MapGrade
+    {
+        Ground,
+        Tunnel,
+        Bridge
+    }
+
     internal struct CityOsmRoadSource
     {
         public int Index;
@@ -13,6 +20,7 @@ namespace CS2MCP
         public string Prefab;
         public string Name;
         public string Highway;
+        public TypedNetworkKinds Utility;
         public string OneWay;
         public int? Lanes;
         public double? SpeedKmh;
@@ -138,8 +146,8 @@ namespace CS2MCP
 
     internal static class CityOsm
     {
-        private const double LongitudeMeters = 111319.49079327358;
-        private const double LatitudeMeters = 110574.27582159436;
+        internal const double LongitudeMeters = 111319.49079327358;
+        internal const double LatitudeMeters = 110574.27582159436;
         private const float EditorPrecision = 0.012f;
         private const string EntityTag = "airimayor:entity";
         private const string PrefabTag = "airimayor:prefab";
@@ -152,11 +160,27 @@ namespace CS2MCP
         {
             var document = new OsmDocument();
             document.Attributes["upload"] = "never";
+            var decks = new List<CityOsmRoadSource>();
             foreach (CityOsmRoadSource road in roads)
             {
                 var way = new OsmWay(NativeId(road.Index));
                 AddNativeWay(document, way, road.Entity, road.Prefab, road.Name);
-                way.Tags["highway"] = road.Highway;
+                if (road.Utility == TypedNetworkKinds.None)
+                {
+                    way.Tags["highway"] = road.Highway;
+                }
+                else
+                {
+                    way.Tags["location"] = "underground";
+                    if ((road.Utility & TypedNetworkKinds.LowVoltage) != 0) way.Tags["power"] = "cable";
+                    var pipes = road.Utility & (TypedNetworkKinds.Water | TypedNetworkKinds.Sewage);
+                    if (pipes != TypedNetworkKinds.None)
+                    {
+                        way.Tags["man_made"] = "pipeline";
+                        way.Tags["substance"] = pipes == TypedNetworkKinds.Water ? "water"
+                            : pipes == TypedNetworkKinds.Sewage ? "sewage" : "water;sewage";
+                    }
+                }
                 if (road.Lanes > 0)
                 {
                     way.Tags["lanes"] = road.Lanes.Value.ToString(Invariant);
@@ -177,7 +201,7 @@ namespace CS2MCP
                 {
                     bool bridge = road.Grade == MapGrade.Bridge;
                     way.Tags[bridge ? "bridge" : "tunnel"] = "yes";
-                    way.Tags["layer"] = bridge ? "1" : "-1";
+                    decks.Add(road);
                 }
                 RoadPath curve = road.Curve;
                 way.Tags[CurveTag] = Pack(curve.A, curve.B, curve.C, curve.D);
@@ -192,6 +216,7 @@ namespace CS2MCP
                 }
                 way.NodeIds.Add(AddJunction(document, road.End));
             }
+            CityOsmLayers.Assign(document, decks);
             foreach (CityOsmBuildingSource building in buildings)
             {
                 var way = new OsmWay(NativeId(building.Index));
@@ -260,7 +285,7 @@ namespace CS2MCP
             var junctions = new HashSet<long>();
             foreach (OsmWay way in document.Ways.Values)
             {
-                if (!IsRoad(way))
+                if (!IsRoad(way) && !IsUtility(way))
                 {
                     continue;
                 }
@@ -274,7 +299,7 @@ namespace CS2MCP
             }
             foreach (OsmWay way in document.Ways.Values)
             {
-                if (IsRoad(way))
+                if (IsRoad(way) || IsUtility(way))
                 {
                     roads.Add(ReadRoad(positions, way, junctions));
                 }
@@ -295,6 +320,10 @@ namespace CS2MCP
         }
 
         private static bool IsRoad(OsmWay way) => way.Tags.ContainsKey("highway") && Tag(way, "area") != "yes";
+
+        internal static bool IsUtility(OsmWay way) => Tag(way, "power") == "cable" || Tag(way, "man_made") == "pipeline";
+
+        internal static bool IsPlatform(OsmNode node) => Tag(node, "public_transport") == "platform" || Tag(node, "highway") == "bus_stop";
 
         private static CityOsmRoad ReadRoad(IReadOnlyDictionary<long, float3> positions, OsmWay way, HashSet<long> junctions)
         {
@@ -455,7 +484,7 @@ namespace CS2MCP
             return true;
         }
 
-        private static int SampleCount(RoadPath curve)
+        internal static int SampleCount(RoadPath curve)
         {
             float startBend = math.length(curve.A - 2f * curve.B + curve.C);
             float endBend = math.length(curve.B - 2f * curve.C + curve.D);
@@ -463,7 +492,7 @@ namespace CS2MCP
             return math.clamp((int)math.ceil(math.sqrt(0.75f * math.max(startBend, endBend) / chordToleranceMeters)), 1, 128);
         }
 
-        private static long NativeId(int index) => 1L + index;
+        internal static long NativeId(int index) => 1L + index;
         private static long ShapeId(long index, int sample) => (1L << 32) + index * 256L + sample;
 
         private static long AddJunction(OsmDocument document, CityOsmJunction junction)
@@ -490,7 +519,7 @@ namespace CS2MCP
             document.Ways.Add(way.Id, way);
         }
 
-        private static OsmNode ToNode(long id, float3 position)
+        internal static OsmNode ToNode(long id, float3 position)
         {
             var node = new OsmNode(id, position.z / LatitudeMeters, position.x / LongitudeMeters);
             node.Attributes["version"] = "1";
@@ -505,9 +534,9 @@ namespace CS2MCP
             return new float3((float)(node.Longitude * LongitudeMeters), height, (float)(node.Latitude * LatitudeMeters));
         }
 
-        private static string Tag(OsmElement element, string key)
+        internal static string Tag(OsmElement element, string key)
         {
-            return element.Tags.TryGetValue(key, out string value) ? value : null;
+            return element != null && element.Tags.TryGetValue(key, out string value) ? value : null;
         }
 
         private static string Pack(params float3[] values)

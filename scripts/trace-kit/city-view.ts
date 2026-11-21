@@ -48,6 +48,8 @@ export interface CityEvent {
 export interface CityMedia {
   index: number
   tool: string
+  name: string
+  image: boolean
   frame?: number
   gameTime?: string
 }
@@ -113,8 +115,10 @@ const reads = new Set([
   'get_labor',
   'list_notifications',
   'list_networks',
+  'read_osm',
 ])
 const writeLabels: Record<string, string> = {
+  edit_osm: 'Edit district map',
   place_building: 'Place building',
   build_network: 'Build connection',
   replace_road_type: 'Replace road',
@@ -242,13 +246,16 @@ export class CityRecording {
           changes,
         })
       }
-      if (
-        data.success === true &&
-        (tool === 'map_image' || tool === 'screenshot') &&
-        Array.isArray(data.files) &&
-        data.files.some((file) => isObject(file) && isAsset(file.asset) && file.asset.mediaType.startsWith('image/'))
-      )
-        this.media.push({ index, tool, ...stamp })
+      if (data.success === true && Array.isArray(data.files)) {
+        for (const file of data.files) {
+          if (!isObject(file) || !isAsset(file.asset) || typeof file.name !== 'string') continue
+          const image = file.asset.mediaType.startsWith('image/')
+          if (image || file.name === 'district.osm') {
+            this.media.push({ index, tool, name: file.name, image, ...stamp })
+            break
+          }
+        }
+      }
     })
   }
 
@@ -572,16 +579,11 @@ export class CityRecording {
         (event) => event.index <= cursor && (frame === undefined || event.frame === undefined || event.frame <= frame),
       )
       .reverse()
-    const media = ['map_image', 'screenshot'].flatMap((tool) =>
-      this.media
-        .filter(
-          (item) =>
-            item.tool === tool &&
-            item.index <= cursor &&
-            (frame === undefined || (item.frame !== undefined && item.frame <= frame)),
-        )
-        .slice(-1),
-    )
+    const latestFiles = new Map<string, CityMedia>()
+    for (const item of this.media) {
+      if (item.index > cursor || (frame !== undefined && (item.frame === undefined || item.frame > frame))) continue
+      latestFiles.set(item.image ? item.tool : item.name, item)
+    }
     return {
       index: cursor,
       overview,
@@ -593,7 +595,7 @@ export class CityRecording {
       pointTotal: points.length,
       events: events.slice(query.eventOffset ?? 0, (query.eventOffset ?? 0) + 30),
       eventTotal: events.length,
-      media,
+      media: [...latestFiles.values()],
       warnings: this.warnings.filter((warning) => warning.index <= cursor).map((warning) => warning.message),
       observations: this.observations.filter((observation) => observation.index <= cursor).length,
       untimed: this.observations.filter((observation) => observation.index <= cursor && !observation.stamp).length,

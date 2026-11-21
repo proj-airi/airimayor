@@ -166,8 +166,8 @@ namespace airimayor.Tests
         public void Requested_tool_cancellation_is_recorded_separately_from_failure()
         {
             using var record = Open();
-            record.FunctionStart("cancelled", "map_text");
-            record.Function("cancelled", "map_text", "{}", new AgentToolResult { Success = false, Text = "interrupted" },
+            record.FunctionStart("cancelled", "read_osm");
+            record.Function("cancelled", "read_osm", "{}", new AgentToolResult { Success = false, Text = "interrupted" },
                 10, default, cancelled: true);
             var lines = Lines(record);
             Assert.Equal("cancelled", (string)Assert.Single(lines, line => (string)line["type"] == "span.end")["status"]);
@@ -178,8 +178,8 @@ namespace airimayor.Tests
         public void An_unapplied_tool_has_no_invented_simulation_anchor()
         {
             using var record = Open();
-            record.FunctionStart("call", "map_text");
-            record.Function("call", "map_text", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
+            record.FunctionStart("call", "read_osm");
+            record.Function("call", "read_osm", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
             JsonObject data = Data(record, Assert.Single(Lines(record), line => (string)line["name"] == "city.tool.result"));
             Assert.Empty((JsonObject)data["timeline"]);
             Assert.Null(data["queuedMs"]);
@@ -253,8 +253,8 @@ namespace airimayor.Tests
             using (record.BindContext(captured))
             {
                 record.System("child", "late tool");
-                record.FunctionStart("late-child-call", "map_text");
-                record.Function("late-child-call", "map_text", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
+                record.FunctionStart("late-child-call", "read_osm");
+                record.Function("late-child-call", "read_osm", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
             }
 
             Assert.All(Lines(record).Where(line => (string)line["ids"]["agentSession"] == "child"), line =>

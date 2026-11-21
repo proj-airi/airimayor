@@ -395,15 +395,6 @@
     border-radius: 4px;
   }
 
-  .toolImage {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    border-radius: 3px;
-    margin-bottom: 4px;
-  }
-
   .composer {
     position: relative;
     padding: 8px 10px 10px 10px;
@@ -575,7 +566,7 @@
         <div class="toolRow expanded">
           <div class="toolHeader">
             <span class="toolDot dotDone"></span>
-            <span class="toolName">map_image</span>
+            <span class="toolName">read_osm</span>
             <span class="toolState">Done</span>
             <span class="toolChevron">
               <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
@@ -583,31 +574,9 @@
           </div>
           <div class="toolBody">
             <div class="toolSectionLabel">Arguments</div>
-            <pre class="toolPre">{ "x": -1420, "z": 980, "radius": 450 }</pre>
+            <pre class="toolPre">{ "xMin": -1870, "zMin": 530, "xMax": -970, "zMax": 1430 }</pre>
             <div class="toolSectionLabel">Result</div>
-            <svg class="toolImage" viewBox="0 0 300 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="City map around the industrial district">
-              <rect width="300" height="190" fill="#f2efe9"/>
-              <path d="M252 0h48v190h-70c14-60 10-130 22-190z" fill="#aad3df"/>
-              <rect x="176" y="16" width="54" height="42" rx="4" fill="#c8facc"/>
-              <g fill="#d9d0c9">
-                <rect x="10" y="12" width="16" height="10"/><rect x="34" y="12" width="12" height="10"/>
-                <rect x="52" y="12" width="18" height="10"/><rect x="10" y="30" width="16" height="12"/>
-                <rect x="34" y="30" width="12" height="12"/><rect x="78" y="14" width="14" height="10"/>
-                <rect x="100" y="14" width="16" height="10"/><rect x="80" y="32" width="12" height="12"/>
-                <rect x="12" y="84" width="14" height="10"/><rect x="34" y="84" width="12" height="10"/>
-                <rect x="12" y="102" width="14" height="12"/><rect x="58" y="86" width="14" height="10"/>
-                <rect x="96" y="86" width="16" height="10"/><rect x="122" y="84" width="12" height="12"/>
-              </g>
-              <g stroke="#c6c1ba" stroke-width="9" fill="none">
-                <path d="M0 60h238"/><path d="M40 0v150"/><path d="M0 140h234"/>
-              </g>
-              <g stroke="#ffffff" stroke-width="6" fill="none">
-                <path d="M0 60h238"/><path d="M40 0v150"/><path d="M0 140h234"/>
-              </g>
-              <path d="M244 0 236 190" stroke="#dc2a67" stroke-width="8" fill="none"/>
-              <path d="M244 0 236 190" stroke="#e892a2" stroke-width="5" fill="none"/>
-              <path d="M56 140h96" stroke="#e05252" stroke-width="5" stroke-dasharray="9 5" fill="none"/>
-            </svg>
+            <pre class="toolPre">{ "revision": "42a1…", "content": "&lt;osm version=\"0.6\"&gt;…&lt;/osm&gt;" }</pre>
             <pre class="toolPre">{ "bounds": { "xMin": -1870, "xMax": -970, "zMin": 530, "zMax": 1430 }, "note": "one congested road segment inside bounds" }</pre>
           </div>
         </div>
@@ -655,7 +624,7 @@
         <div class="toolRow expanded">
           <div class="toolHeader">
             <span class="toolDot dotError"></span>
-            <span class="toolName">export_osm</span>
+            <span class="toolName">read_osm</span>
             <span class="toolState">Error</span>
             <span class="toolChevron">
               <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
@@ -663,10 +632,10 @@
           </div>
           <div class="toolBody">
             <div class="toolSectionLabel">Arguments</div>
-            <pre class="toolPre">{ "x": -1460, "z": 1390 }</pre>
+            <pre class="toolPre">{ "xMin": -1710, "zMin": 1140 }</pre>
             <div class="toolSectionLabel">Result</div>
             <pre class="toolPre">{
-  "error": "provide a map range: x&amp;z&amp;radius OR xMin&amp;zMin&amp;xMax&amp;zMax",
+  "error": "Provide all four district bounds in city meters.",
   "kind": "invalid_arguments"
 }</pre>
           </div>
@@ -680,7 +649,7 @@
         <div class="toolRow">
           <div class="toolHeader">
             <span class="toolDot dotDone"></span>
-            <span class="toolName">export_osm</span>
+            <span class="toolName">read_osm</span>
             <span class="toolState">Done</span>
             <span class="toolChevron">
               <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
@@ -688,9 +657,9 @@
           </div>
           <div class="toolBody">
             <div class="toolSectionLabel">Arguments</div>
-            <pre class="toolPre">{ "x": -1460, "z": 1390, "radius": 250 }</pre>
+            <pre class="toolPre">{ "xMin": -1710, "zMin": 1140, "xMax": -1210, "zMax": 1640 }</pre>
             <div class="toolSectionLabel">Result</div>
-            <pre class="toolPre">&lt;osm version="0.6" upload="never"&gt;…&lt;/osm&gt;</pre>
+            <pre class="toolPre">{ "revision": "b24e…", "content": "&lt;osm version=\"0.6\"&gt;…&lt;/osm&gt;" }</pre>
           </div>
         </div>
 

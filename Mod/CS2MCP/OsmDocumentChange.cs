@@ -51,9 +51,11 @@ namespace CS2MCP
             return new OsmChange(root);
         }
 
-        public static OsmChange Read(string xml)
+        public static OsmChange Read(string xml) => Read(OsmXml.ReadRoot(xml));
+
+        internal static OsmChange Read(XElement root)
         {
-            XElement root = OsmXml.ReadRoot(xml, "osmChange");
+            OsmXml.RequireRoot(root, "osmChange");
             foreach (XElement block in root.Elements())
             {
                 if (block.Name != "create" && block.Name != "modify" && block.Name != "delete")

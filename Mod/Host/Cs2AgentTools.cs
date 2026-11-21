@@ -16,6 +16,7 @@ namespace airimayor.Host
         private static readonly HashSet<string> s_Construction =
             new HashSet<string>(StringComparer.Ordinal)
             {
+                "edit_osm",
                 "zone",
                 "set_road_features",
                 "expand_operational_area",
@@ -33,7 +34,7 @@ namespace airimayor.Host
         private static readonly HashSet<string> s_VisionTools =
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "screenshot", "get_camera", "set_camera", "map_image",
+                "screenshot", "get_camera", "set_camera",
             };
 
         public IReadOnlyList<AgentToolDeclaration> List(bool visionAvailable)
@@ -86,7 +87,7 @@ namespace airimayor.Host
                 Success = invoked.Success,
                 Text = invoked.Text,
                 ImagePng = image,
-                ImageCaption = ImageCaption(name),
+                ImageCaption = image != null ? "City screenshot." : null,
                 PreviewJpeg = invoked.PreviewBytes,
                 Applied = invoked.Applied,
                 QueuedMs = invoked.QueuedMs,
@@ -102,19 +103,6 @@ namespace airimayor.Host
                 s_Treasury.Contains(name) ||
                 name == "demolish" ||
                 name == "purchase_development_node";
-        }
-
-        private static string ImageCaption(string name)
-        {
-            if (string.Equals(name, "map_image", StringComparison.Ordinal))
-            {
-                return "Map overview returned by the map_image tool.";
-            }
-            if (string.Equals(name, "screenshot", StringComparison.Ordinal))
-            {
-                return "Screenshot returned by the screenshot tool.";
-            }
-            return null;
         }
 
         private static bool IsAllowed(string name, bool visionAvailable)

@@ -23,6 +23,7 @@ namespace airimayor.Host
         public string Description;
         public JsonElement Parameters;
         public string Route;
+        public string Body;
         public List<ToolQuerySpec> Query = new List<ToolQuerySpec>();
         public string Response = "json"; // "json" | "text" | "png"
     }
@@ -140,6 +141,7 @@ namespace airimayor.Host
                         Name = toolElement.GetProperty("name").GetString(),
                         Description = GetStringOrEmpty(toolElement, "description"),
                         Route = toolElement.GetProperty("route").GetString(),
+                        Body = GetStringOrNull(toolElement, "body"),
                         Response = GetStringOrDefault(toolElement, "response", "json"),
                     };
                     if (toolElement.TryGetProperty("parameters", out JsonElement parameters))

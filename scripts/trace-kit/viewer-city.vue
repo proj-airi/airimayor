@@ -27,8 +27,8 @@ const result = shallowRef<CityView>(),
   chartLimit = ref<number>(),
   error = ref(''),
   loading = ref(false),
-  imageIndex = ref<number>(),
-  imageUrl = ref('')
+  fileIndex = ref<number>(),
+  fileUrl = ref('')
 let desired: { client: ViewerClient; position: number; query: CityQuery; serial: number } | undefined,
   pending = false,
   serial = 0,
@@ -165,8 +165,8 @@ const panels = computed(() =>
       available: !!result.value?.notifications,
     },
     {
-      key: 'images',
-      label: 'City images',
+      key: 'files',
+      label: 'District maps and images',
       icon: 'i-mingcute:pic-line',
       available: !!result.value?.media.length,
     },
@@ -175,25 +175,26 @@ const panels = computed(() =>
 watch(
   () => result.value?.media,
   (media) => {
-    if (!media?.some((item) => item.index === imageIndex.value)) imageIndex.value = media?.[0]?.index
+    if (!media?.some((item) => item.index === fileIndex.value)) fileIndex.value = media?.[0]?.index
   },
 )
+const selectedFile = computed(() => result.value?.media.find((item) => item.index === fileIndex.value))
 watch(
-  () => [props.client, panel.value, imageIndex.value] as const,
-  async ([client, active, index], _old, onCleanup) => {
+  () => [props.client, panel.value, fileIndex.value, selectedFile.value?.name] as const,
+  async ([client, active, index, name], _old, onCleanup) => {
     let current = true,
       url = ''
-    imageUrl.value = ''
+    fileUrl.value = ''
     onCleanup(() => {
       current = false
       if (url) URL.revokeObjectURL(url)
     })
-    if (active !== 'images' || index === undefined) return
+    if (active !== 'files' || index === undefined || !name) return
     try {
-      const attachment = await client.remote.cityImage(index)
+      const attachment = await client.remote.cityFile(index, name)
       if (attachment && current) {
         url = URL.createObjectURL(attachment.blob)
-        imageUrl.value = url
+        fileUrl.value = url
       }
     } catch (value) {
       if (current) error.value = String(value)
@@ -433,35 +434,36 @@ function chooseMetric(card: CityMetric) {
         </div>
       </section>
       <section
-        v-if="panel === 'images' && result.media.length"
-        aria-label="City images"
+        v-if="panel === 'files' && result.media.length"
+        aria-label="City files"
         class="space-y-2 rounded-md border border-neutral-800 p-3"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <select
-            v-model="imageIndex"
-            aria-label="City image"
+            v-model="fileIndex"
+            aria-label="City file"
             class="max-w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
           >
             <option v-for="item in result.media" :key="item.index" :value="item.index">
-              {{ item.tool === 'map_image' ? 'Map' : 'Screenshot' }} ·
+              {{ item.image ? (item.tool === 'screenshot' ? 'Screenshot' : item.name) : 'District map' }} ·
               {{ cityDate(item.frame === undefined ? undefined : { frame: item.frame, gameTime: item.gameTime }) }}
             </option></select
           ><button
-            v-if="imageIndex !== undefined"
+            v-if="fileIndex !== undefined"
             class="text-xs text-primary-300 hover:underline"
-            @click="emit('record', imageIndex)"
+            @click="emit('record', fileIndex)"
           >
-            Open image source
+            Open source record
           </button>
         </div>
         <img
-          v-if="imageUrl"
-          :src="imageUrl"
+          v-if="fileUrl && selectedFile?.image"
+          :src="fileUrl"
           alt="Recorded city view at the selected city time"
           class="max-h-96 max-w-full rounded object-contain"
         />
-        <p v-else class="text-xs text-neutral-500">Image unavailable or loading…</p>
+        <a v-else-if="fileUrl && selectedFile" :href="fileUrl" :download="selectedFile.name" class="text-xs text-primary-300 hover:underline">Download {{ selectedFile.name }}</a>
+        <p v-else class="text-xs text-neutral-500">File unavailable or loading…</p>
       </section>
       <details class="text-xs text-neutral-500">
         <summary class="cursor-pointer">
@@ -471,7 +473,7 @@ function chooseMetric(card: CityMetric) {
         </summary>
         <p class="mt-2">
           The line previews the full recording. The playhead and current values follow the main replay; readings,
-          actions and images become available when their source is reached. No intermediate readings are invented.
+          actions and files become available when their source is reached. No intermediate readings are invented.
         </p>
         <p v-if="result.selected?.scope" class="mt-2">{{ result.selected.scope }}</p>
         <p v-if="result.overview.chart.length < (result.overview.selected?.samples ?? 0)" class="mt-2">

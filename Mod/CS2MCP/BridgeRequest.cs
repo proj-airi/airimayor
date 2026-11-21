@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using airimayor.Agent;
 using Newtonsoft.Json;
@@ -16,6 +17,7 @@ namespace CS2MCP
         public string Path;
         public Dictionary<string, string> Query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public string Body;
+        public CancellationToken CancellationToken;
 
         /// <summary>Stopwatch timestamp when the request entered the queue.</summary>
         public long EnqueuedTimestamp;

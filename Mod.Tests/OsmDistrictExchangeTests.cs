@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Unity.Mathematics;
 using Xunit;
 
 namespace CS2MCP
@@ -42,6 +43,46 @@ namespace CS2MCP
                     Assert.Equal(requiresTurn ? 1 : 0, turns.Count());
                 }
             }
+        }
+
+        [Fact]
+        public void Interchange_edit_compiles_all_eight_ramps_with_the_same_directed_connections()
+        {
+            OsmDocument baseline = OsmDocument.Read(Fixture("interchange-base.osm"));
+            OsmDocument result = baseline.Edit(Fixture("interchange.osc"));
+            CityOsmGeometry city = CityOsm.Import(result);
+            var changes = CityOsmEdit.Changes(CityOsm.Import(baseline), city, new float4(-500, -500, 500, 500));
+            var ramps = city.Roads.Where(road => road.Highway == "motorway_link").Select(road => road.Id).ToHashSet();
+            Assert.Equal(8, changes.Count(change => change.Edited is OsmWay way && ramps.Contains(way.Id)));
+
+            var deck = result.Ways.Values.Where(way => way.Tags.ContainsKey("bridge")).SelectMany(way => way.NodeIds).ToHashSet();
+            foreach (OsmNode node in result.Nodes.Values)
+            {
+                float3 point = city.Positions[node.Id];
+                point.y = deck.Contains(node.Id) ? 10f : 0f;
+                city.MoveNode(node.Id, point);
+            }
+            var sections = city.Roads.SelectMany(road => road.Sections).ToList();
+            var expected = sections.ToLookup(section => section.StartNode, section => section.EndNode);
+            var junctions = sections.SelectMany(section => new[] { section.StartNode, section.EndNode }).ToHashSet();
+            var courses = city.Roads.SelectMany(road =>
+            {
+                List<long> nodes = result.Ways[road.Id].NodeIds;
+                return road.Sections.SelectMany(section => CityOsmEdit.Courses(nodes,
+                    nodes.IndexOf(section.StartNode), nodes.IndexOf(section.EndNode), section));
+            }).ToList();
+            var built = courses.ToLookup(course => course.Start, course => course.End);
+            foreach (long start in junctions)
+            {
+                var reachable = Reachable(built, start);
+                reachable.IntersectWith(junctions);
+                Assert.True(reachable.SetEquals(Reachable(expected, start)), $"Reachable interchange junctions changed at node {start}.");
+            }
+            Assert.All(courses, course =>
+            {
+                Assert.Equal(city.Positions[course.Start], course.Curve.A);
+                Assert.Equal(city.Positions[course.End], course.Curve.D);
+            });
         }
 
         [Fact]

@@ -2,11 +2,6 @@ using System;
 
 namespace CS2MCP
 {
-    /// <summary>
-    /// Native road-hierarchy facts shared by list_prefabs, list_networks,
-    /// map_text and map_image. Category first: the native UI group decides
-    /// Highways membership; prefab name only covers group-less nets.
-    /// </summary>
     internal static class RoadFactsMath
     {
         public const string RoadClassHighway = "highway";

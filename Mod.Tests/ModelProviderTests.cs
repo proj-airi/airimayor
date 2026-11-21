@@ -230,7 +230,7 @@ namespace airimayor.Tests
             {
                 new ChatMessage(ChatRole.Assistant, new AIContent[]
                 {
-                    new FunctionCallContent("image-call", "map_image", new Dictionary<string, object>()),
+                    new FunctionCallContent("image-call", "screenshot", new Dictionary<string, object>()),
                     new FunctionCallContent("read-call", "get_statistics", new Dictionary<string, object>()),
                 }),
                 tools,

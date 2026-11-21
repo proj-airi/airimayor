@@ -175,66 +175,37 @@
       "response": "png"
     },
     {
-      "name": "export_osm",
-      "description": "Read the roads, shared junctions and building footprints in a city district as a local OpenStreetMap document. Give x, z and radius or all four rectangle bounds in city meters. Roads and footprints reaching the district are returned whole. For a visual overview use map_image.",
+      "name": "read_osm",
+      "description": "Read a district's roads, junctions, buildings, underground utilities and transit stops. Returns its revision and editable OpenStreetMap XML in content. Use city coordinates in meters for all four bounds.",
       "parameters": {
         "type": "object",
         "properties": {
-          "x": {
-            "type": "number",
-            "description": "Center X (with z+radius)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z (with x+radius)"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 14336,
-            "description": "Half-size of square range in meters (with x+z)"
-          },
           "xMin": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min X (with zMin+xMax+zMax)"
+            "description": "West side of the district in city meters"
           },
           "zMin": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min Z"
+            "description": "Minimum district Z in city meters"
           },
           "xMax": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max X"
+            "description": "East side of the district in city meters"
           },
           "zMax": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max Z"
+            "description": "Maximum district Z in city meters"
           }
         },
-        "required": []
+        "required": [
+          "xMin",
+          "zMin",
+          "xMax",
+          "zMax"
+        ]
       },
-      "route": "/city/osm",
+      "route": "/city/osm/read",
       "query": [
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
         {
           "key": "xMin",
           "arg": "xMin"
@@ -252,69 +223,50 @@
           "arg": "zMax"
         }
       ],
-      "response": "text"
+      "response": "json"
     },
     {
-      "name": "map_image",
-      "description": "Undistorted top-down PNG city map in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
+      "name": "edit_osm",
+      "description": "Apply a district edit to the city. Reuse the bounds and revision from read_osm. Submit the full edited OSM map or an OsmChange patch in content. Preserve nearby features and share node references at road junctions. Use standard OSM tags, with airimayor:prefab for a particular city asset. Removing an existing mapped feature requires demolition permission. Returns the updated district and revision.",
       "parameters": {
         "type": "object",
         "properties": {
-          "x": {
-            "type": "number",
-            "description": "Center X (with z+radius)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z (with x+radius)"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 14336,
-            "description": "Half-size of square range in meters (with x+z)"
-          },
           "xMin": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min X (with zMin+xMax+zMax)"
+            "description": "West side of the district in city meters"
           },
           "zMin": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min Z"
+            "description": "Minimum district Z in city meters"
           },
           "xMax": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max X"
+            "description": "East side of the district in city meters"
           },
           "zMax": {
             "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max Z"
+            "description": "Maximum district Z in city meters"
+          },
+          "revision": {
+            "type": "string",
+            "description": "District revision returned by read_osm"
+          },
+          "content": {
+            "type": "string",
+            "description": "Complete edited OSM XML or an OsmChange XML patch"
           }
         },
-        "required": []
+        "required": [
+          "xMin",
+          "zMin",
+          "xMax",
+          "zMax",
+          "revision",
+          "content"
+        ]
       },
-      "route": "/city/map",
+      "route": "/city/osm/edit",
       "query": [
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
         {
           "key": "xMin",
           "arg": "xMin"
@@ -330,9 +282,14 @@
         {
           "key": "zMax",
           "arg": "zMax"
+        },
+        {
+          "key": "revision",
+          "arg": "revision"
         }
       ],
-      "response": "png"
+      "body": "content",
+      "response": "json"
     },
     {
       "name": "get_budget",
@@ -1438,86 +1395,6 @@
         }
       ],
       "response": "json"
-    },
-    {
-      "name": "map_text",
-      "description": "Compact map text for a range. Returns a local coordinate frame, elevation/slope/water/owned/buildable summaries, connected regions, road nodes/edges, directional sectors, and omitted metadata. Road lines carry roadClass/lanes/speedKmh/highwayRules/zonable; roadClass is the game's road category (highway = the Highways category). Use before choosing an expansion direction or placing shoreline/terrain-sensitive infrastructure. Coordinates in region and network geometry are quantized units relative to frame.origin_world; multiply by quantum_m to recover meter offsets. Spatial evidence for planning. Give x+z+radius or xMin+zMin+xMax+zMax bounds.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "x": {
-            "type": "number",
-            "description": "Center X (with z+radius)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z (with x+radius)"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 14336,
-            "description": "Half-size of square range in meters (with x+z)"
-          },
-          "xMin": {
-            "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min X (with zMin+xMax+zMax)"
-          },
-          "zMin": {
-            "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds min Z"
-          },
-          "xMax": {
-            "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max X"
-          },
-          "zMax": {
-            "type": "number",
-            "minimum": -7168,
-            "maximum": 7168,
-            "description": "Bounds max Z"
-          }
-        },
-        "required": []
-      },
-      "route": "/city/terrain",
-      "query": [
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "xMin",
-          "arg": "xMin"
-        },
-        {
-          "key": "zMin",
-          "arg": "zMin"
-        },
-        {
-          "key": "xMax",
-          "arg": "xMax"
-        },
-        {
-          "key": "zMax",
-          "arg": "zMax"
-        }
-      ],
-      "response": "text"
     },
     {
       "name": "probe_layer",

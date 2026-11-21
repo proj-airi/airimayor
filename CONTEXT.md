@@ -93,7 +93,7 @@ An exact named game asset used by a road, building or other city object.
 _Avoid_: a building use or a road class as an exact asset identity
 
 **Local OSM map**:
-An OpenStreetMap document for a fictional city district. Roads refer to shared junctions and buildings occupy mapped footprints.
+An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, utility lines and building lots. Shared nodes connect ways, and platform nodes locate roadside stops.
 _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 
 **Ground**:
@@ -121,7 +121,7 @@ A connected set of typed-network edges that does not reach an outside connection
 _Avoid_: treating every degree-1 dead end as isolated
 
 **Road facts**:
-Native per-prefab road identity on `list_prefabs`, `list_networks` and `map_text`: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
+Native per-prefab road identity on `list_prefabs` and `list_networks`: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
 _Avoid_: width as the highway test; a new traffic tool
 
 **Operational area**:
@@ -153,14 +153,6 @@ _Avoid_: a pin drawn on the map, a prop, a tool the Agent calls, a district, a M
 **Clip**:
 A place named inside a message that moves the camera on click. The player sends clips as cards on the message; the Agent writes them inline, and the chat renders both the same way.
 _Avoid_: an attachment row, a second copy of the place list, a persistent highlight
-
-**MAP_TEXT**:
-Budgeted semantic-vector text from `map_text`. Spatial evidence, not construction approval.
-_Avoid_: heightmap, 8×8 samples as the Agent interface
-
-**Map image**:
-Undistorted PNG overview from `map_image`: citywide by default, zoomed extent with x+z+radius or xMin/zMin/xMax/zMax bounds. OSM Carto look: scale-dependent density of land, water, parks, buildings, roads, and rails. Names stay in MAP_TEXT. Appears only when the player enabled visual tools.
-_Avoid_: street names in the PNG; stop-to-stop transit overlays; Carto or QGIS as the product renderer; model-parsed GeoJSON; treating the map as construction approval
 
 **Player permission**:
 A durable setting that shows or hides one group of city tools. The groups are peers: construction, demolition, treasury and policy, development points, the clock, visual tools, saving, diagnostics, and panel control. A hidden tool is not offered.

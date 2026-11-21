@@ -3,13 +3,15 @@ using Unity.Entities;
 
 namespace CS2MCP
 {
-    /// <summary>
-    /// Native road identity for the model-facing surface. One reader serves
-    /// list_prefabs, list_networks, map_text and map_image so the category
-    /// decision lives in exactly one place (see RoadFactsMath).
-    /// </summary>
     public sealed partial class RequestHandlers
     {
+        private float NativeRoadWidthM(Entity prefab)
+        {
+            return EntityManager.HasComponent<NetGeometryData>(prefab)
+                ? EntityManager.GetComponentData<NetGeometryData>(prefab).m_DefaultWidth
+                : 0f;
+        }
+
         private struct RoadPrefabFacts
         {
             public string RoadClass;

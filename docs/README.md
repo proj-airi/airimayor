@@ -11,24 +11,24 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | Former standalone building placement contract, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
 | [0004-linear-networks.md](./adr/0004-linear-networks.md) | Former individual network connection contract, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
 | [0005-player-permissions.md](./adr/0005-player-permissions.md) | Settings, not flags (grouping superseded by [0042](./adr/0042-player-permission-groups.md)) |
-| [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain`/`LOCAL_MAP` superseded by 0017; now `map_text` MAP_TEXT plus separate `map_image` |
+| [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
 | [0007-session-lifecycle.md](./adr/0007-session-lifecycle.md) | Session follows the loaded city; data under `ModsData` |
 | [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Superseded; player-set window and native Harness compaction ([0048](./adr/0048-native-maf-harness.md)) |
 | [0009-typed-network-graph.md](./adr/0009-typed-network-graph.md) | One typed network behind list, demolish, and topology QA |
 | [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines connect existing stops through the route tool |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
 | [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat on `GameBottomRight` + `Portal`; bindings catalog; event-sourced transcript |
-| [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | `map_image` via Carto reflection; shares the vision switch |
+| [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
 | [0014-tool-image-preview.md](./adr/0014-tool-image-preview.md) | Tool image previews are thumbnails over the event channel |
 | [0015-map-style-and-extent.md](./adr/0015-map-style-and-extent.md) | Light map style; bounded extents (style superseded by 0020) |
 | [0016-map-layering-port.md](./adr/0016-map-layering-port.md) | Port road layering; label deferral superseded by 0020 |
-| [0017-map-text-map-image-split.md](./adr/0017-map-text-map-image-split.md) | map_text and map_image stay separate tools |
-| [0018-bounded-map-game-crs.md](./adr/0018-bounded-map-game-crs.md) | Bounded `map_image` forces the Game CRS; no Transform mirroring |
+| [0017-map-text-map-image-split.md](./adr/0017-map-text-map-image-split.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
+| [0018-bounded-map-game-crs.md](./adr/0018-bounded-map-game-crs.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
 | [0019-vendored-map-source.md](./adr/0019-vendored-map-source.md) | Native map source; Carto reflection removed after acceptance |
-| [0020-osm-carto-map-image.md](./adr/0020-osm-carto-map-image.md) | `map_image` targets OSM Carto (labels superseded by 0022) |
-| [0021-osm-carto-stroke-painter.md](./adr/0021-osm-carto-stroke-painter.md) | `map_image` paints OSM Carto lines, not Bresenham squares |
-| [0022-map-image-geometry-only.md](./adr/0022-map-image-geometry-only.md) | `map_image` is geometry; names stay in `map_text` |
-| [0023-map-image-no-route-overlay.md](./adr/0023-map-image-no-route-overlay.md) | `map_image` omits stop-to-stop transit overlays |
+| [0020-osm-carto-map-image.md](./adr/0020-osm-carto-map-image.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
+| [0021-osm-carto-stroke-painter.md](./adr/0021-osm-carto-stroke-painter.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
+| [0022-map-image-geometry-only.md](./adr/0022-map-image-geometry-only.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
+| [0023-map-image-no-route-overlay.md](./adr/0023-map-image-no-route-overlay.md) | Historical map design, superseded by [0059](./adr/0059-coordinate-addressed-osm-editing.md) |
 | [0024-map-image-ways-not-grade-splits.md](./adr/0024-map-image-ways-not-grade-splits.md) | Ways are the road graph; elevation is paint |
 | [0025-map-image-native-node-ways.md](./adr/0025-map-image-native-node-ways.md) | Ways walk native nodes; width is paint |
 | [0026-road-facts-category-first.md](./adr/0026-road-facts-category-first.md) | Native road facts; category first, width never promotes |
@@ -64,6 +64,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0056-turn-focused-recording-workspace.md](./adr/0056-turn-focused-recording-workspace.md) | Turn-scoped replay and analysis in AIRI docking panes; native execution stays distinct from mayor turns |
 | [0057-repository-policy-checks.md](./adr/0057-repository-policy-checks.md) | Deterministic repository contracts and evidence-based semantic review through alint |
 | [0058-local-osm-city-geometry.md](./adr/0058-local-osm-city-geometry.md) | Local OSM district maps and bidirectional road and building geometry conversion |
+| [0059-coordinate-addressed-osm-editing.md](./adr/0059-coordinate-addressed-osm-editing.md) | Read and edit a live district as OSM by its city coordinates |
 
 ## Guide
 

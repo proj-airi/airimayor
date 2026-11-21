@@ -127,7 +127,7 @@ test('latency uses captured metrics and leaves missing values unavailable instea
     reasoning: 'River inspection',
     update: { contents: [{ $type: 'textReasoning', text: 'River inspection' }] },
   })
-  delta(150, { update: { contents: [{ $type: 'functionCall', name: 'map_text', callId: 'tool' }] } })
+  delta(150, { update: { contents: [{ $type: 'functionCall', name: 'read_osm', callId: 'tool' }] } })
   trace.add({ type: 'span.end', spanId: 'call', track: 'agents/mayor/llm', status: 'ok', ts: 200,
     attrs: { 'llm.ttft_ms': 31, 'llm.ttfat_ms': 55 } })
   trace.add({ type: 'span.begin', spanId: 'without-metrics', track: 'agents/mayor/llm', name: 'chat', ts: 201 })

@@ -1,5 +1,6 @@
 export const LEDGER_FIELDS = ['money', 'developmentPoints', 'buildings', 'networkEdges', 'transitLines']
 const WITNESS_FIELDS: Record<string, string[]> = {
+  edit_osm: ['networkEdges', 'buildings', 'money'],
   place_building: ['buildings', 'money'],
   build_network: ['networkEdges', 'money'],
   replace_road_type: ['networkEdges', 'money'],
