@@ -6,6 +6,7 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
+- Migrate the ten legacy city tools to the [OSM editing and query contract](./adr/0060-osm-first-city-tools.md). Verify directional road features and demolition-only edits, zone-cell readback, ordered transit stops across bounds, and resource-aware expansion of an owned area. Verify placed-feature search, dated traffic and power rankings, whole-city reachability and asset discovery on empty land before retiring the corresponding entries.
 - Native-summary task separation on OpenCode Go DeepSeek: historical player requests must be summarized as source material instead of answered as the current task.
 - AIRI plugin
 
