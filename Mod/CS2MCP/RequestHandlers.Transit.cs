@@ -21,8 +21,6 @@ namespace CS2MCP
     /// WaypointDefinition through BridgeToolSystem so GenerateRoutesSystem and
     /// ApplyRoutesSystem own native validation. Delete adds Deleted through
     /// EndFrameBarrier — the same path TransportationOverviewUISystem uses.
-    /// Roadside stops are placed with place_building. Station sub-stops come
-    /// with the station building. Line tools only connect stops that exist.
     /// </summary>
     public sealed partial class RequestHandlers
     {
@@ -199,7 +197,7 @@ namespace CS2MCP
                 total,
                 truncated = total > stops.Count,
                 stops,
-                note = "read-only snapshot of existing stops; add_transit_line connects them. A new roadside stop is place_building.",
+                note = "Passenger lines can connect these existing stops.",
             });
         }
 

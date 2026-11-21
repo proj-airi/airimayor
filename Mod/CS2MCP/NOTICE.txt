@@ -11,8 +11,3 @@ Modifications by the airimayor project:
   actual implementation.
 - The standalone MCP server entry point (index.ts / extract-tools.mjs) is
   preserved for reference under archive/cs2mcp-server/.
-
-CreateDefinitions.cs contains portions derived from game code:
-Copyright (c) Colossal Order and Paradox Interactive.
-Not for reuse or distribution except in accordance with the Paradox Interactive
-End User License Agreement.

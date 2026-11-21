@@ -131,8 +131,8 @@ namespace airimayor.Tests
             using var run = record.BindRun("root", "root-run", "mayor");
             var clock = new SimulationStamp(1200, "2026-01-02 08:00", 0f);
             string resultText = new string('r', 70000);
-            record.FunctionStart("call/1", "build_network");
-            record.Function("call/1", "build_network", "{\"apiKey\":\"private\"}", new AgentToolResult
+            record.FunctionStart("call/1", "set_road_features");
+            record.Function("call/1", "set_road_features", "{\"apiKey\":\"private\"}", new AgentToolResult
             {
                 Success = true, Text = resultText, ImagePng = new byte[] { 1, 2, 3 },
                 Files = new Dictionary<string, byte[]> { ["probe.txt"] = Encoding.UTF8.GetBytes("token=private") },
@@ -195,10 +195,10 @@ namespace airimayor.Tests
             };
             ActivitySource.AddActivityListener(listener);
             using var source = new ActivitySource("airimayor.harness");
-            using var activity = source.StartActivity("execute_tool build_network");
+            using var activity = source.StartActivity("execute_tool set_road_features");
             using var record = Open();
-            record.FunctionStart("native-call", "build_network");
-            record.Function("native-call", "build_network", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
+            record.FunctionStart("native-call", "set_road_features");
+            record.Function("native-call", "set_road_features", "{}", new AgentToolResult { Success = true, Text = "{}" }, 0, new ToolAnchors());
             JsonObject[] lines = Lines(record);
             Assert.DoesNotContain(lines, line => (string)line["type"] == "span.begin" || (string)line["type"] == "span.end");
             Assert.Equal(activity.SpanId.ToHexString(), (string)Assert.Single(lines, line => (string)line["name"] == "city.tool.result")["spanId"]);

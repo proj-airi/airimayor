@@ -569,7 +569,7 @@
 
         <div class="messageRow assistantRow">
           <span class="roleLabel">AIRI</span>
-          <span class="messageText">I'll pull up the district on the map and check the road layout, then add capacity where the queues are worst.</span>
+          <span class="messageText">I'll pull up the district on the map and check the road layout, then identify where another connection could help.</span>
         </div>
 
         <div class="toolRow expanded">
@@ -655,7 +655,7 @@
         <div class="toolRow expanded">
           <div class="toolHeader">
             <span class="toolDot dotError"></span>
-            <span class="toolName">build_network</span>
+            <span class="toolName">export_osm</span>
             <span class="toolState">Error</span>
             <span class="toolChevron">
               <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
@@ -663,24 +663,24 @@
           </div>
           <div class="toolBody">
             <div class="toolSectionLabel">Arguments</div>
-            <pre class="toolPre">{ "prefab": "Medium Avenue", "x1": -1460, "z1": 1390, "x2": -1020, "z2": 1330 }</pre>
+            <pre class="toolPre">{ "x": -1460, "z": 1390 }</pre>
             <div class="toolSectionLabel">Result</div>
             <pre class="toolPre">{
-  "error": "Route rejected: local grade 12.4% exceeds the 10% limit near x=-1240, z=1365",
-  "hint": "Change the route; ground mode never promotes to bridge or tunnel"
+  "error": "provide a map range: x&amp;z&amp;radius OR xMin&amp;zMin&amp;xMax&amp;zMax",
+  "kind": "invalid_arguments"
 }</pre>
           </div>
         </div>
 
         <div class="messageRow assistantRow">
           <span class="roleLabel">AIRI</span>
-          <span class="messageText">The direct route over the ridge is too steep for native validation — no silent bridges. I'll go around the slope instead.</span>
+          <span class="messageText">I’ll read the roads and buildings within 250 meters of the industrial district.</span>
         </div>
 
         <div class="toolRow">
           <div class="toolHeader">
             <span class="toolDot dotDone"></span>
-            <span class="toolName">build_network</span>
+            <span class="toolName">export_osm</span>
             <span class="toolState">Done</span>
             <span class="toolChevron">
               <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 15.7 5.3 9a1.35 1.35 0 0 1 1.9-1.9L12 11.9l4.8-4.8A1.35 1.35 0 0 1 18.7 9z"/></svg>
@@ -688,9 +688,9 @@
           </div>
           <div class="toolBody">
             <div class="toolSectionLabel">Arguments</div>
-            <pre class="toolPre">{ "prefab": "Medium Avenue", "x1": -1490, "z1": 1240, "x2": -1020, "z2": 1385 }</pre>
+            <pre class="toolPre">{ "x": -1460, "z": 1390, "radius": 250 }</pre>
             <div class="toolSectionLabel">Result</div>
-            <pre class="toolPre">{ "entity": 199453, "prefab": "Medium Avenue", "length": 492, "connectedEnds": 2, "note": "District edge linked to the highway ramp" }</pre>
+            <pre class="toolPre">&lt;osm version="0.6" upload="never"&gt;…&lt;/osm&gt;</pre>
           </div>
         </div>
 

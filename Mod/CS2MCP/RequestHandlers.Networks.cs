@@ -533,7 +533,7 @@ namespace CS2MCP
                         entity.Version,
                         edge.m_Start.Index,
                         edge.m_End.Index,
-                        SamplePlacementPath(curve),
+                        SampleNetworkCurve(curve),
                         curve.m_Length,
                         kinds,
                         IsOutsideConnectionNode(edge.m_Start),
@@ -574,14 +574,6 @@ namespace CS2MCP
                     .m_Voltage == ElectricityConnection.Voltage.Low;
             }
             return TypedNetworkMath.Classify(isRoad, water, sewage, lowVoltage);
-        }
-
-        private static TypedNetworkKinds ToTypedNetworkKinds(Game.Net.UtilityTypes utilityTypes)
-        {
-            return TypedNetworkMath.FromUtilities(
-                (utilityTypes & Game.Net.UtilityTypes.WaterPipe) != 0,
-                (utilityTypes & Game.Net.UtilityTypes.SewagePipe) != 0,
-                (utilityTypes & Game.Net.UtilityTypes.LowVoltageLine) != 0);
         }
 
         private bool IsOutsideConnectionNode(Entity node)

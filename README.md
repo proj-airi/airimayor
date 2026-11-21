@@ -40,6 +40,12 @@ flowchart TD
   builtin --> tools
 ```
 
+## Local OSM maps
+
+Ask the mayor to export roads and buildings around a point, for example within 200 meters of a school. `export_osm` returns the complete intersecting road and building ways as XML and keeps a `district.osm` attachment in the session record. The district uses a fictional equatorial origin. Building outlines represent lots. Attached native geometry preserves the original road curves and building poses across an unchanged round trip.
+
+Run `dotnet test Mod.Tests --filter FullyQualifiedName~Osm` to exercise both conversion directions, including edited snapshots, OsmChange patches and the [district and interchange fixtures](docs/research/examples/2026-11-21-osm/trials.json). Map edits are verified offline. The [construction decision](docs/adr/0058-local-osm-city-geometry.md) describes the game integration.
+
 ## Build
 
 Repository checks use a separate root install:
@@ -80,4 +86,4 @@ For automated validation, run `npm --prefix scripts/trace-kit run check -- "<ses
 
 ## License
 
-[Apache License 2.0](./LICENSE). The tool layer is an inlined adaptation of [CS2MCP](https://github.com/LancerComet/cities-skylines-2-mcp); attribution is in [NOTICE](./NOTICE). Portions of `CreateDefinitions.cs` remain under the Paradox Interactive EULA.
+[Apache License 2.0](./LICENSE). The tool layer is an inlined adaptation of [CS2MCP](https://github.com/LancerComet/cities-skylines-2-mcp), with attribution in [NOTICE](./NOTICE).

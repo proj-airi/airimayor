@@ -16,11 +16,8 @@ namespace airimayor.Host
         private static readonly HashSet<string> s_Construction =
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "place_building",
-                "build_network",
                 "zone",
                 "set_road_features",
-                "replace_road_type",
                 "expand_operational_area",
                 "set_facility_upgrade",
                 "add_transit_line",

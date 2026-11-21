@@ -92,7 +92,6 @@ namespace airimayor.Host
                     Success = true,
                     ImagePng = response.Body,
                     PreviewBytes = response.Preview,
-                    Files = response.Files,
                     Text = "{}",
                 };
             }
@@ -110,6 +109,7 @@ namespace airimayor.Host
                     Text = text,
                 };
             }
+            result.Files = response.Files;
             result.Applied = response.Applied;
             result.QueuedMs = response.QueuedMs;
             if (write)

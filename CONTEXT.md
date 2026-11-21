@@ -89,39 +89,31 @@ _Avoid_: a second player chat, an automatic report that wakes the root conversat
 ### Construction
 
 **Prefab**:
-An exact named game asset. The Agent picks one before placing or building.
-_Avoid_: service `role` as a `place_building` argument
+An exact named game asset used by a road, building or other city object.
+_Avoid_: a building use or a road class as an exact asset identity
 
-**place_building**:
-The write that places one standalone prefab and pose.
-_Avoid_: `find_placement`, `find_infrastructure_candidate`, preview-then-commit
-
-**build_network**:
-The write that constructs one linear connection: a straight segment, a curve that leaves and joins along existing roads, a two-part bend, or a frontage copy beside an existing road.
-_Avoid_: `build_road`, `place_road`, `build_bridge`, a separate curve or parallel tool, a control point on a straight segment
+**Local OSM map**:
+An OpenStreetMap document for a fictional city district. Roads refer to shared junctions and buildings occupy mapped footprints.
+_Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 
 **Ground**:
-Default road mode: follow terrain; reject water and steep grades instead of rewriting the route.
-_Avoid_: implied bridge, auto-elevate
+The road level that follows the terrain.
+_Avoid_: an implied bridge at every crossing
 
 **Grade-separated**:
-Explicit road mode for a bridge, elevated road, or tunnel. The model must ask for it.
-_Avoid_: `build_bridge`, silent promotion from a failed ground path
+A crossing where the roads pass at different heights.
+_Avoid_: a shared junction at the point where their centerlines cross on the map
 
 **Native validation**:
 The game's ordinary placement and apply checks. The product does not bypass them.
 _Avoid_: Anarchy, `force`, collision bypass
-
-**Auto-connect**:
-Placement-owned follow-up that attaches matching water, sewage, or low-voltage networks.
-_Avoid_: Agent-drawn pipes or cables as the happy path
 
 **Network**:
 Roads, pipes, and cables as linear infrastructure.
 _Avoid_: "road" as a synonym for every utility line
 
 **Typed network**:
-A top-level linear edge classified as road, fresh water, sewage, or low-voltage from native prefab layers. Auto-connect, list, demolish, and topology QA share that identity.
+A top-level linear edge classified as road, fresh water, sewage, or low-voltage from native prefab layers. Network inventory, demolition and topology checks share that identity.
 _Avoid_: a second utility-versus-road taxonomy; high-voltage as part of this set
 
 **Isolated component**:

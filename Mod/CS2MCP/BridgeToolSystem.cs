@@ -24,15 +24,6 @@ using Transform = Game.Objects.Transform;
 
 namespace CS2MCP
 {
-    /// <summary>
-    /// Headless placement tool. Activated programmatically for exactly three
-    /// tool-update frames per operation:
-    ///   1. CreateDefinitions — build definition entities (ported LineTool job),
-    ///      applyMode=Clear lets the game generate preview Temp entities.
-    ///   2. Apply — if validation passed (GetAllowApply), applyMode=Apply commits
-    ///      the Temp entities to permanent ones; otherwise reject.
-    ///   3. Finish — restore the previously active tool.
-    /// </summary>
     public sealed partial class BridgeToolSystem : ObjectToolBaseSystem
     {
         private enum Stage
@@ -45,11 +36,8 @@ namespace CS2MCP
 
         private enum OperationKind
         {
-            Object,
-            Net,
             Demolish,
             Upgrade,
-            ReplaceNet,
             OperationalArea,
             Zone,
             FacilityUpgrade,
@@ -60,17 +48,9 @@ namespace CS2MCP
         private OperationKind m_PendingKind;
         private Entity m_PendingPrefabEntity;
         private Entity m_PendingTarget;
-        private Entity[] m_PendingReplaceEdges = Array.Empty<Entity>();
         private PrefabBase m_PendingPrefab;
         private string m_PendingLabel;
         private float3 m_PendingPosition;
-        private Entity m_PendingAttachParent;
-        private float3 m_PendingEnd;
-        private RoadBuildMode? m_PendingRoadMode;
-        private readonly List<NetworkCourseSegment> m_PendingCourses = new List<NetworkCourseSegment>();
-        private NetworkCourseShape m_PendingShape;
-        private float m_PendingCourseLength;
-        private float m_PendingSteepestGrade;
         private CompositionFlags m_PendingUpgradeFlags;
         private Game.Areas.Node[] m_PendingOperationalAreaNodes;
         private Entity m_PendingOwner;
@@ -88,22 +68,11 @@ namespace CS2MCP
         private float m_PendingZoneRadius;
         private float2 m_PendingZoneSize;
         private float m_PendingZoneRotationDegrees;
-        private float2 m_PendingElevations;
         private quaternion m_PendingRotation;
         private BridgeRequest m_PendingRequest;
         private ToolBaseSystem m_PreviousTool;
-        private bool m_AutoConnectQueued;
-        private Entity m_AutoConnectPrefabEntity;
-        private PrefabBase m_AutoConnectPrefab;
-        private float3 m_AutoConnectStart;
-        private float3 m_AutoConnectEnd;
-        private Entity m_AutoConnectTargetEdge;
-        private float m_AutoConnectTargetSplit;
-        private string m_PlacedBuildingName;
-        private float3 m_PlacedBuildingPosition;
         private Entity[] m_PendingTransitStops;
         private EntityQuery m_TempRouteQuery;
-        private EntityQuery m_BlockerBuildingQuery;
 
         private CityConfigurationSystem m_CityConfigurationSystem;
 
@@ -136,20 +105,6 @@ namespace CS2MCP
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
                 ComponentType.ReadOnly<Temp>());
-            m_BlockerBuildingQuery = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[]
-                {
-                    ComponentType.ReadOnly<Game.Buildings.Building>(),
-                    ComponentType.ReadOnly<Transform>(),
-                    ComponentType.ReadOnly<PrefabRef>(),
-                },
-                None = new[]
-                {
-                    ComponentType.ReadOnly<Temp>(),
-                    ComponentType.ReadOnly<Deleted>(),
-                },
-            });
         }
 
         public override PrefabBase GetPrefab()
@@ -161,107 +116,6 @@ namespace CS2MCP
         {
             // Never let the game UI select this tool via asset selection.
             return false;
-        }
-
-        /// <summary>Must be called on the simulation thread.</summary>
-        public bool TryQueuePlacement(
-            Entity prefabEntity,
-            PrefabBase prefab,
-            float3 position,
-            quaternion rotation,
-            BridgeRequest request,
-            Entity autoConnectPrefabEntity = default,
-            PrefabBase autoConnectPrefab = null,
-            float3 autoConnectStart = default,
-            float3 autoConnectEnd = default,
-            Entity autoConnectTargetEdge = default,
-            float autoConnectTargetSplit = 0f,
-            Entity attachParent = default)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Object;
-            m_PendingPrefabEntity = prefabEntity;
-            m_PendingPrefab = prefab;
-            m_PendingPosition = position;
-            m_PendingRotation = rotation;
-            m_PendingAttachParent = attachParent;
-            m_PendingRequest = request;
-            SetAutoConnect(
-                autoConnectPrefabEntity,
-                autoConnectPrefab,
-                autoConnectStart,
-                autoConnectEnd,
-                autoConnectTargetEdge,
-                autoConnectTargetSplit);
-            Activate();
-            return true;
-        }
-
-        private void SetAutoConnect(
-            Entity prefabEntity,
-            PrefabBase prefab,
-            float3 start,
-            float3 end,
-            Entity targetEdge,
-            float targetSplit)
-        {
-            m_AutoConnectQueued = prefabEntity != Entity.Null
-                && prefab != null
-                && targetEdge != Entity.Null;
-            m_AutoConnectPrefabEntity = prefabEntity;
-            m_AutoConnectPrefab = prefab;
-            m_AutoConnectStart = start;
-            m_AutoConnectEnd = end;
-            m_AutoConnectTargetEdge = targetEdge;
-            m_AutoConnectTargetSplit = targetSplit;
-        }
-
-        private void ClearAutoConnect()
-        {
-            SetAutoConnect(default, null, default, default, default, 0f);
-        }
-
-        /// <summary>Must be called on the simulation thread.</summary>
-        internal bool TryQueueRoad(
-            Entity prefabEntity,
-            PrefabBase prefab,
-            float3 start,
-            float3 end,
-            float2 elevations,
-            RoadBuildMode? roadMode,
-            NetworkCourseShape shape,
-            IReadOnlyList<NetworkCourseSegment> courses,
-            float length,
-            float steepestGrade,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Net;
-            m_PendingPrefabEntity = prefabEntity;
-            m_PendingPrefab = prefab;
-            m_PendingPosition = start;
-            m_PendingEnd = end;
-            m_PendingElevations = elevations;
-            m_PendingRoadMode = roadMode;
-            m_PendingShape = shape;
-            m_PendingCourseLength = length;
-            m_PendingSteepestGrade = steepestGrade;
-            m_PendingCourses.Clear();
-            for (int i = 0; i < courses.Count; i++)
-            {
-                m_PendingCourses.Add(courses[i]);
-            }
-            m_PendingRotation = quaternion.identity;
-            m_PendingRequest = request;
-            ClearAutoConnect();
-            Activate();
-            return true;
         }
 
         /// <summary>Must be called on the simulation thread.</summary>
@@ -305,7 +159,6 @@ namespace CS2MCP
             m_PendingPosition = position;
             m_PendingRotation = rotation;
             m_PendingRequest = request;
-            ClearAutoConnect();
             Activate();
             return true;
         }
@@ -331,7 +184,6 @@ namespace CS2MCP
             m_PendingLabel = linePrefab != null ? linePrefab.name : null;
             m_PendingTransitStops = stops;
             m_PendingRequest = request;
-            ClearAutoConnect();
             Activate();
             return true;
         }
@@ -397,49 +249,6 @@ namespace CS2MCP
             return true;
         }
 
-        /// <summary>
-        /// Queues native replacement of each selected road edge in one operation.
-        /// The handler has already chosen the edges.
-        /// </summary>
-        public bool TryQueueRoadReplacement(
-            IReadOnlyList<Entity> targets,
-            string previousPrefab,
-            Entity prefabEntity,
-            PrefabBase prefab,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle || targets == null || targets.Count == 0)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.ReplaceNet;
-            m_PendingReplaceEdges = new Entity[targets.Count];
-            for (int i = 0; i < targets.Count; i++)
-            {
-                m_PendingReplaceEdges[i] = targets[i];
-            }
-            m_PendingTarget = targets[0];
-            m_PendingLabel = previousPrefab;
-            m_PendingPrefabEntity = prefabEntity;
-            m_PendingPrefab = prefab;
-            Game.Net.Curve first = EntityManager.GetComponentData<Game.Net.Curve>(targets[0]);
-            Game.Net.Curve last = EntityManager.GetComponentData<Game.Net.Curve>(targets[targets.Count - 1]);
-            m_PendingPosition = first.m_Bezier.a;
-            m_PendingEnd = last.m_Bezier.d;
-            m_PendingCourses.Clear();
-            for (int i = 0; i < targets.Count; i++)
-            {
-                Bezier4x3 bezier = EntityManager.GetComponentData<Game.Net.Curve>(targets[i]).m_Bezier;
-                m_PendingCourses.Add(new NetworkCourseSegment
-                {
-                    Path = new RoadPath(bezier.a, bezier.b, bezier.c, bezier.d),
-                });
-            }
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
         /// <summary>Queues zone-cell painting for ToolUpdate, where ToolOutputBarrier is
         /// open and the game's zone cell-check lifecycle can observe Updated.
         /// Must be called on the simulation thread.</summary>
@@ -489,28 +298,11 @@ namespace CS2MCP
                         applyMode = ApplyMode.Clear;
                         switch (m_PendingKind)
                         {
-                            case OperationKind.Object:
-                                CreatePlacementDefinitions();
-                                break;
-                            case OperationKind.Net:
-                                if (m_AutoConnectQueued && !TryRefreshAutoConnectTarget())
-                                {
-                                    CompletePending(BuildAutoConnectFailedResponse(
-                                        "the selected utility network changed before the connector could be built"));
-                                    m_AutoConnectQueued = false;
-                                    m_Stage = Stage.Finish;
-                                    break;
-                                }
-                                CreateRoadDefinitions();
-                                break;
                             case OperationKind.Demolish:
                                 CreateModifyDefinitions(CreationFlags.Delete, default);
                                 break;
                             case OperationKind.Upgrade:
                                 CreateModifyDefinitions(CreationFlags.Upgrade, m_PendingUpgradeFlags);
-                                break;
-                            case OperationKind.ReplaceNet:
-                                CreateRoadReplacementDefinition();
                                 break;
                             case OperationKind.OperationalArea:
                                 CreateOperationalAreaDefinition();
@@ -525,12 +317,7 @@ namespace CS2MCP
                                 BuildTransitLineDefinitions();
                                 break;
                         }
-                        if (m_Stage != Stage.Finish)
-                        {
-                            m_Stage = m_PendingKind == OperationKind.Zone
-                                ? Stage.Finish
-                                : Stage.Apply;
-                        }
+                        m_Stage = m_PendingKind == OperationKind.Zone ? Stage.Finish : Stage.Apply;
                         break;
 
                     case Stage.Apply:
@@ -542,56 +329,14 @@ namespace CS2MCP
                         if (GetAllowApply())
                         {
                             applyMode = ApplyMode.Apply;
-                            if (m_AutoConnectQueued && m_PendingKind == OperationKind.Net)
-                            {
-                                CompletePending(BuildAutoConnectResponse());
-                                m_AutoConnectQueued = false;
-                            }
-                            else if (m_AutoConnectQueued)
-                            {
-                                // Building committed. Chain the utility connector
-                                // (pipe/cable to the matching utility lane) in the same
-                                // operation so the model does not have to place
-                                // it manually.
-                                m_PlacedBuildingName = m_PendingPrefab != null
-                                    ? m_PendingPrefab.name
-                                    : null;
-                                m_PlacedBuildingPosition = m_PendingPosition;
-                                m_Stage = Stage.CreateDefinitions;
-                                m_PendingKind = OperationKind.Net;
-                                m_PendingPrefabEntity = m_AutoConnectPrefabEntity;
-                                m_PendingPrefab = m_AutoConnectPrefab;
-                                m_PendingPosition = m_AutoConnectStart;
-                                m_PendingEnd = m_AutoConnectEnd;
-                                m_PendingCourses.Clear();
-                                m_PendingShape = NetworkCourseShape.Straight;
-                                // The connector prefabs selected by the placement
-                                // module are underground pipes or ground cables.
-                                m_PendingElevations = new float2(-10f, -10f);
-                                m_PendingRoadMode = null;
-                            }
-                            else
-                            {
-                                CompletePending(BuildSuccessResponse());
-                            }
+                            CompletePending(BuildSuccessResponse());
                         }
                         else
                         {
                             applyMode = ApplyMode.Clear;
-                            if (m_AutoConnectQueued && m_PendingKind == OperationKind.Net)
-                            {
-                                CompletePending(BuildAutoConnectFailedResponse());
-                                m_AutoConnectQueued = false;
-                            }
-                            else
-                            {
-                                CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, DescribeValidationBlock()));
-                            }
+                            CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, DescribeValidationBlock()));
                         }
-                        if (m_Stage != Stage.CreateDefinitions)
-                        {
-                            m_Stage = Stage.Finish;
-                        }
+                        m_Stage = Stage.Finish;
                         break;
 
                     case Stage.Finish:
@@ -612,30 +357,6 @@ namespace CS2MCP
                 Deactivate();
             }
             return inputDeps;
-        }
-
-        private bool TryRefreshAutoConnectTarget()
-        {
-            if (m_AutoConnectTargetEdge == Entity.Null
-                || !EntityManager.Exists(m_AutoConnectTargetEdge)
-                || !EntityManager.HasComponent<Game.Net.Edge>(m_AutoConnectTargetEdge)
-                || !EntityManager.HasComponent<Game.Net.Curve>(m_AutoConnectTargetEdge)
-                || EntityManager.HasComponent<Deleted>(m_AutoConnectTargetEdge))
-            {
-                return false;
-            }
-
-            Game.Net.Curve curve =
-                EntityManager.GetComponentData<Game.Net.Curve>(m_AutoConnectTargetEdge);
-            m_AutoConnectTargetSplit = math.saturate(m_AutoConnectTargetSplit);
-            // NetToolSystem derives both the control point and the split anchor
-            // from the top-level edge. Refresh both from the live edge so the
-            // queued connector cannot combine stale geometry with a valid anchor.
-            m_PendingEnd = MathUtils.Position(
-                curve.m_Bezier,
-                m_AutoConnectTargetSplit);
-            m_AutoConnectEnd = m_PendingEnd;
-            return true;
         }
 
         private void ApplyZoneCells()
@@ -739,47 +460,6 @@ namespace CS2MCP
             return math.abs(local.x) <= halfSize.x && math.abs(local.y) <= halfSize.y;
         }
 
-        private BridgeResponse BuildAutoConnectResponse()
-        {
-            return BridgeResponse.Json(new
-            {
-                placed = true,
-                prefab = m_PlacedBuildingName,
-                position = new
-                {
-                    x = m_PlacedBuildingPosition.x,
-                    y = m_PlacedBuildingPosition.y,
-                    z = m_PlacedBuildingPosition.z,
-                },
-                connected = true,
-                connection = new
-                {
-                    prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
-                    start = new { x = m_AutoConnectStart.x, z = m_AutoConnectStart.z },
-                    end = new { x = m_AutoConnectEnd.x, z = m_AutoConnectEnd.z },
-                },
-                note = "building placed; utility connector (pipe/cable) auto-built to the corresponding utility network",
-            });
-        }
-
-        private BridgeResponse BuildAutoConnectFailedResponse(string connectionError = null)
-        {
-            return BridgeResponse.Json(new
-            {
-                placed = true,
-                prefab = m_PlacedBuildingName,
-                position = new
-                {
-                    x = m_PlacedBuildingPosition.x,
-                    y = m_PlacedBuildingPosition.y,
-                    z = m_PlacedBuildingPosition.z,
-                },
-                connected = false,
-                connectionError = connectionError ?? DescribeValidationBlock(),
-                note = "building placed, but the automatic utility connector was rejected by the game; connect it manually with build_network",
-            });
-        }
-
         private BridgeResponse BuildSuccessResponse()
         {
             switch (m_PendingKind)
@@ -825,57 +505,6 @@ namespace CS2MCP
                         stopCount = m_PendingTransitStops != null ? m_PendingTransitStops.Length : 0,
                         note = "passenger line created; vehicles spawn from depots. Call list_transit_lines to read the new line.",
                     });
-                case OperationKind.ReplaceNet:
-                    return BridgeResponse.Json(new
-                    {
-                        replaced = true,
-                        edgeCount = m_PendingReplaceEdges.Length,
-                        previousPrefab = m_PendingLabel,
-                        prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
-                        start = new { x = m_PendingPosition.x, z = m_PendingPosition.z },
-                        end = new { x = m_PendingEnd.x, z = m_PendingEnd.z },
-                        note = "road type replaced; the original edge ids may change, so refresh list_networks and verify lanes, zoning and traffic",
-                    });
-                case OperationKind.Net:
-                    float? widthM = null;
-                    if (EntityManager.HasComponent<NetGeometryData>(m_PendingPrefabEntity))
-                    {
-                        widthM = (float?)Math.Round(
-                            EntityManager.GetComponentData<NetGeometryData>(m_PendingPrefabEntity).m_DefaultWidth,
-                            1);
-                    }
-                    return BridgeResponse.Json(new
-                    {
-                        placed = true,
-                        prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
-                        start = new { x = m_PendingPosition.x, z = m_PendingPosition.z },
-                        end = new { x = m_PendingEnd.x, z = m_PendingEnd.z },
-                        mode = DescribeRoadMode(m_PendingRoadMode),
-                        elevation = !m_PendingRoadMode.HasValue
-                            ? null
-                            : new
-                            {
-                                startM = (float?)m_PendingElevations.x,
-                                endM = (float?)m_PendingElevations.y,
-                            },
-                        widthM,
-                        shape = DescribeCourseShape(m_PendingShape),
-                        lengthM = (float?)Math.Round(m_PendingCourseLength, 1),
-                        steepestGrade = float.IsInfinity(m_PendingSteepestGrade)
-                            ? null
-                            : (float?)Math.Round(m_PendingSteepestGrade, 3),
-                        segmentCount = m_PendingCourses.Count,
-                        joins = new
-                        {
-                            start = DescribeJoin(m_PendingCourses.Count == 0
-                                ? NetworkJoinKind.New
-                                : m_PendingCourses[0].StartJoin),
-                            end = DescribeJoin(m_PendingCourses.Count == 0
-                                ? NetworkJoinKind.New
-                                : m_PendingCourses[m_PendingCourses.Count - 1].EndJoin),
-                        },
-                        note = "built; verify with list_networks or screenshot",
-                    });
                 case OperationKind.OperationalArea:
                     return BridgeResponse.Json(new
                     {
@@ -907,74 +536,8 @@ namespace CS2MCP
                         note = $"{m_PendingOperationalAreaKind} operational area expanded; call inspect_operational_area to verify resource, capacity and ownership",
                     });
                 default:
-                    object lotSize = null;
-                    object footprintMeters = null;
-                    if (EntityManager.HasComponent<BuildingData>(m_PendingPrefabEntity))
-                    {
-                        int2 lot = EntityManager.GetComponentData<BuildingData>(m_PendingPrefabEntity).m_LotSize;
-                        lotSize = new { x = lot.x, z = lot.y };
-                        footprintMeters = new
-                        {
-                            x = (float)Math.Round(lot.x * 8f, 1),
-                            z = (float)Math.Round(lot.y * 8f, 1),
-                        };
-                    }
-                    return BridgeResponse.Json(new
-                    {
-                        placed = true,
-                        prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
-                        position = new
-                        {
-                            x = m_PendingPosition.x,
-                            y = m_PendingPosition.y,
-                            z = m_PendingPosition.z,
-                        },
-                        lotSize,
-                        footprintMeters,
-                        note = "placed; verify with list_buildings or screenshot",
-                    });
+                    throw new InvalidOperationException($"No result for {m_PendingKind}.");
             }
-        }
-
-        private static string DescribeCourseShape(NetworkCourseShape shape)
-        {
-            switch (shape)
-            {
-                case NetworkCourseShape.Simple:
-                    return "simple";
-                case NetworkCourseShape.Complex:
-                    return "complex";
-                case NetworkCourseShape.Parallel:
-                    return "parallel";
-                default:
-                    return "straight";
-            }
-        }
-
-        private static string DescribeJoin(NetworkJoinKind join)
-        {
-            switch (join)
-            {
-                case NetworkJoinKind.Node:
-                    return "node";
-                case NetworkJoinKind.Split:
-                    return "split";
-                default:
-                    return "new";
-            }
-        }
-
-        private static string DescribeRoadMode(RoadBuildMode? mode)
-        {
-            if (mode == RoadBuildMode.Ground)
-            {
-                return "ground";
-            }
-            if (mode == RoadBuildMode.GradeSeparated)
-            {
-                return "grade-separated";
-            }
-            return null;
         }
 
         private void CompletePending(BridgeResponse response)
@@ -1018,145 +581,8 @@ namespace CS2MCP
                 message.Append(" (no ErrorType icons on temp entities)");
             }
 
-            if ((m_PendingKind == OperationKind.Net || m_PendingKind == OperationKind.ReplaceNet)
-                && reasons.Exists(reason => reason.StartsWith("OverlapExisting", StringComparison.Ordinal))
-                && TryNameCourseBlocker(out string blocker))
-            {
-                message.Append("; blocked by ").Append(blocker);
-            }
-            if (m_PendingKind == OperationKind.Net)
-            {
-                float length = math.distance(
-                    new float2(m_PendingPosition.x, m_PendingPosition.z),
-                    new float2(m_PendingEnd.x, m_PendingEnd.z));
-                if (m_PendingRoadMode == RoadBuildMode.Ground)
-                {
-                    message.Append(
-                        $". hint: this was a mode=ground road (~{length:F0}m); change the route if it crosses water or is too steep, " +
-                        "or explicitly use mode=grade-separated with both e1/e2 for an intentional bridge, elevated road or tunnel");
-                }
-                else if (m_PendingRoadMode == RoadBuildMode.GradeSeparated)
-                {
-                    message.Append(
-                        $". hint: this was a mode=grade-separated road (~{length:F0}m); adjust both e1/e2 or change the route; " +
-                        "e1/e2 are elevation meters (-30..60), not entity indexes");
-                }
-                else
-                {
-                    message.Append(
-                        $". hint: prefer short utility-network segments on owned land (this attempt ~{length:F0}m); " +
-                        "e1/e2 are elevation meters (-30..60), not entity indexes");
-                }
-            }
-            else if (m_PendingKind != OperationKind.ReplaceNet)
-            {
-                message.Append("; try a different position or target");
-            }
-
+            message.Append("; try a different position or target");
             return message.ToString();
-        }
-
-        /// <summary>
-        /// Names the hard building blocking a failed network course so
-        /// demolish can target it. Samples each pending segment against
-        /// placed buildings; native-clearable growables are skipped exactly
-        /// like in placement preflight.
-        /// </summary>
-        private bool TryNameCourseBlocker(out string blocker)
-        {
-            blocker = null;
-            using (NativeArray<Entity> entities = m_BlockerBuildingQuery.ToEntityArray(Allocator.Temp))
-            {
-                foreach (NetworkCourseSegment segment in m_PendingCourses)
-                {
-                    for (int step = 0; step <= 8; step++)
-                    {
-                        float3 sample = NetworkCourseMath.Point(segment.Path, step / 8f);
-                        if (TryFindBuildingAt(entities, sample.xz, out Entity building, out float3 position))
-                        {
-                            blocker = DescribeBlocker(building, position);
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
-        private bool TryFindBuildingAt(
-            NativeArray<Entity> entities,
-            float2 point,
-            out Entity building,
-            out float3 position)
-        {
-            building = Entity.Null;
-            position = default;
-            for (int i = 0; i < entities.Length; i++)
-            {
-                Entity candidate = entities[i];
-                PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(candidate);
-                if (!EntityManager.HasComponent<BuildingData>(prefabRef.m_Prefab))
-                {
-                    continue;
-                }
-                Transform transform = EntityManager.GetComponentData<Transform>(candidate);
-                float2 halfExtents = new float2(
-                    EntityManager.GetComponentData<BuildingData>(prefabRef.m_Prefab).m_LotSize) * 4f;
-                if (math.distancesq(point, transform.m_Position.xz) >= math.lengthsq(halfExtents)
-                    || !PointInFootprint(point, transform, halfExtents)
-                    || !IsHardObstacle(candidate, prefabRef.m_Prefab))
-                {
-                    continue;
-                }
-                building = candidate;
-                position = transform.m_Position;
-                return true;
-            }
-            return false;
-        }
-
-        private static bool PointInFootprint(float2 point, Transform transform, float2 halfExtents)
-        {
-            float3 right3 = math.mul(transform.m_Rotation, new float3(1f, 0f, 0f));
-            float2 right = math.normalizesafe(right3.xz, new float2(1f, 0f));
-            float2 forward = math.normalizesafe(
-                math.forward(transform.m_Rotation).xz,
-                new float2(0f, 1f));
-            float2 local = point - transform.m_Position.xz;
-            return math.abs(math.dot(local, right)) <= halfExtents.x
-                && math.abs(math.dot(local, forward)) <= halfExtents.y;
-        }
-
-        private bool IsHardObstacle(Entity building, Entity prefab)
-        {
-            Game.Objects.GeometryFlags geometryFlags =
-                EntityManager.HasComponent<ObjectGeometryData>(prefab)
-                    ? EntityManager.GetComponentData<ObjectGeometryData>(prefab).m_Flags
-                    : Game.Objects.GeometryFlags.None;
-            return PlacementObstaclePolicy.IsHardBuildingObstacle(
-                EntityManager.HasComponent<SpawnableBuildingData>(prefab),
-                EntityManager.HasComponent<SignatureBuildingData>(prefab),
-                (geometryFlags & Game.Objects.GeometryFlags.Overridable) != 0,
-                (geometryFlags & Game.Objects.GeometryFlags.DeleteOverridden) != 0,
-                EntityManager.HasComponent<Game.Objects.Attached>(building),
-                EntityManager.HasComponent<Game.Events.OnFire>(building),
-                EntityManager.HasComponent<Overridden>(building));
-        }
-
-        private string DescribeBlocker(Entity building, float3 position)
-        {
-            string name = "<unknown>";
-            if (EntityManager.HasComponent<PrefabRef>(building))
-            {
-                PrefabBase prefab = m_PrefabSystem.GetPrefab<PrefabBase>(
-                    EntityManager.GetComponentData<PrefabRef>(building).m_Prefab);
-                if (prefab != null)
-                {
-                    name = prefab.name;
-                }
-            }
-            return $"{name} at entity {building.Index}:{building.Version} " +
-                $"near ({position.x:F0}, {position.z:F0})";
         }
 
         private void CollectErrorReasons(Entity entity, List<string> reasons)
@@ -1202,7 +628,7 @@ namespace CS2MCP
             reasons.Add(DescribeErrorType(error));
         }
 
-        private string DescribeErrorType(ErrorType error)
+        private static string DescribeErrorType(ErrorType error)
         {
             switch (error)
             {
@@ -1217,9 +643,7 @@ namespace CS2MCP
                 case ErrorType.TightCurve:
                     return "TightCurve (curve too sharp)";
                 case ErrorType.InWater:
-                    return m_PendingKind == OperationKind.Net
-                        ? "InWater (network crossing needs bridge elevation or another route)"
-                        : "InWater (object placement is invalid at this water depth)";
+                    return "InWater (placement is invalid at this water depth)";
                 case ErrorType.NotOnShoreline:
                     return "NotOnShoreline (move the placement seed closer to a wet/dry shoreline transition)";
                 case ErrorType.ExceedsCityLimits:
@@ -1249,24 +673,10 @@ namespace CS2MCP
             m_PendingRequest = null;
             m_PendingPrefab = null;
             m_PendingPrefabEntity = Entity.Null;
-            m_PendingAttachParent = Entity.Null;
             m_PendingOwner = Entity.Null;
             m_PendingOperationalAreaNodes = null;
             m_PendingOperationalAreaKind = null;
             m_PendingOperationalResource = null;
-            m_PendingRoadMode = null;
-            m_PendingCourses.Clear();
-            m_PendingShape = NetworkCourseShape.Straight;
-            m_PendingCourseLength = 0f;
-            m_PendingSteepestGrade = 0f;
-            m_AutoConnectQueued = false;
-            m_AutoConnectPrefabEntity = Entity.Null;
-            m_AutoConnectPrefab = null;
-            m_AutoConnectStart = default;
-            m_AutoConnectEnd = default;
-            m_AutoConnectTargetEdge = Entity.Null;
-            m_AutoConnectTargetSplit = 0f;
-            m_PlacedBuildingName = null;
             m_PendingTransitStops = null;
             if (m_ToolSystem.activeTool == this)
             {
@@ -1353,48 +763,6 @@ namespace CS2MCP
         }
 
         /// <summary>
-        /// Mirrors NetToolSystem.CreateReplacement for one ownerless edge. The
-        /// native Generate/Validation/Apply systems replace the original and
-        /// rebuild dependent geometry instead of mutating PrefabRef in place.
-        /// </summary>
-        private void CreateRoadReplacementDefinition()
-        {
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            for (int i = 0; i < m_PendingReplaceEdges.Length; i++)
-            {
-                Entity target = m_PendingReplaceEdges[i];
-                Game.Net.Edge edge = EntityManager.GetComponentData<Game.Net.Edge>(target);
-                Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(target);
-                Entity definitionEntity = commandBuffer.CreateEntity();
-                commandBuffer.AddComponent(definitionEntity, new CreationDefinition
-                {
-                    m_Original = target,
-                    m_Prefab = m_PendingPrefabEntity,
-                    m_Flags = CreationFlags.Align | CreationFlags.SubElevation,
-                });
-                commandBuffer.AddComponent(definitionEntity, default(Updated));
-
-                NetCourse course = default;
-                course.m_Curve = curve.m_Bezier;
-                course.m_Length = curve.m_Length;
-                course.m_FixedIndex = -1;
-                course.m_StartPosition.m_Entity = edge.m_Start;
-                course.m_StartPosition.m_Position = curve.m_Bezier.a;
-                course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(curve.m_Bezier));
-                course.m_StartPosition.m_CourseDelta = 0f;
-                course.m_StartPosition.m_ParentMesh = -1;
-                course.m_StartPosition.m_Flags = CoursePosFlags.IsFirst;
-                course.m_EndPosition.m_Entity = edge.m_End;
-                course.m_EndPosition.m_Position = curve.m_Bezier.d;
-                course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(curve.m_Bezier));
-                course.m_EndPosition.m_CourseDelta = 1f;
-                course.m_EndPosition.m_ParentMesh = -1;
-                course.m_EndPosition.m_Flags = CoursePosFlags.IsLast;
-                commandBuffer.AddComponent(definitionEntity, course);
-            }
-        }
-
-        /// <summary>
         /// Mirrors AreaToolSystem's existing-area edit definition: the original
         /// area, its real owner, existing prefab, Relocate flag, and full Node
         /// buffer travel through Generate/Validation/ApplyAreasSystem together.
@@ -1417,142 +785,6 @@ namespace CS2MCP
             {
                 nodes.Add(node);
             }
-        }
-
-        /// <summary>
-        /// Emits the courses already shaped for this build. An empty list is the
-        /// utility connector queued after a building placement.
-        /// </summary>
-        private void CreateRoadDefinitions()
-        {
-            if (m_PendingCourses.Count == 0)
-            {
-                CreateAutoConnectCourse();
-                return;
-            }
-
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            Unity.Mathematics.Random random = RandomSeed.Next().GetRandom(0);
-            for (int i = 0; i < m_PendingCourses.Count; i++)
-            {
-                EmitCourse(
-                    commandBuffer,
-                    ref random,
-                    m_PendingCourses[i],
-                    i == 0,
-                    i == m_PendingCourses.Count - 1);
-            }
-        }
-
-        /// <summary>
-        /// Utility connector queued after a building placement. One straight
-        /// buried course, with the end attached to the network the placement
-        /// search already chose.
-        /// </summary>
-        private void CreateAutoConnectCourse()
-        {
-            TerrainHeightData terrainHeight = m_TerrainSystem.GetHeightData();
-            RoadPath path = RoadPath.Straight(m_PendingPosition, m_PendingEnd);
-            Curve rawCurve = new Curve
-            {
-                m_Bezier = new Bezier4x3(path.A, path.B, path.C, path.D),
-            };
-            Bezier4x3 adjusted = NetUtils.AdjustPosition(
-                rawCurve,
-                fixedStart: false,
-                linearMiddle: false,
-                fixedEnd: false,
-                ref terrainHeight).m_Bezier;
-            float e1 = m_PendingElevations.x;
-            float e2 = m_PendingElevations.y;
-            adjusted.a.y += e1;
-            adjusted.b.y += math.lerp(e1, e2, 1f / 3f);
-            adjusted.c.y += math.lerp(e1, e2, 2f / 3f);
-            adjusted.d.y += e2;
-            var segment = new NetworkCourseSegment
-            {
-                Path = new RoadPath(adjusted.a, adjusted.b, adjusted.c, adjusted.d),
-                StartElevation = e1,
-                EndElevation = e2,
-                StartJoin = NetworkJoinKind.New,
-                EndJoin = NetworkJoinKind.New,
-            };
-            if (m_AutoConnectQueued)
-            {
-                Game.Net.Edge targetEdge =
-                    EntityManager.GetComponentData<Game.Net.Edge>(m_AutoConnectTargetEdge);
-                PlacementSearchMath.ResolveConnectionAnchor(
-                    m_AutoConnectTargetEdge,
-                    targetEdge.m_Start,
-                    targetEdge.m_End,
-                    m_AutoConnectTargetSplit,
-                    out segment.EndEntity,
-                    out segment.EndSplit);
-                segment.EndJoin = segment.EndSplit > 0f && segment.EndSplit < 1f
-                    ? NetworkJoinKind.Split
-                    : NetworkJoinKind.Node;
-            }
-
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            Unity.Mathematics.Random random = RandomSeed.Next().GetRandom(0);
-            EmitCourse(commandBuffer, ref random, segment, true, true);
-            m_PendingCourseLength = NetworkCourseMath.Length(segment.Path);
-            m_PendingSteepestGrade = NetworkCourseMath.SteepestGrade(segment.Path);
-            m_PendingCourses.Add(segment);
-        }
-
-        private void EmitCourse(
-            EntityCommandBuffer commandBuffer,
-            ref Unity.Mathematics.Random random,
-            NetworkCourseSegment segment,
-            bool first,
-            bool last)
-        {
-            Bezier4x3 courseCurve = new Bezier4x3(
-                segment.Path.A,
-                segment.Path.B,
-                segment.Path.C,
-                segment.Path.D);
-            float e1 = segment.StartElevation;
-            float e2 = segment.EndElevation;
-            NetCourse course = default;
-            course.m_Curve = courseCurve;
-            course.m_Elevation = new float2(math.min(e1, e2), math.max(e1, e2));
-            course.m_StartPosition.m_Position = course.m_Curve.a;
-            course.m_StartPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.StartTangent(course.m_Curve));
-            course.m_StartPosition.m_CourseDelta = 0f;
-            course.m_StartPosition.m_ParentMesh = -1;
-            course.m_StartPosition.m_Elevation = e1;
-            course.m_StartPosition.m_Entity = segment.StartEntity;
-            course.m_StartPosition.m_SplitPosition = segment.StartSplit;
-            course.m_StartPosition.m_Flags = CoursePosFlags.FreeHeight;
-            course.m_EndPosition.m_Position = course.m_Curve.d;
-            course.m_EndPosition.m_Rotation = NetUtils.GetNodeRotation(MathUtils.EndTangent(course.m_Curve));
-            course.m_EndPosition.m_CourseDelta = 1f;
-            course.m_EndPosition.m_ParentMesh = -1;
-            course.m_EndPosition.m_Elevation = e2;
-            course.m_EndPosition.m_Entity = segment.EndEntity;
-            course.m_EndPosition.m_SplitPosition = segment.EndSplit;
-            course.m_EndPosition.m_Flags = CoursePosFlags.FreeHeight;
-            if (first)
-            {
-                course.m_StartPosition.m_Flags |= CoursePosFlags.IsFirst;
-            }
-            if (last)
-            {
-                course.m_EndPosition.m_Flags |= CoursePosFlags.IsLast;
-            }
-            course.m_Length = MathUtils.Length(course.m_Curve);
-            course.m_FixedIndex = -1;
-
-            Entity entity = commandBuffer.CreateEntity();
-            commandBuffer.AddComponent(entity, new CreationDefinition
-            {
-                m_Prefab = m_PendingPrefabEntity,
-                m_RandomSeed = random.NextInt(),
-            });
-            commandBuffer.AddComponent(entity, default(Updated));
-            commandBuffer.AddComponent(entity, course);
         }
 
         /// <summary>
@@ -1720,83 +952,6 @@ namespace CS2MCP
             {
                 m_Connection = stop,
             };
-        }
-
-        /// <summary>
-        /// Fills and synchronously executes the ported LineTool definition job
-        /// for a single object at the pending position/rotation.
-        /// </summary>
-        private void CreatePlacementDefinitions()
-        {
-            CreateDefinitions definitions = default;
-            definitions.m_RandomizationEnabled = false;
-            definitions.m_FixedRandomSeed = 0;
-            definitions.m_EditorMode = m_ToolSystem.actionMode.IsEditor();
-            definitions.m_LefthandTraffic = m_CityConfigurationSystem.leftHandTraffic;
-            definitions.m_ObjectPrefab = m_PendingPrefabEntity;
-            definitions.m_Theme = m_CityConfigurationSystem.defaultTheme;
-            definitions.m_RandomSeed = RandomSeed.Next();
-            definitions.m_AgeMask = AgeMask.Mature;
-            definitions.m_ControlPoint = new ControlPoint
-            {
-                m_Position = m_PendingPosition,
-                m_HitPosition = m_PendingPosition,
-                m_Rotation = m_PendingRotation,
-                m_OriginalEntity = m_PendingAttachParent,
-            };
-            definitions.m_AttachmentPrefab = default;
-            definitions.m_OwnerData = GetComponentLookup<Owner>(true);
-            definitions.m_TransformData = GetComponentLookup<Transform>(true);
-            definitions.m_AttachedData = GetComponentLookup<Game.Objects.Attached>(true);
-            definitions.m_LocalTransformCacheData = GetComponentLookup<LocalTransformCache>(true);
-            definitions.m_ElevationData = GetComponentLookup<Game.Objects.Elevation>(true);
-            definitions.m_BuildingData = GetComponentLookup<Game.Buildings.Building>(true);
-            definitions.m_LotData = GetComponentLookup<Game.Buildings.Lot>(true);
-            definitions.m_EdgeData = GetComponentLookup<Game.Net.Edge>(true);
-            definitions.m_NodeData = GetComponentLookup<Game.Net.Node>(true);
-            definitions.m_CurveData = GetComponentLookup<Game.Net.Curve>(true);
-            definitions.m_NetElevationData = GetComponentLookup<Game.Net.Elevation>(true);
-            definitions.m_OrphanData = GetComponentLookup<Game.Net.Orphan>(true);
-            definitions.m_UpgradedData = GetComponentLookup<Game.Net.Upgraded>(true);
-            definitions.m_CompositionData = GetComponentLookup<Game.Net.Composition>(true);
-            definitions.m_AreaClearData = GetComponentLookup<Game.Areas.Clear>(true);
-            definitions.m_AreaSpaceData = GetComponentLookup<Game.Areas.Space>(true);
-            definitions.m_AreaLotData = GetComponentLookup<Game.Areas.Lot>(true);
-            definitions.m_EditorContainerData = GetComponentLookup<Game.Tools.EditorContainer>(true);
-            definitions.m_PrefabRefData = GetComponentLookup<PrefabRef>(true);
-            definitions.m_PrefabNetObjectData = GetComponentLookup<NetObjectData>(true);
-            definitions.m_PrefabBuildingData = GetComponentLookup<BuildingData>(true);
-            definitions.m_PrefabAssetStampData = GetComponentLookup<AssetStampData>(true);
-            definitions.m_PrefabBuildingExtensionData = GetComponentLookup<BuildingExtensionData>(true);
-            definitions.m_PrefabSpawnableObjectData = GetComponentLookup<SpawnableObjectData>(true);
-            definitions.m_PrefabObjectGeometryData = GetComponentLookup<ObjectGeometryData>(true);
-            definitions.m_PrefabPlaceableObjectData = GetComponentLookup<PlaceableObjectData>(true);
-            definitions.m_PrefabAreaGeometryData = GetComponentLookup<AreaGeometryData>(true);
-            definitions.m_PrefabBuildingTerraformData = GetComponentLookup<BuildingTerraformData>(true);
-            definitions.m_PrefabCreatureSpawnData = GetComponentLookup<CreatureSpawnData>(true);
-            definitions.m_PlaceholderBuildingData = GetComponentLookup<PlaceholderBuildingData>(true);
-            definitions.m_PrefabNetGeometryData = GetComponentLookup<NetGeometryData>(true);
-            definitions.m_PrefabCompositionData = GetComponentLookup<NetCompositionData>(true);
-            definitions.m_SubObjects = GetBufferLookup<Game.Objects.SubObject>(true);
-            definitions.m_CachedNodes = GetBufferLookup<LocalNodeCache>(true);
-            definitions.m_InstalledUpgrades = GetBufferLookup<Game.Buildings.InstalledUpgrade>(true);
-            definitions.m_SubNets = GetBufferLookup<Game.Net.SubNet>(true);
-            definitions.m_ConnectedEdges = GetBufferLookup<Game.Net.ConnectedEdge>(true);
-            definitions.m_SubAreas = GetBufferLookup<Game.Areas.SubArea>(true);
-            definitions.m_AreaNodes = GetBufferLookup<Game.Areas.Node>(true);
-            definitions.m_AreaTriangles = GetBufferLookup<Game.Areas.Triangle>(true);
-            definitions.m_PrefabSubObjects = GetBufferLookup<Game.Prefabs.SubObject>(true);
-            definitions.m_PrefabSubNets = GetBufferLookup<Game.Prefabs.SubNet>(true);
-            definitions.m_PrefabSubLanes = GetBufferLookup<Game.Prefabs.SubLane>(true);
-            definitions.m_PrefabSubAreas = GetBufferLookup<Game.Prefabs.SubArea>(true);
-            definitions.m_PrefabSubAreaNodes = GetBufferLookup<SubAreaNode>(true);
-            definitions.m_PrefabPlaceholderElements = GetBufferLookup<PlaceholderObjectElement>(true);
-            definitions.m_PrefabRequirementElements = GetBufferLookup<ObjectRequirementElement>(true);
-            definitions.m_PrefabServiceUpgradeBuilding = GetBufferLookup<ServiceUpgradeBuilding>(true);
-            definitions.m_WaterSurfaceData = m_WaterSystem.GetSurfaceData(out _);
-            definitions.m_TerrainHeightData = m_TerrainSystem.GetHeightData();
-            definitions.m_CommandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            definitions.Execute();
         }
     }
 }

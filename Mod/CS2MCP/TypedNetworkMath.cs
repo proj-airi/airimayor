@@ -1009,12 +1009,13 @@ namespace CS2MCP
             float best = float.MaxValue;
             for (int i = 1; i < points.Length; i++)
             {
-                best = math.min(
-                    best,
-                    PlacementSearchMath.DistanceSquaredToSegment(
-                        point,
-                        points[i - 1].xz,
-                        points[i].xz));
+                float2 start = points[i - 1].xz;
+                float2 direction = points[i].xz - start;
+                float lengthSquared = math.lengthsq(direction);
+                float fraction = lengthSquared < 0.01f * 0.01f
+                    ? 0f
+                    : math.saturate(math.dot(point - start, direction) / lengthSquared);
+                best = math.min(best, math.distancesq(point, start + direction * fraction));
             }
             return best;
         }

@@ -53,7 +53,7 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestAcp)), "拉起当前代理，请它用一句话回答，然后结束。" },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowConstruction)), "修建" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "放置建筑、道路、分区和线路，以及更换路型。" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "调整分区、道路设施、设施升级、作业区域和公共交通线路。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowDemolition)), "拆除" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowDemolition)), "允许代理直接推平建筑和路段。" },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowTreasury)), "财政与政策" },

@@ -20,20 +20,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Mod\CS2MCP\OsmDocument*.cs" LinkBase="Production" />
+    <Compile Include="..\Mod\CS2MCP\CityOsm*.cs" LinkBase="Production" />
+    <None Include="..\docs\research\examples\2026-11-21-osm\*.osm;..\docs\research\examples\2026-11-21-osm\*.osc" Link="OsmFixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\Mod\CS2MCP\MapRgb.cs" Link="Production\MapRgb.cs" />
     <Compile Include="..\Mod\CS2MCP\MapImageModel.cs" Link="Production\MapImageModel.cs" />
     <Compile Include="..\Mod\CS2MCP\MapStrokeRaster.cs" Link="Production\MapStrokeRaster.cs" />
     <Compile Include="..\Mod\CS2MCP\TrackStrokePaint.cs" Link="Production\TrackStrokePaint.cs" />
     <Compile Include="..\Mod\CS2MCP\MapImagePaint.cs" Link="Production\MapImagePaint.cs" />
     <Compile Include="..\Mod\CS2MCP\MapStrokeJoin.cs" Link="Production\MapStrokeJoin.cs" />
-    <Compile Include="..\Mod\CS2MCP\NetworkBuildArguments.cs" Link="Production\NetworkBuildArguments.cs" />
     <Compile Include="..\Mod\CS2MCP\NetworkCourseMath.cs" Link="Production\NetworkCourseMath.cs" />
     <Compile Include="..\Mod\CS2MCP\OperationalAreaPlanningMath.cs" Link="Production\OperationalAreaPlanningMath.cs" />
-    <Compile Include="..\Mod\CS2MCP\PlacementObstaclePolicy.cs" Link="Production\PlacementObstaclePolicy.cs" />
-    <Compile Include="..\Mod\CS2MCP\PlacementSearchMath.cs" Link="Production\PlacementSearchMath.cs" />
     <Compile Include="..\Mod\CS2MCP\PrefabOperationalAreaGraph.cs" Link="Production\PrefabOperationalAreaGraph.cs" />
     <Compile Include="..\Mod\CS2MCP\RoadFactsMath.cs" Link="Production\RoadFactsMath.cs" />
-    <Compile Include="..\Mod\CS2MCP\RoadGroundPreflight.cs" Link="Production\RoadGroundPreflight.cs" />
     <Compile Include="..\Mod\CS2MCP\TypedNetworkMath.cs" Link="Production\TypedNetworkMath.cs" />
     <Compile Include="..\Mod\CS2MCP\SimWait.cs" Link="Production\SimWait.cs" />
     <Compile Include="..\Mod\Host\PointedPlaceText.cs" Link="Production\PointedPlaceText.cs" />

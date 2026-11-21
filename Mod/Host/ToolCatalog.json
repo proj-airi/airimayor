@@ -175,6 +175,86 @@
       "response": "png"
     },
     {
+      "name": "export_osm",
+      "description": "Read the roads, shared junctions and building footprints in a city district as a local OpenStreetMap document. Give x, z and radius or all four rectangle bounds in city meters. Roads and footprints reaching the district are returned whole. For a visual overview use map_image.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "description": "Center X (with z+radius)"
+          },
+          "z": {
+            "type": "number",
+            "description": "Center Z (with x+radius)"
+          },
+          "radius": {
+            "type": "number",
+            "minimum": 8,
+            "maximum": 14336,
+            "description": "Half-size of square range in meters (with x+z)"
+          },
+          "xMin": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds min X (with zMin+xMax+zMax)"
+          },
+          "zMin": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds min Z"
+          },
+          "xMax": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds max X"
+          },
+          "zMax": {
+            "type": "number",
+            "minimum": -7168,
+            "maximum": 7168,
+            "description": "Bounds max Z"
+          }
+        },
+        "required": []
+      },
+      "route": "/city/osm",
+      "query": [
+        {
+          "key": "x",
+          "arg": "x"
+        },
+        {
+          "key": "z",
+          "arg": "z"
+        },
+        {
+          "key": "radius",
+          "arg": "radius"
+        },
+        {
+          "key": "xMin",
+          "arg": "xMin"
+        },
+        {
+          "key": "zMin",
+          "arg": "zMin"
+        },
+        {
+          "key": "xMax",
+          "arg": "xMax"
+        },
+        {
+          "key": "zMax",
+          "arg": "zMax"
+        }
+      ],
+      "response": "text"
+    },
+    {
       "name": "map_image",
       "description": "Undistorted top-down PNG city map in OSM Carto style (roads, rail, buildings by function, parks, water). Names stay in map_text. Omit bounds for a citywide planning overview (road layout, expansion direction, district structure); pass x+z+radius or xMin/zMin/xMax/zMax for a zoomed extent (troubleshooting a site). Returns the image directly.",
       "parameters": {
@@ -641,7 +721,7 @@
     },
     {
       "name": "set_facility_upgrade",
-      "description": "Install a missing facility upgrade or toggle Out of Service on an installed one. upgrade is a prefab name from list_facility_upgrades. enabled=true installs or returns the upgrade to service; enabled=false sets Out of Service. Do not use place_building for upgrades.",
+      "description": "Install a missing facility upgrade or toggle Out of Service on an installed one. upgrade is a prefab name from list_facility_upgrades. enabled=true installs or returns the upgrade to service; enabled=false sets Out of Service.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -692,7 +772,7 @@
     },
     {
       "name": "list_transit_stops",
-      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line. A new roadside stop is place_building.",
+      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -808,7 +888,7 @@
     },
     {
       "name": "add_transit_line",
-      "description": "Create a simple passenger line. stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop and uses native route pathfinding. Vehicles spawn from depots. Do not use place_building for stops or lines.",
+      "description": "Create a simple passenger line. stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop and uses native route pathfinding. Vehicles spawn from depots.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -867,281 +947,6 @@
         {
           "key": "version",
           "arg": "version"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "place_building",
-      "description": "Place one standalone prefab at x/z. For every site you choose, include radius and omit rotation so the tool can find a nearby legal pose (clearance, road frontage when the prefab needs a road, shoreline snap when it needs water). A roadside object (stop, mailbox, bicycle rack) snaps to the near side of a road or track inside the radius. Omit radius or set rotation for a player-selected exact pose. If exact placement fails, retry with a larger radius and no rotation. Off-road water/sewage/low-voltage nodes receive a matching pipe or cable; high voltage is hand-built. Road-fronted nodes use the networks on that road. Do not use this for regular zoned residential/commercial/industrial/office buildings; those grow from zone.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "prefab": {
-            "type": "string",
-            "description": "Exact prefab name from list_prefabs"
-          },
-          "x": {
-            "type": "number",
-            "description": "World X coordinate (meters)"
-          },
-          "z": {
-            "type": "number",
-            "description": "World Z coordinate (meters)"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 300,
-            "description": "Nearby search radius in meters for sites you choose; omit for a player-selected exact pose. Increase it after a failed exact or narrow placement."
-          },
-          "rotation": {
-            "type": "number",
-            "description": "Exact Y-axis rotation in degrees. Omit for sites you choose so prefabs that need a road face the road and shoreline prefabs orient to the wet/dry boundary."
-          }
-        },
-        "required": [
-          "prefab",
-          "x",
-          "z"
-        ]
-      },
-      "route": "/build/place",
-      "query": [
-        {
-          "key": "prefab",
-          "arg": "prefab"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "rotation",
-          "arg": "rotation"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "build_network",
-      "description": "Build a road or utility-network connection between two world coordinates. Omit shape for one straight segment. shape=simple is one ramp curve that leaves and joins along the roads at the two ends (departure and arrival, each 0..1 of the end-to-end distance). shape=complex is two segments with a smooth joint; mx and mz move that joint sideways. shape=parallel copies the road between the two given points as a frontage road: each end snaps to the nearest road, offset is required (-80..80 m, positive is to the right walking from start to end) and raise is optional meters up or down (at most 64 road edges per call). Each shape uses only its own fields. Use SHORT segments (50-250m) on OWNED map tiles. An end that hits a compatible node or road edge joins it; a miss starts a new node. The result reports shape, lengthM, steepestGrade, segmentCount and joins. Small streets may join a highway where native validation allows; prefer a ramp/collector/arterial path and verify flowPercent stays at 70 or above via list_networks. For ROAD prefabs, omitting mode selects ground: the route is sampled at roughly 4m or finer intervals for water and local grade, keeping the route on the ground: detected water crossings and grades above 10% (or a stricter prefab limit) call for mode=grade-separated. Use mode=grade-separated for an intentional bridge, elevated road or tunnel; provide both e1 and e2, with at least one nonzero. On a grade-separated road, profile=ease keeps the ends flat (easeStart and easeEnd, each 0..0.5) and profile=arch adds a crest (archHeight, archAt). Pipes, cables and other non-road networks take shape only. Pipes and Ground Cables remain UNDERGROUND by default (auto -10m buried), so omit e1/e2 to accept that burial. If the call fails, change the route or use shorter segments; do not repeat the same coordinates.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "prefab": {
-            "type": "string",
-            "description": "Exact prefab name from list_prefabs (category road or net)"
-          },
-          "x1": {
-            "type": "number",
-            "description": "Start X (meters)"
-          },
-          "z1": {
-            "type": "number",
-            "description": "Start Z (meters)"
-          },
-          "x2": {
-            "type": "number",
-            "description": "End X (meters)"
-          },
-          "z2": {
-            "type": "number",
-            "description": "End Z (meters)"
-          },
-          "shape": {
-            "type": "string",
-            "enum": [
-              "straight",
-              "simple",
-              "complex",
-              "parallel"
-            ],
-            "description": "How the two ends connect. Omit or straight: one straight segment. simple: one curve that follows the road it leaves and the road it joins. complex: two segments meeting at a smooth joint. parallel: a frontage road copied from the road through the two given points. A field for another shape is rejected."
-          },
-          "departure": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "simple or complex only. How long the curve follows the road it leaves, as a fraction of the end-to-end distance. Omit to choose from how opposed the two roads are."
-          },
-          "arrival": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "simple or complex only. How long the curve follows the road it joins, as a fraction of the end-to-end distance. Omit to choose from how opposed the two roads are."
-          },
-          "mx": {
-            "type": "number",
-            "description": "complex only. World X of the smooth joint. Provide together with mz; omit both to place the joint halfway along the ramp curve."
-          },
-          "mz": {
-            "type": "number",
-            "description": "complex only. World Z of the smooth joint. Provide together with mx."
-          },
-          "offset": {
-            "type": "number",
-            "minimum": -80,
-            "maximum": 80,
-            "description": "parallel only, required. Meters to the side of the copied road. Positive is to the right walking from the start to the end."
-          },
-          "raise": {
-            "type": "number",
-            "minimum": -80,
-            "maximum": 80,
-            "description": "parallel only. Meters up or down from the copied road. Omit for the same height."
-          },
-          "profile": {
-            "type": "string",
-            "enum": [
-              "linear",
-              "ease",
-              "arch"
-            ],
-            "description": "Grade-separated roads only. Omit or linear: height blends from e1 to e2. ease: the ramp stays flat at each end. arch: a crest above that blend."
-          },
-          "easeStart": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 0.5,
-            "description": "profile=ease only. Fraction of the ramp that stays flat at the start. Default 0.1."
-          },
-          "easeEnd": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 0.5,
-            "description": "profile=ease only. Fraction of the ramp that stays flat at the end. Default 0.1."
-          },
-          "archHeight": {
-            "type": "number",
-            "minimum": -80,
-            "maximum": 80,
-            "description": "profile=arch only, required. Crest height in meters above the blend from e1 to e2."
-          },
-          "archAt": {
-            "type": "number",
-            "minimum": 0.1,
-            "maximum": 0.9,
-            "description": "profile=arch only. Where the crest sits along the ramp, 0.1 to 0.9. Default 0.5."
-          },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "ground",
-              "grade-separated"
-            ],
-            "description": "Road prefabs only. Omit to select ground sampling at roughly 4m or finer intervals, keeping the route clear of detected water crossings and local grades above 10% (or a stricter prefab limit). Use grade-separated for an intentional bridge/elevated/tunnel segment; provide both e1 and e2, with at least one nonzero."
-          },
-          "e1": {
-            "type": "number",
-            "minimum": -30,
-            "maximum": 60,
-            "description": "Elevation at start in meters relative to terrain (-30..60). Required together with e2 for a grade-separated road, where at least one endpoint must be nonzero; positive values are elevated and negative values are underground. Omit for a ground road or automatic utility burial."
-          },
-          "e2": {
-            "type": "number",
-            "minimum": -30,
-            "maximum": 60,
-            "description": "Elevation at end in meters relative to terrain (-30..60). Required together with e1 for a grade-separated road, where at least one endpoint must be nonzero. Omit for a ground road or automatic utility burial."
-          }
-        },
-        "required": [
-          "prefab",
-          "x1",
-          "z1",
-          "x2",
-          "z2"
-        ]
-      },
-      "route": "/build/network",
-      "query": [
-        {
-          "key": "prefab",
-          "arg": "prefab"
-        },
-        {
-          "key": "x1",
-          "arg": "x1"
-        },
-        {
-          "key": "z1",
-          "arg": "z1"
-        },
-        {
-          "key": "x2",
-          "arg": "x2"
-        },
-        {
-          "key": "z2",
-          "arg": "z2"
-        },
-        {
-          "key": "shape",
-          "arg": "shape"
-        },
-        {
-          "key": "departure",
-          "arg": "departure"
-        },
-        {
-          "key": "arrival",
-          "arg": "arrival"
-        },
-        {
-          "key": "mx",
-          "arg": "mx"
-        },
-        {
-          "key": "mz",
-          "arg": "mz"
-        },
-        {
-          "key": "offset",
-          "arg": "offset"
-        },
-        {
-          "key": "raise",
-          "arg": "raise"
-        },
-        {
-          "key": "profile",
-          "arg": "profile"
-        },
-        {
-          "key": "easeStart",
-          "arg": "easeStart"
-        },
-        {
-          "key": "easeEnd",
-          "arg": "easeEnd"
-        },
-        {
-          "key": "archHeight",
-          "arg": "archHeight"
-        },
-        {
-          "key": "archAt",
-          "arg": "archAt"
-        },
-        {
-          "key": "mode",
-          "arg": "mode"
-        },
-        {
-          "key": "e1",
-          "arg": "e1"
-        },
-        {
-          "key": "e2",
-          "arg": "e2"
         }
       ],
       "response": "json"
@@ -1326,7 +1131,7 @@
     },
     {
       "name": "set_road_features",
-      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees. The road prefab itself changes with replace_road_type.",
+      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1375,66 +1180,6 @@
         {
           "key": "side",
           "arg": "side"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "replace_road_type",
-      "description": "Replace the road between two world points with another road prefab. Each end snaps to the nearest road, then the call follows that road: one edge, or a chain of at most 64. The two points must lie on one connected road. The game clears buildings that grow on the road and names any building needing attention. The new prefab must exist, be unlocked, and be one the game allows as a replacement. Refresh list_networks after success.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "x1": {
-            "type": "number",
-            "description": "Start X (meters)"
-          },
-          "z1": {
-            "type": "number",
-            "description": "Start Z (meters)"
-          },
-          "x2": {
-            "type": "number",
-            "description": "End X (meters)"
-          },
-          "z2": {
-            "type": "number",
-            "description": "End Z (meters)"
-          },
-          "prefab": {
-            "type": "string",
-            "description": "Exact replacement road prefab from list_prefabs(category=road)"
-          }
-        },
-        "required": [
-          "x1",
-          "z1",
-          "x2",
-          "z2",
-          "prefab"
-        ]
-      },
-      "route": "/build/road/replace",
-      "query": [
-        {
-          "key": "x1",
-          "arg": "x1"
-        },
-        {
-          "key": "z1",
-          "arg": "z1"
-        },
-        {
-          "key": "x2",
-          "arg": "x2"
-        },
-        {
-          "key": "z2",
-          "arg": "z2"
-        },
-        {
-          "key": "prefab",
-          "arg": "prefab"
         }
       ],
       "response": "json"
@@ -1523,7 +1268,7 @@
     },
     {
       "name": "inspect_network_topology",
-      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the repair-site coordinates for build_network. Findings capped at 64. Optional x/z/radius.",
+      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the location to inspect. Findings capped at 64. Optional x/z/radius.",
       "parameters": {
         "type": "object",
         "properties": {

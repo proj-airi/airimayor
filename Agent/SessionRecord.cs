@@ -402,6 +402,7 @@ namespace airimayor.Agent
             switch (Path.GetExtension(name).ToLowerInvariant())
             {
                 case ".json": return "application/json";
+                case ".osm": return "application/xml";
                 case ".txt": case ".log": case ".csv": return "text/plain";
                 case ".png": return "image/png";
                 case ".jpg": case ".jpeg": return "image/jpeg";

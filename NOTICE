@@ -11,11 +11,6 @@ This product includes an inlined, adapted copy of the CS2MCP bridge
 licensed under the Apache License, Version 2.0.
 See Mod/CS2MCP/NOTICE.txt and Mod/CS2MCP/LICENSE-CS2MCP.txt.
 
-CreateDefinitions.cs contains portions derived from game code:
-Copyright (c) Colossal Order and Paradox Interactive.
-Not for reuse or distribution except in accordance with the Paradox Interactive
-End User License Agreement.
-
 UI icons under Mod/UI/src/images/ are from MingCute Icon
 (https://github.com/Richard9394/MingCute), Copyright MingCute Design,
 licensed under the Apache License, Version 2.0.

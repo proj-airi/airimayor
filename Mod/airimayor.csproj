@@ -137,10 +137,8 @@
 		<Exec Command="pwsh.exe -NoLogo -NoProfile -NonInteractive -File &quot;$(MSBuildProjectDirectory)\merge-deps.ps1&quot; -DeployDir &quot;$(DeployDir)&quot; -GameManaged &quot;$(ManagedFullPath)&quot;" LogStandardErrorAsError="true" />
 	</Target>
 
-	<!-- Overlay exists only while iterating with Mod/HotReload. A leftover
-	     file would silently replace the catalog just embedded in this DLL. -->
-	<Target Name="ClearHotReloadCatalog" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
-		<Delete Files="$(UserDataPath)\ModsData\airimayor\hot-reload\ToolCatalog.json" />
+	<Target Name="ClearHotReloadOverrides" AfterTargets="DeployWIP" Condition="'$(NeedBuild)' == 'true'">
+		<Delete Files="$(UserDataPath)\ModsData\airimayor\hot-reload\ToolCatalog.json;$(UserDataPath)\ModsData\airimayor\hot-reload\RequestHandlers.payload" />
 	</Target>
 
 </Project>

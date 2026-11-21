@@ -1,6 +1,6 @@
 # Can an agent edit a Cities: Skylines II district through an OSM file?
 
-Status: frozen
+Status: frozen. The product decision is recorded in [ADR 0058](../adr/0058-local-osm-city-geometry.md).
 
 An OSM document can describe which streets meet, the direction of a ramp and the outline of a building. The promising experiment is to export a bounded district, edit the same objects locally, preview the proposed changes at several scales, then apply only the requested changes through the game. Success would mean a particular edit survived construction and a fresh export. Reading and writing valid XML establishes only the first step. [OSM elements](https://wiki.openstreetmap.org/wiki/Elements) · [Native construction](../adr/0002-native-validation.md)
 

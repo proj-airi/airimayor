@@ -37,23 +37,23 @@ if (row.kind === "tool") {
 let builtin = emptyTranscript;
 builtin = applyWireEvent(builtin, {
   kind: "tool",
-  tool: "place_building",
-  text: "{\"prefab\":\"Clinic\"}",
+  tool: "list_buildings",
+  text: "{\"limit\":1}",
   status: "Idle",
 });
 builtin = applyWireEvent(builtin, {
   kind: "tool",
-  tool: "place_building",
-  text: "placed",
+  tool: "list_buildings",
+  text: "one building",
   status: "Idle",
 });
 assert.equal(builtin.lines.length, 1);
 const closed = builtin.lines[0];
 assert.equal(closed.kind, "tool");
 if (closed.kind === "tool") {
-  assert.equal(closed.name, "place_building");
-  assert.equal(closed.args, "{\"prefab\":\"Clinic\"}");
-  assert.equal(closed.result, "placed");
+  assert.equal(closed.name, "list_buildings");
+  assert.equal(closed.args, "{\"limit\":1}");
+  assert.equal(closed.result, "one building");
   assert.equal(closed.state, "done");
 }
 

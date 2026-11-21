@@ -8,14 +8,14 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | --- | --- |
 | [0001-in-process-meai-loop.md](./adr/0001-in-process-meai-loop.md) | Historical handwritten-loop choice, superseded by [0048](./adr/0048-native-maf-harness.md) |
 | [0002-native-validation.md](./adr/0002-native-validation.md) | Ordinary native validation; no Anarchy or `force` |
-| [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | `place_building` is the only model-facing building write |
-| [0004-linear-networks.md](./adr/0004-linear-networks.md) | Linear write (`build_network` since [0027](./adr/0027-tool-surface-renaming.md)); ground vs grade-separated; no silent promotion |
+| [0003-one-step-building-placement.md](./adr/0003-one-step-building-placement.md) | Former standalone building placement contract, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
+| [0004-linear-networks.md](./adr/0004-linear-networks.md) | Former individual network connection contract, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
 | [0005-player-permissions.md](./adr/0005-player-permissions.md) | Settings, not flags (grouping superseded by [0042](./adr/0042-player-permission-groups.md)) |
 | [0006-budgeted-local-map.md](./adr/0006-budgeted-local-map.md) | `terrain`/`LOCAL_MAP` superseded by 0017; now `map_text` MAP_TEXT plus separate `map_image` |
 | [0007-session-lifecycle.md](./adr/0007-session-lifecycle.md) | Session follows the loaded city; data under `ModsData` |
 | [0008-context-budget-auto-custom.md](./adr/0008-context-budget-auto-custom.md) | Superseded; player-set window and native Harness compaction ([0048](./adr/0048-native-maf-harness.md)) |
 | [0009-typed-network-graph.md](./adr/0009-typed-network-graph.md) | One typed network behind list, demolish, and topology QA |
-| [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines via Route Tool apply; roadside stops are placed by [0044](./adr/0044-roadside-objects-share-place-building.md) |
+| [0010-native-transit-lines.md](./adr/0010-native-transit-lines.md) | Transit lines connect existing stops through the route tool |
 | [0011-specialized-industry-hub-identity.md](./adr/0011-specialized-industry-hub-identity.md) | Specialized-industry role follows declared extractor Operational areas |
 | [0012-docked-chat-transcript.md](./adr/0012-docked-chat-transcript.md) | Docked chat on `GameBottomRight` + `Portal`; bindings catalog; event-sourced transcript |
 | [0013-carto-map-export.md](./adr/0013-carto-map-export.md) | `map_image` via Carto reflection; shares the vision switch |
@@ -46,10 +46,10 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0038-one-task-tool.md](./adr/0038-one-task-tool.md) | External `task` report delivery; built-in uses native start/wait/results ([0048](./adr/0048-native-maf-harness.md)) |
 | [0039-acp-tool-preview.md](./adr/0039-acp-tool-preview.md) | External tool rows use the same in-game JPEG thumbnail, paired to the ACP tool call |
 | [0040-advance-hands-over-on-pause.md](./adr/0040-advance-hands-over-on-pause.md) | An advance hands over only on pause; a lower positive speed keeps waiting |
-| [0041-network-connection-shapes.md](./adr/0041-network-connection-shapes.md) | `build_network` shape is a straight segment, a tangent-locked curve, a smooth bend, or a frontage copy |
+| [0041-network-connection-shapes.md](./adr/0041-network-connection-shapes.md) | Former curve and frontage construction options, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
 | [0042-player-permission-groups.md](./adr/0042-player-permission-groups.md) | Nine peer permission checkboxes; hidden tools stay out of the catalog |
 | [0043-pointed-places.md](./adr/0043-pointed-places.md) | A pointed place is a card on the player message, not a mark drawn in the city |
-| [0044-roadside-objects-share-place-building.md](./adr/0044-roadside-objects-share-place-building.md) | Roadside objects share `place_building`; the snap stays inside the write |
+| [0044-roadside-objects-share-place-building.md](./adr/0044-roadside-objects-share-place-building.md) | Former roadside placement contract, superseded by [0058](./adr/0058-local-osm-city-geometry.md) |
 | [0045-message-clips.md](./adr/0045-message-clips.md) | Agent places are inline `<clip>` tags; click moves the camera, no persistent highlight |
 | [0046-session-record.md](./adr/0046-session-record.md) | Session evidence and clock envelope; built-in capture gaps revised by [0048](./adr/0048-native-maf-harness.md) |
 | [0047-write-evidence.md](./adr/0047-write-evidence.md) | Before/after city ledger on writes stays in the record; an offline check judges confirmed, diverged, or undetermined |
@@ -63,6 +63,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0055-city-observations-in-replay.md](./adr/0055-city-observations-in-replay.md) | Cursor-scoped city observations, native history, road identity, write changes and images |
 | [0056-turn-focused-recording-workspace.md](./adr/0056-turn-focused-recording-workspace.md) | Turn-scoped replay and analysis in AIRI docking panes; native execution stays distinct from mayor turns |
 | [0057-repository-policy-checks.md](./adr/0057-repository-policy-checks.md) | Deterministic repository contracts and evidence-based semantic review through alint |
+| [0058-local-osm-city-geometry.md](./adr/0058-local-osm-city-geometry.md) | Local OSM district maps and bidirectional road and building geometry conversion |
 
 ## Guide
 

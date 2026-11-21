@@ -658,7 +658,7 @@ namespace airimayor
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.TestAcp)), "Starts the selected agent, asks for one sentence, and stops it." },
 
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowConstruction)), "Construction" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "Place buildings, roads, zones, and transit lines, and replace a road's type." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowConstruction)), "Change zoning, road features, facility upgrades, operational areas and transit lines." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowDemolition)), "Demolition" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.AllowDemolition)), "Let the agent bulldoze buildings and road segments directly." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AllowTreasury)), "Treasury and policy" },
