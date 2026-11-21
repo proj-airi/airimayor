@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Colossal.Mathematics;
 using Unity.Mathematics;
 
 namespace CS2MCP
@@ -33,32 +34,26 @@ namespace CS2MCP
     {
         public TypedNetworkEdge(
             int entityIndex,
-            int entityVersion,
             int startNode,
             int endNode,
             float3[] points,
-            float length,
             TypedNetworkKinds kinds,
             bool startOutside,
             bool endOutside)
         {
             EntityIndex = entityIndex;
-            EntityVersion = entityVersion;
             StartNode = startNode;
             EndNode = endNode;
             Points = points;
-            Length = length;
             Kinds = kinds;
             StartOutside = startOutside;
             EndOutside = endOutside;
         }
 
         public int EntityIndex { get; }
-        public int EntityVersion { get; }
         public int StartNode { get; }
         public int EndNode { get; }
         public float3[] Points { get; }
-        public float Length { get; }
         public TypedNetworkKinds Kinds { get; }
         public bool StartOutside { get; }
         public bool EndOutside { get; }
@@ -74,8 +69,7 @@ namespace CS2MCP
             int nodeB,
             int componentSize,
             float distanceM,
-            bool hasAnchor = false,
-            float2 anchor = default)
+            float2 anchor)
         {
             Class = topologyClass;
             EdgeA = edgeA;
@@ -84,7 +78,6 @@ namespace CS2MCP
             NodeB = nodeB;
             ComponentSize = componentSize;
             DistanceM = distanceM;
-            HasAnchor = hasAnchor;
             Anchor = anchor;
         }
 
@@ -95,7 +88,6 @@ namespace CS2MCP
         public int NodeB { get; }
         public int ComponentSize { get; }
         public float DistanceM { get; }
-        public bool HasAnchor { get; }
         public float2 Anchor { get; }
     }
 
@@ -199,7 +191,6 @@ namespace CS2MCP
         public static bool TryParseNetworkSort(
             string raw,
             TypedNetworkKinds kind,
-            bool hasCenter,
             out string sort,
             out string error)
         {
@@ -209,15 +200,7 @@ namespace CS2MCP
             {
                 return true;
             }
-            if (sort == "distance")
-            {
-                if (!hasCenter)
-                {
-                    error = "sort=distance requires both x and z";
-                    return false;
-                }
-                return true;
-            }
+            if (sort == "distance") return true;
             if (sort == "traffic_volume" || sort == "congestion")
             {
                 if (kind != TypedNetworkKinds.Road)
@@ -307,27 +290,6 @@ namespace CS2MCP
             chosenCapacity = capacity;
         }
 
-        public static string PrimaryKindName(TypedNetworkKinds kinds)
-        {
-            if ((kinds & TypedNetworkKinds.Road) != 0)
-            {
-                return "road";
-            }
-            if ((kinds & TypedNetworkKinds.Water) != 0)
-            {
-                return "water";
-            }
-            if ((kinds & TypedNetworkKinds.Sewage) != 0)
-            {
-                return "sewage";
-            }
-            if ((kinds & TypedNetworkKinds.LowVoltage) != 0)
-            {
-                return "low_voltage";
-            }
-            return "none";
-        }
-
         public static string TopologyClassName(NetworkTopologyClass topologyClass)
         {
             switch (topologyClass)
@@ -351,49 +313,7 @@ namespace CS2MCP
             }
         }
 
-        public static bool InsideQuery(
-            NetworkTopologyFinding finding,
-            IReadOnlyList<TypedNetworkEdge> edges,
-            float2 center,
-            float radius)
-        {
-            return TryRepairSite(finding, edges, out float2 site)
-                && math.distance(site, center) <= radius;
-        }
-
-        public static bool TryRepairSite(
-            NetworkTopologyFinding finding,
-            IReadOnlyList<TypedNetworkEdge> edges,
-            out float2 site)
-        {
-            if (finding.HasAnchor)
-            {
-                site = finding.Anchor;
-                return true;
-            }
-            return TryEdgeSite(edges, finding.EdgeA, out site);
-        }
-
-        public static bool TryEdgeSite(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            int index,
-            out float2 site)
-        {
-            site = default;
-            if (index < 0 || index >= edges.Count)
-            {
-                return false;
-            }
-            float3[] points = edges[index].Points;
-            if (points == null || points.Length == 0)
-            {
-                return false;
-            }
-            site = points[points.Length / 2].xz;
-            return true;
-        }
-
-        public static int[] LabelComponents(
+        private static int[] LabelComponents(
             IReadOnlyList<TypedNetworkEdge> edges,
             TypedNetworkKinds kind)
         {
@@ -421,187 +341,7 @@ namespace CS2MCP
             return labels;
         }
 
-        public static bool ComponentIsIsolated(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            TypedNetworkKinds kind,
-            int componentId,
-            int[] labels)
-        {
-            if (edges == null || labels == null || componentId < 0)
-            {
-                return false;
-            }
-
-            if (kind == TypedNetworkKinds.Road)
-            {
-                if (ComponentHasOutside(edges, componentId, labels))
-                {
-                    return false;
-                }
-                int size = ComponentSize(labels, componentId);
-                return size > 0 && size != LargestComponentSize(edges, kind, labels);
-            }
-
-            var nodes = new HashSet<int>();
-            for (int i = 0; i < edges.Count; i++)
-            {
-                if (labels[i] != componentId)
-                {
-                    continue;
-                }
-                TypedNetworkEdge edge = edges[i];
-                nodes.Add(edge.StartNode);
-                nodes.Add(edge.EndNode);
-            }
-            if (nodes.Count == 0)
-            {
-                return false;
-            }
-            for (int i = 0; i < edges.Count; i++)
-            {
-                TypedNetworkEdge edge = edges[i];
-                if ((edge.Kinds & TypedNetworkKinds.Road) == 0)
-                {
-                    continue;
-                }
-                if (nodes.Contains(edge.StartNode) || nodes.Contains(edge.EndNode))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        public static bool[] IsolatedFlags(IReadOnlyList<TypedNetworkEdge> edges)
-        {
-            int count = edges != null ? edges.Count : 0;
-            var flags = new bool[count];
-            if (count == 0)
-            {
-                return flags;
-            }
-
-            int[] roadLabels = LabelComponents(edges, TypedNetworkKinds.Road);
-            int[] waterLabels = LabelComponents(edges, TypedNetworkKinds.Water);
-            int[] sewageLabels = LabelComponents(edges, TypedNetworkKinds.Sewage);
-            int[] lowVoltageLabels = LabelComponents(edges, TypedNetworkKinds.LowVoltage);
-            for (int i = 0; i < count; i++)
-            {
-                TypedNetworkEdge edge = edges[i];
-                if ((edge.Kinds & TypedNetworkKinds.Road) != 0)
-                {
-                    flags[i] = ComponentIsIsolated(
-                        edges,
-                        TypedNetworkKinds.Road,
-                        roadLabels[i],
-                        roadLabels);
-                    continue;
-                }
-                bool isolated = true;
-                int counted = 0;
-                if ((edge.Kinds & TypedNetworkKinds.Water) != 0)
-                {
-                    counted++;
-                    isolated &= ComponentIsIsolated(
-                        edges,
-                        TypedNetworkKinds.Water,
-                        waterLabels[i],
-                        waterLabels);
-                }
-                if ((edge.Kinds & TypedNetworkKinds.Sewage) != 0)
-                {
-                    counted++;
-                    isolated &= ComponentIsIsolated(
-                        edges,
-                        TypedNetworkKinds.Sewage,
-                        sewageLabels[i],
-                        sewageLabels);
-                }
-                if ((edge.Kinds & TypedNetworkKinds.LowVoltage) != 0)
-                {
-                    counted++;
-                    isolated &= ComponentIsIsolated(
-                        edges,
-                        TypedNetworkKinds.LowVoltage,
-                        lowVoltageLabels[i],
-                        lowVoltageLabels);
-                }
-                flags[i] = counted > 0 && isolated;
-            }
-            return flags;
-        }
-
-        public static int ComponentSize(int[] labels, int componentId)
-        {
-            if (labels == null || componentId < 0)
-            {
-                return 0;
-            }
-            int size = 0;
-            for (int i = 0; i < labels.Length; i++)
-            {
-                if (labels[i] == componentId)
-                {
-                    size++;
-                }
-            }
-            return size;
-        }
-
-        public static int LargestComponentSize(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            TypedNetworkKinds kind,
-            int[] labels)
-        {
-            if (edges == null || labels == null)
-            {
-                return 0;
-            }
-            var sizes = new Dictionary<int, int>();
-            for (int i = 0; i < edges.Count; i++)
-            {
-                if (labels[i] < 0 || (edges[i].Kinds & kind) == 0)
-                {
-                    continue;
-                }
-                sizes.TryGetValue(labels[i], out int size);
-                sizes[labels[i]] = size + 1;
-            }
-            int largest = 0;
-            foreach (int size in sizes.Values)
-            {
-                if (size > largest)
-                {
-                    largest = size;
-                }
-            }
-            return largest;
-        }
-
-        public static bool ComponentHasOutside(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            int componentId,
-            int[] labels)
-        {
-            if (edges == null || labels == null || componentId < 0)
-            {
-                return false;
-            }
-            for (int i = 0; i < edges.Count; i++)
-            {
-                if (labels[i] != componentId)
-                {
-                    continue;
-                }
-                if (edges[i].StartOutside || edges[i].EndOutside)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public static Dictionary<int, int> RoadDegrees(IReadOnlyList<TypedNetworkEdge> edges)
+        private static Dictionary<int, int> RoadDegrees(IReadOnlyList<TypedNetworkEdge> edges)
         {
             var degrees = new Dictionary<int, int>();
             if (edges == null)
@@ -648,7 +388,7 @@ namespace CS2MCP
             return deadEnds;
         }
 
-        public static List<NetworkTopologyFinding> FindRoadIssues(IReadOnlyList<TypedNetworkEdge> edges)
+        public static List<NetworkTopologyFinding> FindRoadIssues(IReadOnlyList<TypedNetworkEdge> edges, Bounds2? bounds = null)
         {
             var findings = new List<NetworkTopologyFinding>();
             if (edges == null || edges.Count == 0)
@@ -661,10 +401,12 @@ namespace CS2MCP
                 edges,
                 TypedNetworkKinds.Road,
                 NetworkTopologyClass.IsolatedRoad,
-                findings);
+                bounds, findings);
             AddTooCloseJunctions(edges, degrees, findings);
-            AddNearMisses(edges, degrees, findings);
-            AddUnnodedCrossings(edges, findings);
+            var roadGrid = RoadGrid(edges);
+            AddNearMisses(edges, degrees, roadGrid, findings);
+            AddUnnodedCrossings(edges, roadGrid, bounds, findings);
+            if (bounds.HasValue) findings.RemoveAll(finding => !MathUtils.Intersect(bounds.Value, finding.Anchor));
             return findings;
         }
 
@@ -674,7 +416,7 @@ namespace CS2MCP
         /// </summary>
         public static List<NetworkTopologyFinding> FindUtilityIsolatedFindings(
             IReadOnlyList<TypedNetworkEdge> edges,
-            TypedNetworkKinds kind)
+            TypedNetworkKinds kind, Bounds2? bounds = null)
         {
             var findings = new List<NetworkTopologyFinding>();
             NetworkTopologyClass topologyClass;
@@ -694,7 +436,7 @@ namespace CS2MCP
             {
                 return findings;
             }
-            AddIsolatedComponents(edges, kind, topologyClass, findings);
+            AddIsolatedComponents(edges, kind, topologyClass, bounds, findings);
             return findings;
         }
 
@@ -702,47 +444,61 @@ namespace CS2MCP
             IReadOnlyList<TypedNetworkEdge> edges,
             TypedNetworkKinds kind,
             NetworkTopologyClass topologyClass,
+            Bounds2? bounds,
             List<NetworkTopologyFinding> findings)
         {
-            if (edges == null || edges.Count == 0)
-            {
-                return;
-            }
+            if (edges == null || edges.Count == 0) return;
             int[] labels = LabelComponents(edges, kind);
-            var seen = new HashSet<int>();
+            var roadNodes = new HashSet<int>();
+            if (kind != TypedNetworkKinds.Road)
+            {
+                foreach (TypedNetworkEdge edge in edges)
+                {
+                    if ((edge.Kinds & TypedNetworkKinds.Road) == 0) continue;
+                    roadNodes.Add(edge.StartNode);
+                    roadNodes.Add(edge.EndNode);
+                }
+            }
+            var components = new Dictionary<int, (int Size, bool Connected, int Edge, float2 Site)>();
             for (int i = 0; i < edges.Count; i++)
             {
-                int componentId = labels[i];
-                if (componentId < 0 || !seen.Add(componentId))
+                int label = labels[i];
+                if (label < 0) continue;
+                TypedNetworkEdge edge = edges[i];
+                if (!components.TryGetValue(label, out var component)) component.Edge = -1;
+                component.Size++;
+                component.Connected |= kind == TypedNetworkKinds.Road ? edge.StartOutside || edge.EndOutside
+                    : roadNodes.Contains(edge.StartNode) || roadNodes.Contains(edge.EndNode);
+                if (component.Edge < 0 && TryComponentSite(edge.Points, bounds, out float2 site))
                 {
-                    continue;
+                    component.Edge = i;
+                    component.Site = site;
                 }
-                if (!ComponentIsIsolated(edges, kind, componentId, labels))
-                {
-                    continue;
-                }
-                int size = 0;
-                int first = i;
-                for (int j = 0; j < edges.Count; j++)
-                {
-                    if (labels[j] == componentId)
-                    {
-                        if (size == 0)
-                        {
-                            first = j;
-                        }
-                        size++;
-                    }
-                }
-                findings.Add(new NetworkTopologyFinding(
-                    topologyClass,
-                    first,
-                    -1,
-                    edges[first].StartNode,
-                    edges[first].EndNode,
-                    size,
-                    0f));
+                components[label] = component;
             }
+            foreach (var component in components.Values)
+            {
+                if (component.Connected || component.Edge < 0) continue;
+                TypedNetworkEdge edge = edges[component.Edge];
+                findings.Add(new NetworkTopologyFinding(topologyClass, component.Edge, -1, edge.StartNode, edge.EndNode,
+                    component.Size, 0f, component.Site));
+            }
+        }
+
+        private static bool TryComponentSite(float3[] points, Bounds2? bounds, out float2 site)
+        {
+            site = points[points.Length / 2].xz;
+            if (!bounds.HasValue || MathUtils.Intersect(bounds.Value, site)) return true;
+            for (int i = 1; i < points.Length; i++)
+            {
+                var line = new Line2.Segment(points[i - 1].xz, points[i].xz);
+                if (MathUtils.Intersect(bounds.Value, line, out float2 interval))
+                {
+                    site = math.lerp(line.a, line.b, math.csum(interval) * 0.5f);
+                    return true;
+                }
+            }
+            return false;
         }
 
         private readonly struct JunctionSite
@@ -836,7 +592,6 @@ namespace CS2MCP
                                     nodeB,
                                     0,
                                     distance,
-                                    true,
                                     (siteA.Position.xz + siteB.Position.xz) * 0.5f));
                             }
                         }
@@ -848,6 +603,7 @@ namespace CS2MCP
         private static void AddNearMisses(
             IReadOnlyList<TypedNetworkEdge> edges,
             Dictionary<int, int> degrees,
+            Dictionary<long, List<int>> grid,
             List<NetworkTopologyFinding> findings)
         {
             for (int i = 0; i < edges.Count; i++)
@@ -859,10 +615,11 @@ namespace CS2MCP
                 {
                     continue;
                 }
-                TryNearMiss(edges, degrees, i, edge.StartNode, edge.Points[0], findings);
+                TryNearMiss(edges, degrees, grid, i, edge.StartNode, edge.Points[0], findings);
                 TryNearMiss(
                     edges,
                     degrees,
+                    grid,
                     i,
                     edge.EndNode,
                     edge.Points[edge.Points.Length - 1],
@@ -873,6 +630,7 @@ namespace CS2MCP
         private static void TryNearMiss(
             IReadOnlyList<TypedNetworkEdge> edges,
             Dictionary<int, int> degrees,
+            Dictionary<long, List<int>> grid,
             int edgeIndex,
             int node,
             float3 position,
@@ -885,26 +643,24 @@ namespace CS2MCP
             float best = NearMissMeters * NearMissMeters;
             int bestEdge = -1;
             TypedNetworkEdge self = edges[edgeIndex];
-            for (int i = 0; i < edges.Count; i++)
+            int2 min = (int2)math.floor((position.xz - NearMissMeters) / GridMeters);
+            int2 max = (int2)math.floor((position.xz + NearMissMeters) / GridMeters);
+            var seen = new HashSet<int>();
+            for (int x = min.x; x <= max.x; x++)
+            for (int z = min.y; z <= max.y; z++)
             {
-                if (i == edgeIndex)
+                if (!grid.TryGetValue(CellKey(x, z), out var candidates)) continue;
+                foreach (int i in candidates)
                 {
-                    continue;
-                }
-                TypedNetworkEdge other = edges[i];
-                if ((other.Kinds & TypedNetworkKinds.Road) == 0
-                    || other.Points == null
-                    || other.Points.Length < 2
-                    || SharesNode(other, self.StartNode)
-                    || SharesNode(other, self.EndNode))
-                {
-                    continue;
-                }
-                float distanceSquared = DistanceSquaredToPolyline(position.xz, other.Points);
-                if (distanceSquared < best)
-                {
-                    best = distanceSquared;
-                    bestEdge = i;
+                    if (i == edgeIndex || !seen.Add(i)) continue;
+                    TypedNetworkEdge other = edges[i];
+                    if (SharesNode(other, self.StartNode) || SharesNode(other, self.EndNode)) continue;
+                    float distanceSquared = DistanceSquaredToPolyline(position, other.Points);
+                    if (distanceSquared < best)
+                    {
+                        best = distanceSquared;
+                        bestEdge = i;
+                    }
                 }
             }
             if (bestEdge < 0)
@@ -919,13 +675,10 @@ namespace CS2MCP
                 -1,
                 0,
                 math.sqrt(best),
-                true,
                 position.xz));
         }
 
-        private static void AddUnnodedCrossings(
-            IReadOnlyList<TypedNetworkEdge> edges,
-            List<NetworkTopologyFinding> findings)
+        private static Dictionary<long, List<int>> RoadGrid(IReadOnlyList<TypedNetworkEdge> edges)
         {
             var grid = new Dictionary<long, List<int>>();
             for (int i = 0; i < edges.Count; i++)
@@ -960,6 +713,12 @@ namespace CS2MCP
                 }
             }
 
+            return grid;
+        }
+
+        private static void AddUnnodedCrossings(IReadOnlyList<TypedNetworkEdge> edges, Dictionary<long, List<int>> grid,
+            Bounds2? bounds, List<NetworkTopologyFinding> findings)
+        {
             var seen = new HashSet<long>();
             foreach (List<int> cell in grid.Values)
             {
@@ -983,14 +742,7 @@ namespace CS2MCP
                         {
                             continue;
                         }
-                        if (!TryPolylineCrossing(first.Points, second.Points, out float heightDelta))
-                        {
-                            continue;
-                        }
-                        if (heightDelta > CrossingHeightMeters)
-                        {
-                            continue;
-                        }
+                        if (!TryPolylineCrossing(first.Points, second.Points, bounds, out float heightDelta, out float2 site)) continue;
                         findings.Add(new NetworkTopologyFinding(
                             NetworkTopologyClass.UnnodedCrossing,
                             a,
@@ -998,13 +750,13 @@ namespace CS2MCP
                             -1,
                             -1,
                             0,
-                            heightDelta));
+                            heightDelta, site));
                     }
                 }
             }
         }
 
-        private static float DistanceSquaredToPolyline(float2 point, float3[] points)
+        private static float DistanceSquaredToPolyline(float3 point, float3[] points)
         {
             float best = float.MaxValue;
             for (int i = 1; i < points.Length; i++)
@@ -1014,15 +766,18 @@ namespace CS2MCP
                 float lengthSquared = math.lengthsq(direction);
                 float fraction = lengthSquared < 0.01f * 0.01f
                     ? 0f
-                    : math.saturate(math.dot(point - start, direction) / lengthSquared);
-                best = math.min(best, math.distancesq(point, start + direction * fraction));
+                    : math.saturate(math.dot(point.xz - start, direction) / lengthSquared);
+                float height = math.lerp(points[i - 1].y, points[i].y, fraction);
+                if (math.abs(height - point.y) <= CrossingHeightMeters)
+                    best = math.min(best, math.distancesq(point.xz, start + direction * fraction));
             }
             return best;
         }
 
-        private static bool TryPolylineCrossing(float3[] first, float3[] second, out float heightDelta)
+        private static bool TryPolylineCrossing(float3[] first, float3[] second, Bounds2? bounds, out float heightDelta, out float2 site)
         {
             heightDelta = 0f;
+            site = default;
             for (int i = 1; i < first.Length; i++)
             {
                 for (int j = 1; j < second.Length; j++)
@@ -1040,7 +795,11 @@ namespace CS2MCP
                     float y1 = math.lerp(first[i - 1].y, first[i].y, t);
                     float y2 = math.lerp(second[j - 1].y, second[j].y, u);
                     heightDelta = math.abs(y1 - y2);
-                    return true;
+                    if (heightDelta > CrossingHeightMeters) continue;
+                    if ((i == 1 && t <= 0.02f) || (i == first.Length - 1 && t >= 0.98f)
+                        || (j == 1 && u <= 0.02f) || (j == second.Length - 1 && u >= 0.98f)) continue;
+                    site = math.lerp(first[i - 1].xz, first[i].xz, t);
+                    if (!bounds.HasValue || MathUtils.Intersect(bounds.Value, site)) return true;
                 }
             }
             return false;
@@ -1066,8 +825,7 @@ namespace CS2MCP
             float2 ca = c - a;
             t = (ca.x * s.y - ca.y * s.x) / denom;
             u = (ca.x * r.y - ca.y * r.x) / denom;
-            const float epsilon = 0.02f;
-            return t > epsilon && t < 1f - epsilon && u > epsilon && u < 1f - epsilon;
+            return t >= 0f && t <= 1f && u >= 0f && u <= 1f;
         }
 
         private static void PolylineBounds(float3[] points, out float2 min, out float2 max)
@@ -1119,12 +877,13 @@ namespace CS2MCP
                 parent[node] = node;
                 return node;
             }
-            if (next != node)
+            while (next != node)
             {
-                next = Find(parent, next);
-                parent[node] = next;
+                parent[node] = parent[next];
+                node = next;
+                next = parent[node];
             }
-            return next;
+            return node;
         }
     }
 }

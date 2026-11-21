@@ -8,7 +8,6 @@ using Game.City;
 using Game.Common;
 using Game.Net;
 using Game.Notifications;
-using Game.Pathfind;
 using Game.Prefabs;
 using Game.Routes;
 using Game.Simulation;
@@ -35,44 +34,15 @@ namespace CS2MCP
             Finish,
         }
 
-        private enum OperationKind
-        {
-            Demolish,
-            Upgrade,
-            OperationalArea,
-            Zone,
-            FacilityUpgrade,
-            TransitLine,
-        }
-
         private Stage m_Stage = Stage.Idle;
-        private OperationKind m_PendingKind;
         private Entity m_PendingPrefabEntity;
         private Entity m_PendingTarget;
         private PrefabBase m_PendingPrefab;
         private string m_PendingLabel;
         private float3 m_PendingPosition;
-        private CompositionFlags m_PendingUpgradeFlags;
-        private Game.Areas.Node[] m_PendingOperationalAreaNodes;
-        private Entity m_PendingOwner;
-        private float m_PendingPreviousAreaSurface;
-        private int m_PendingPreviousStorageCapacity;
-        private float m_PendingTargetArea;
-        private string m_PendingOperationalAreaKind;
-        private string m_PendingOperationalResource;
-        private float m_PendingOperationalResourceAmount;
-        private float m_PendingOperationalResourceCoverage;
-        private int m_PendingOperationalResourceSampleCount;
-        private float m_PendingOperationalResourceMaxConcentration;
-        private ZoneType m_PendingZone;
-        private float2 m_PendingZoneCenter;
-        private float m_PendingZoneRadius;
-        private float2 m_PendingZoneSize;
-        private float m_PendingZoneRotationDegrees;
         private quaternion m_PendingRotation;
         private BridgeRequest m_PendingRequest;
         private ToolBaseSystem m_PreviousTool;
-        private Entity[] m_PendingTransitStops;
         private EntityQuery m_TempRouteQuery;
 
         private CityConfigurationSystem m_CityConfigurationSystem;
@@ -93,7 +63,7 @@ namespace CS2MCP
             {
                 return;
             }
-            CompletePending(BridgeResponse.Error(BridgeErrorKind.Timeout, m_Stage == Stage.Readback
+            CompletePending(OsmFailure(BridgeErrorKind.Timeout, m_Stage == Stage.Readback
                 ? "The city received the edit but its result could not be confirmed. Read the district again before editing."
                 : "Construction did not finish in time. Read the site before retrying."));
             applyMode = ApplyMode.None;
@@ -108,7 +78,8 @@ namespace CS2MCP
             m_CityConfigurationSystem = base.World.GetOrCreateSystemManaged<CityConfigurationSystem>();
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
-                ComponentType.ReadOnly<Temp>());
+                ComponentType.ReadOnly<Temp>(),
+                ComponentType.Exclude<Deleted>());
         }
 
         public override PrefabBase GetPrefab()
@@ -120,22 +91,6 @@ namespace CS2MCP
         {
             // Never let the game UI select this tool via asset selection.
             return false;
-        }
-
-        /// <summary>Must be called on the simulation thread.</summary>
-        public bool TryQueueUpgrade(Entity target, string label, CompositionFlags upgradeFlags, BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Upgrade;
-            m_PendingTarget = target;
-            m_PendingLabel = label;
-            m_PendingUpgradeFlags = upgradeFlags;
-            m_PendingRequest = request;
-            Activate();
-            return true;
         }
 
         /// <summary>
@@ -155,126 +110,12 @@ namespace CS2MCP
             {
                 return false;
             }
-            m_PendingKind = OperationKind.FacilityUpgrade;
             m_PendingTarget = parent;
             m_PendingPrefabEntity = upgradePrefabEntity;
             m_PendingPrefab = upgradePrefab;
             m_PendingLabel = upgradePrefab != null ? upgradePrefab.name : null;
             m_PendingPosition = position;
             m_PendingRotation = rotation;
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
-        /// <summary>
-        /// Must be called on the simulation thread. Creates a passenger line
-        /// through RouteTool CreationDefinition + WaypointDefinition so
-        /// GenerateRoutesSystem / ApplyRoutesSystem own pathfinding and apply.
-        /// </summary>
-        public bool TryQueueTransitLine(
-            Entity linePrefabEntity,
-            PrefabBase linePrefab,
-            Entity[] stops,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.TransitLine;
-            m_PendingPrefabEntity = linePrefabEntity;
-            m_PendingPrefab = linePrefab;
-            m_PendingLabel = linePrefab != null ? linePrefab.name : null;
-            m_PendingTransitStops = stops;
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
-        /// <summary>Must be called on the simulation thread.</summary>
-        public bool TryQueueDemolish(Entity target, string label, BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Demolish;
-            m_PendingTarget = target;
-            m_PendingLabel = label;
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
-        /// <summary>
-        /// Queues a complete replacement polygon for an existing building-owned
-        /// operational area. The handler owns the expansion-only geometry checks;
-        /// the game's area generation, validation and apply systems own the write.
-        /// </summary>
-        public bool TryQueueOperationalAreaExpansion(
-            Entity area,
-            Entity owner,
-            Entity prefabEntity,
-            PrefabBase prefab,
-            Game.Areas.Node[] polygonNodes,
-            float previousSurface,
-            int previousCapacity,
-            float targetArea,
-            string areaKind,
-            string resource,
-            float resourceAmount,
-            float resourceCoverage,
-            int resourceSampleCount,
-            float resourceMaxConcentration,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.OperationalArea;
-            m_PendingTarget = area;
-            m_PendingOwner = owner;
-            m_PendingPrefabEntity = prefabEntity;
-            m_PendingPrefab = prefab;
-            m_PendingOperationalAreaNodes = polygonNodes;
-            m_PendingPreviousAreaSurface = previousSurface;
-            m_PendingPreviousStorageCapacity = previousCapacity;
-            m_PendingTargetArea = targetArea;
-            m_PendingOperationalAreaKind = areaKind;
-            m_PendingOperationalResource = resource;
-            m_PendingOperationalResourceAmount = resourceAmount;
-            m_PendingOperationalResourceCoverage = resourceCoverage;
-            m_PendingOperationalResourceSampleCount = resourceSampleCount;
-            m_PendingOperationalResourceMaxConcentration = resourceMaxConcentration;
-            m_PendingRequest = request;
-            Activate();
-            return true;
-        }
-
-        /// <summary>Queues zone-cell painting for ToolUpdate, where ToolOutputBarrier is
-        /// open and the game's zone cell-check lifecycle can observe Updated.
-        /// Must be called on the simulation thread.</summary>
-        public bool TryQueueZone(
-            ZoneType zone,
-            string label,
-            float2 center,
-            float2 size,
-            float rotationDegrees,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingKind = OperationKind.Zone;
-            m_PendingZone = zone;
-            m_PendingLabel = label;
-            m_PendingZoneCenter = center;
-            m_PendingZoneSize = size;
-            m_PendingZoneRotationDegrees = rotationDegrees;
-            m_PendingZoneRadius = math.length(size * 0.5f);
             m_PendingRequest = request;
             Activate();
             return true;
@@ -305,40 +146,15 @@ namespace CS2MCP
                 {
                     case Stage.CreateDefinitions:
                         applyMode = ApplyMode.Clear;
-                        switch (m_PendingKind)
-                        {
-                            case OperationKind.Demolish:
-                                CreateModifyDefinitions(m_PendingTarget, CreationFlags.Delete, default);
-                                break;
-                            case OperationKind.Upgrade:
-                                CreateModifyDefinitions(m_PendingTarget, CreationFlags.Upgrade, m_PendingUpgradeFlags);
-                                break;
-                            case OperationKind.OperationalArea:
-                                CreateOperationalAreaDefinition();
-                                break;
-                            case OperationKind.Zone:
-                                ApplyZoneCells();
-                                break;
-                            case OperationKind.FacilityUpgrade:
-                                CreateObjectDefinition(m_PendingPrefabEntity, m_PendingPosition, m_PendingRotation, m_PendingTarget, Entity.Null, Entity.Null);
-                                break;
-                            case OperationKind.TransitLine:
-                                BuildTransitLineDefinitions();
-                                break;
-                        }
-                        m_Stage = m_PendingKind == OperationKind.Zone ? Stage.Finish : Stage.Apply;
+                        CreateObjectDefinition(m_PendingPrefabEntity, m_PendingPosition, m_PendingRotation, m_PendingTarget, Entity.Null, Entity.Null);
+                        m_Stage = Stage.Apply;
                         break;
 
                     case Stage.Apply:
-                        if (m_PendingKind == OperationKind.TransitLine)
-                        {
-                            UpdateTransitLineApply();
-                            break;
-                        }
                         if (GetAllowApply())
                         {
                             applyMode = ApplyMode.Apply;
-                            CompletePending(BuildSuccessResponse());
+                            CompletePending(FacilityUpgradeResponse());
                         }
                         else
                         {
@@ -368,185 +184,23 @@ namespace CS2MCP
             return inputDeps;
         }
 
-        private void ApplyZoneCells()
+        private BridgeResponse FacilityUpgradeResponse()
         {
-            const float cellSize = 8f;
-            int cellsChanged = 0;
-            int blocksTouched = 0;
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            using (EntityQuery query = EntityManager.CreateEntityQuery(new EntityQueryDesc
+            return BridgeResponse.Json(new
             {
-                All = new[]
+                applied = true,
+                upgrade = m_PendingLabel,
+                enabled = true,
+                installed = true,
+                entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
+                position = new
                 {
-                    ComponentType.ReadOnly<Block>(),
-                    ComponentType.ReadOnly<Cell>(),
+                    x = m_PendingPosition.x,
+                    y = m_PendingPosition.y,
+                    z = m_PendingPosition.z,
                 },
-                None = new[]
-                {
-                    ComponentType.ReadOnly<Game.Tools.Temp>(),
-                    ComponentType.ReadOnly<Deleted>(),
-                },
-            }))
-            using (NativeArray<Entity> blocks = query.ToEntityArray(Allocator.Temp))
-            {
-                foreach (Entity blockEntity in blocks)
-                {
-                    Block block = EntityManager.GetComponentData<Block>(blockEntity);
-                    float blockExtent = cellSize * (math.cmax(block.m_Size) + 1) * 0.71f;
-                    if (math.distance(block.m_Position.xz, m_PendingZoneCenter) > m_PendingZoneRadius + blockExtent)
-                    {
-                        continue;
-                    }
-
-                    DynamicBuffer<Cell> cells = EntityManager.GetBuffer<Cell>(blockEntity);
-                    int blockCells = 0;
-                    for (int cellZ = 0; cellZ < block.m_Size.y; cellZ++)
-                    {
-                        for (int cellX = 0; cellX < block.m_Size.x; cellX++)
-                        {
-                            int index = cellZ * block.m_Size.x + cellX;
-                            if (index >= cells.Length)
-                            {
-                                continue;
-                            }
-                            Cell cell = cells[index];
-                            if ((cell.m_State & CellFlags.Visible) == 0
-                                || (cell.m_State & (CellFlags.Blocked | CellFlags.Overridden)) != 0
-                                || cell.m_Zone.Equals(m_PendingZone))
-                            {
-                                continue;
-                            }
-                            float3 cellPosition = ZoneUtils.GetCellPosition(block, new int2(cellX, cellZ));
-                            if (!PendingZoneContains(cellPosition.xz))
-                            {
-                                continue;
-                            }
-                            cell.m_Zone = m_PendingZone;
-                            cells[index] = cell;
-                            blockCells++;
-                        }
-                    }
-
-                    if (blockCells == 0)
-                    {
-                        continue;
-                    }
-                    cellsChanged += blockCells;
-                    blocksTouched++;
-                    if (!EntityManager.HasComponent<Updated>(blockEntity))
-                    {
-                        commandBuffer.AddComponent<Updated>(blockEntity);
-                    }
-                }
-            }
-
-            var payload = new Dictionary<string, object>
-            {
-                ["zone"] = m_PendingLabel,
-                ["center"] = new { x = m_PendingZoneCenter.x, z = m_PendingZoneCenter.y },
-                ["cellsChanged"] = cellsChanged,
-                ["blocksTouched"] = blocksTouched,
-                ["width"] = m_PendingZoneSize.x,
-                ["depth"] = m_PendingZoneSize.y,
-                ["rotation"] = m_PendingZoneRotationDegrees,
-                ["note"] = cellsChanged == 0
-                    ? "no zonable cells found in shape - zone cells only exist along roads and must be unoccupied"
-                    : "zoned; buildings grow after set_simulation advance",
-            };
-            CompletePending(BridgeResponse.Json(payload));
-        }
-
-        private bool PendingZoneContains(float2 position)
-        {
-            float2 delta = position - m_PendingZoneCenter;
-            float radians = math.radians(m_PendingZoneRotationDegrees);
-            float sine = math.sin(radians);
-            float cosine = math.cos(radians);
-            float2 local = new float2(
-                cosine * delta.x + sine * delta.y,
-                -sine * delta.x + cosine * delta.y);
-            float2 halfSize = m_PendingZoneSize * 0.5f;
-            return math.abs(local.x) <= halfSize.x && math.abs(local.y) <= halfSize.y;
-        }
-
-        private BridgeResponse BuildSuccessResponse()
-        {
-            switch (m_PendingKind)
-            {
-                case OperationKind.Demolish:
-                    return BridgeResponse.Json(new
-                    {
-                        demolished = true,
-                        prefab = m_PendingLabel,
-                        entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        note = "demolished; connected nodes and lanes are cleaned up by the game",
-                    });
-                case OperationKind.Upgrade:
-                    return BridgeResponse.Json(new
-                    {
-                        roadFeaturesSet = true,
-                        canonicalTool = "set_road_features",
-                        prefab = m_PendingLabel,
-                        entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        note = "road features applied to the segment",
-                    });
-                case OperationKind.FacilityUpgrade:
-                    return BridgeResponse.Json(new
-                    {
-                        applied = true,
-                        upgrade = m_PendingLabel,
-                        enabled = true,
-                        installed = true,
-                        entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        position = new
-                        {
-                            x = m_PendingPosition.x,
-                            y = m_PendingPosition.y,
-                            z = m_PendingPosition.z,
-                        },
-                        note = "upgrade installed on the parent building",
-                    });
-                case OperationKind.TransitLine:
-                    return BridgeResponse.Json(new
-                    {
-                        created = true,
-                        prefab = m_PendingLabel,
-                        stopCount = m_PendingTransitStops != null ? m_PendingTransitStops.Length : 0,
-                        note = "passenger line created; vehicles spawn from depots. Call list_transit_lines to read the new line.",
-                    });
-                case OperationKind.OperationalArea:
-                    return BridgeResponse.Json(new
-                    {
-                        expanded = true,
-                        area = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                        prefab = m_PendingPrefab != null ? m_PendingPrefab.name : null,
-                        targetAreaM2 = (float)Math.Round(m_PendingTargetArea, 1),
-                        previousSurfaceAreaM2 = (float)Math.Round(m_PendingPreviousAreaSurface, 1),
-                        previousCapacity = m_PendingPreviousStorageCapacity >= 0
-                            ? (int?)m_PendingPreviousStorageCapacity
-                            : null,
-                        resource = m_PendingOperationalResource == null
-                            ? null
-                            : new
-                            {
-                                type = m_PendingOperationalResource,
-                                estimatedRemainingAmount = (float)Math.Round(m_PendingOperationalResourceAmount, 1),
-                                coverage = m_PendingOperationalResource == Game.Areas.MapFeature.Forest.ToString()
-                                    ? (float?)null
-                                    : (float)Math.Round(m_PendingOperationalResourceCoverage, 3),
-                                treeCount = m_PendingOperationalResource == Game.Areas.MapFeature.Forest.ToString()
-                                    ? (int?)m_PendingOperationalResourceSampleCount
-                                    : null,
-                                maxConcentration = m_PendingOperationalResource == Game.Areas.MapFeature.Forest.ToString()
-                                    ? (float?)Math.Round(m_PendingOperationalResourceMaxConcentration, 3)
-                                    : null,
-                            },
-                        nodes = m_PendingOperationalAreaNodes != null ? m_PendingOperationalAreaNodes.Length : 0,
-                        note = $"{m_PendingOperationalAreaKind} operational area expanded; call inspect_operational_area to verify resource, capacity and ownership",
-                    });
-                default:
-                    throw new InvalidOperationException($"No result for {m_PendingKind}.");
-            }
+                note = "upgrade installed on the parent building",
+            });
         }
 
         private void CompletePending(BridgeResponse response)
@@ -683,11 +337,6 @@ namespace CS2MCP
             m_PendingRequest = null;
             m_PendingPrefab = null;
             m_PendingPrefabEntity = Entity.Null;
-            m_PendingOwner = Entity.Null;
-            m_PendingOperationalAreaNodes = null;
-            m_PendingOperationalAreaKind = null;
-            m_PendingOperationalResource = null;
-            m_PendingTransitStops = null;
             if (m_ToolSystem.activeTool == this)
             {
                 m_ToolSystem.activeTool = m_PreviousTool != null ? m_PreviousTool : m_DefaultToolSystem;
@@ -695,29 +344,16 @@ namespace CS2MCP
             m_PreviousTool = null;
         }
 
-        /// <summary>
-        /// Creates a modify definition for the pending target, faithfully
-        /// mirroring BulldozeToolSystem.AddEntity (CreationDefinition with
-        /// m_Original + flags plus a NetCourse/ObjectDefinition describing the
-        /// original). Used for Delete (bulldoze) and Upgrade (road upgrades:
-        /// grass/trees/lighting...). The game's generate/apply systems handle
-        /// all related cleanup/recreation — nodes, zone blocks, lanes — which a
-        /// raw component edit would skip (and skipping corrupts state).
-        /// </summary>
-        private void CreateModifyDefinitions(Entity target, CreationFlags flags, CompositionFlags upgrades)
+        private void CreateDemolitionDefinition(Entity target)
         {
             EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
             Entity e = commandBuffer.CreateEntity();
             var definition = new CreationDefinition
             {
                 m_Original = target,
-                m_Flags = flags,
+                m_Flags = CreationFlags.Delete,
             };
             commandBuffer.AddComponent(e, default(Updated));
-            if (upgrades != default(CompositionFlags))
-            {
-                commandBuffer.AddComponent(e, new Game.Net.Upgraded { m_Flags = upgrades });
-            }
 
             if (EntityManager.HasComponent<Game.Net.Edge>(target))
             {
@@ -776,138 +412,26 @@ namespace CS2MCP
         /// area, its real owner, existing prefab, Relocate flag, and full Node
         /// buffer travel through Generate/Validation/ApplyAreasSystem together.
         /// </summary>
-        private void CreateOperationalAreaDefinition()
+        private void CreateOperationalAreaDefinition(OsmPerimeter perimeter)
         {
             EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
             Entity definitionEntity = commandBuffer.CreateEntity();
             commandBuffer.AddComponent(definitionEntity, new CreationDefinition
             {
-                m_Original = m_PendingTarget,
-                m_Owner = m_PendingOwner,
-                m_Prefab = m_PendingPrefabEntity,
+                m_Original = perimeter.Area,
+                m_Owner = perimeter.Owner,
+                m_Prefab = perimeter.Prefab,
                 m_Flags = CreationFlags.Relocate,
             });
             commandBuffer.AddComponent(definitionEntity, default(Updated));
             DynamicBuffer<Game.Areas.Node> nodes =
                 commandBuffer.AddBuffer<Game.Areas.Node>(definitionEntity);
-            foreach (Game.Areas.Node node in m_PendingOperationalAreaNodes)
+            foreach (Game.Areas.Node node in perimeter.Nodes)
             {
                 nodes.Add(node);
             }
         }
 
         /// <summary>
-        private void UpdateTransitLineApply()
-        {
-            if (!TransitLinePathfindReady())
-            {
-                applyMode = ApplyMode.None;
-                return;
-            }
-            if (GetAllowApply())
-            {
-                applyMode = ApplyMode.Apply;
-                CompletePending(BuildSuccessResponse());
-            }
-            else
-            {
-                applyMode = ApplyMode.Clear;
-                CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, DescribeValidationBlock()));
-            }
-            m_Stage = Stage.Finish;
-        }
-
-        private bool TransitLinePathfindReady()
-        {
-            if (m_TempRouteQuery.IsEmptyIgnoreFilter)
-            {
-                return false;
-            }
-            using (NativeArray<Entity> routes = m_TempRouteQuery.ToEntityArray(Allocator.Temp))
-            {
-                Entity route = routes[0];
-                if (!EntityManager.HasComponent<Route>(route)
-                    || (EntityManager.GetComponentData<Route>(route).m_Flags & RouteFlags.Complete) == 0
-                    || !EntityManager.HasBuffer<RouteWaypoint>(route)
-                    || !EntityManager.HasBuffer<RouteSegment>(route))
-                {
-                    return false;
-                }
-                DynamicBuffer<RouteWaypoint> waypoints =
-                    EntityManager.GetBuffer<RouteWaypoint>(route, isReadOnly: true);
-                DynamicBuffer<RouteSegment> segments =
-                    EntityManager.GetBuffer<RouteSegment>(route, isReadOnly: true);
-                if (waypoints.Length == 0 || segments.Length == 0)
-                {
-                    return false;
-                }
-                for (int i = 0; i < segments.Length; i++)
-                {
-                    Entity segment = segments[i].m_Segment;
-                    if (!EntityManager.HasComponent<PathTargets>(segment)
-                        || !EntityManager.HasComponent<PathInformation>(segment))
-                    {
-                        return false;
-                    }
-                    PathTargets targets = EntityManager.GetComponentData<PathTargets>(segment);
-                    RouteWaypoint start = waypoints[i];
-                    RouteWaypoint end = waypoints[i + 1 >= waypoints.Length ? 0 : i + 1];
-                    if (!EntityManager.HasComponent<Position>(start.m_Waypoint)
-                        || !EntityManager.HasComponent<Position>(end.m_Waypoint))
-                    {
-                        return false;
-                    }
-                    float3 startPosition = EntityManager.GetComponentData<Position>(start.m_Waypoint).m_Position;
-                    float3 endPosition = EntityManager.GetComponentData<Position>(end.m_Waypoint).m_Position;
-                    if (math.distancesq(targets.m_ReadyStartPosition, startPosition) >= 1f
-                        || math.distancesq(targets.m_ReadyEndPosition, endPosition) >= 1f)
-                    {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Mirrors RouteToolSystem.CreateDefinitionsJob for a new complete
-        /// passenger route: CreationDefinition + ColorDefinition + closed
-        /// WaypointDefinition loop attached to existing TransportStop entities.
-        /// </summary>
-        private void BuildTransitLineDefinitions()
-        {
-            if (m_PendingTransitStops == null || m_PendingTransitStops.Length < 2)
-            {
-                return;
-            }
-            EntityCommandBuffer commandBuffer = m_ToolOutputBarrier.CreateCommandBuffer();
-            Entity definition = commandBuffer.CreateEntity();
-            commandBuffer.AddComponent(definition, new CreationDefinition
-            {
-                m_Prefab = m_PendingPrefabEntity,
-            });
-            UnityEngine.Color32 color = UnityEngine.Color.magenta;
-            if (m_PendingPrefab is RoutePrefab routePrefab)
-            {
-                color = routePrefab.color;
-            }
-            commandBuffer.AddComponent(definition, new ColorDefinition { m_Color = color });
-            commandBuffer.AddComponent(definition, default(Updated));
-            DynamicBuffer<WaypointDefinition> waypoints = commandBuffer.AddBuffer<WaypointDefinition>(definition);
-            for (int i = 0; i < m_PendingTransitStops.Length; i++)
-            {
-                waypoints.Add(MakeStopWaypoint(m_PendingTransitStops[i]));
-            }
-            waypoints.Add(MakeStopWaypoint(m_PendingTransitStops[0]));
-        }
-
-        private WaypointDefinition MakeStopWaypoint(Entity stop)
-        {
-            Transform transform = EntityManager.GetComponentData<Transform>(stop);
-            return new WaypointDefinition(transform.m_Position)
-            {
-                m_Connection = stop,
-            };
-        }
     }
 }

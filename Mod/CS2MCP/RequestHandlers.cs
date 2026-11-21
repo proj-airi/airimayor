@@ -107,26 +107,18 @@ namespace CS2MCP
                     return SetBudget(request);
                 case "/prefabs":
                     return GetPrefabs(request);
+                case "/city/osm/query":
+                    return QueryOsm(request);
                 case "/city/osm/read":
                     return ReadOsm(request);
                 case "/city/osm/edit":
                     return EditOsm(request);
-                case "/build/road/features":
-                    return SetRoadFeatures(request);
                 case "/zones":
                     return GetZoneTypes();
-                case "/build/zone":
-                    return Zone(request);
                 case "/debug/zone-blocks":
                     return DebugZoneBlocks(request);
-                case "/build/demolish":
-                    return Demolish(request);
-                case "/city/buildings":
-                    return ListBuildings(request);
                 case "/city/buildings/operational-area":
                     return InspectOperationalArea(request);
-                case "/build/operational-area/expand":
-                    return ExpandOperationalArea(request);
                 case "/city/buildings/upgrades":
                     return ListFacilityUpgrades(request);
                 case "/build/facility-upgrade":
@@ -135,14 +127,6 @@ namespace CS2MCP
                     return ListTransitStops(request);
                 case "/city/transit/lines":
                     return ListTransitLines(request);
-                case "/build/transit/line":
-                    return AddTransitLine(request);
-                case "/build/transit/line/delete":
-                    return RemoveTransitLine(request);
-                case "/city/networks":
-                    return ListNetworks(request);
-                case "/city/networks/topology":
-                    return InspectNetworkTopology(request);
                 case "/city/loan":
                     return GetLoan();
                 case "/city/fees":
@@ -176,7 +160,7 @@ namespace CS2MCP
                         $"unknown endpoint: {request.Path}; available: /state /city/overview /city/demand " +
                         "/city/budget /city/budget/set /city/services /city/labor /city/statistics /city/taxes " +
                         "/city/policies /city/policies/set /city/service-budgets " +
-                        "/prefabs /city/osm/read /city/osm/edit /build/zone /build/demolish /city/buildings /sim/clock /sim/clock/set /screenshot");
+                        "/prefabs /city/osm/read /city/osm/edit /city/osm/query /sim/clock /sim/clock/set /screenshot");
             }
         }
 

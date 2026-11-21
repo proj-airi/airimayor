@@ -24,10 +24,12 @@ namespace CS2MCP
             {
                 return OsmFileResponse(bounds, before);
             }
+            var areas = PlanOsmAreas(bounds, before, after, changes);
 
             var roads = new List<OsmRoadPlacement>();
             var buildings = new List<OsmBuildingPlacement>();
             var deletions = new List<Entity>();
+            var routes = new List<OsmTransitEdit>();
             var changedRoadAssets = new Dictionary<long, (Entity Prefab, bool Reverse)>();
             List<OsmEditRoadAsset> assets = null;
             TerrainHeightData terrain = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
@@ -48,8 +50,7 @@ namespace CS2MCP
                 }
                 else
                 {
-                    CityOsmEdit.CheckEditedTags(oldWay, way, "highway", "oneway", "lanes", "width", "maxspeed",
-                        "bridge", "tunnel", "layer", "airimayor:prefab", "name");
+                    CityOsmEdit.CheckEditedTags(oldWay, way, OsmRoadUpgrades.EditableRoadTags);
                     prefab = ResolveOsmRoad(ref assets, oldWay, way, original, out reverse);
                     CheckOsmStreetName(oldWay, way, original, after);
                     if (OsmRoadGrade(way) != MapGrade.Ground)
@@ -95,6 +96,11 @@ namespace CS2MCP
             var affected = new HashSet<Entity>();
             foreach (CityOsmEditItem change in changes)
             {
+                if (change.Edited is OsmRelation || change.Original is OsmRelation)
+                {
+                    routes.Add(PlanOsmTransit(change.Original as OsmRelation, change.Edited as OsmRelation, before, after, bounds));
+                    continue;
+                }
                 if (change.Edited is OsmNode || change.Original is OsmNode)
                 {
                     if (!TryPlanOsmStop(change.Original, change.Edited, current, target, buildings, deletions))
@@ -147,27 +153,60 @@ namespace CS2MCP
                 }
             }
             CheckOsmMovedJunctions(current, target, affected);
-            BridgeResponse CheckCurrent()
+            CheckOsmTransitBatch(routes, buildings, deletions);
+            CheckOsmAreaDependencies(areas, roads, buildings, deletions);
+            bool needsConstruction = roads.Count + buildings.Count + routes.Count > 0 || areas.HasEdits;
+            BridgeResponse CheckPermissions()
             {
-                if (!airimayor.Setting.StaticAllowConstruction || (deletions.Count > 0 && !airimayor.Setting.StaticAllowDemolition))
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "The city permissions changed before the edit was applied.");
-                }
-                if (CityOsmFile.Revision(m_System.CityLoadId, bounds, ReadOsmDocument(bounds).Write()) != request.Query["revision"])
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "The district changed. Read it again before editing.");
-                }
+                if (needsConstruction && !airimayor.Setting.StaticAllowConstruction)
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "This edit requires construction permission.");
+                if (deletions.Count > 0 && !airimayor.Setting.StaticAllowDemolition)
+                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "Removing a mapped feature requires demolition permission.");
                 return null;
             }
+            BridgeResponse denied = CheckPermissions();
+            if (denied != null) return denied;
+            BridgeResponse CheckCurrent()
+            {
+                return CheckPermissions() ?? CheckOsmRevision(request, bounds);
+            }
             var tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            BridgeResponse Readback(IEnumerable<Entity> realized)
+            BridgeResponse Readback(IEnumerable<(OsmKind Kind, long Source, Entity Entity)> realized)
             {
                 OsmDocument district = ReadOsmDocument(bounds);
-                var present = new HashSet<string>(district.Elements.Select(element => CityOsm.Tag(element, "airimayor:entity")));
-                return realized.All(entity => present.Contains(OsmEntityIdentity(entity)))
-                    && deletions.All(entity => !present.Contains(OsmEntityIdentity(entity))) ? OsmFileResponse(bounds, district) : null;
+                var features = district.Elements.Where(element => element.Tags.ContainsKey("airimayor:entity"))
+                    .ToLookup(element => (element.Kind, CityOsm.Tag(element, "airimayor:entity")));
+                var matches = new Dictionary<string, List<string>>();
+                foreach (var result in realized)
+                {
+                    OsmElement mapped = features[(result.Kind, OsmEntityIdentity(result.Entity))].FirstOrDefault();
+                    if (mapped == null) return null;
+                    string prefix = result.Kind.ToString().ToLowerInvariant() + "/";
+                    string source = prefix + result.Source.ToString(CultureInfo.InvariantCulture);
+                    if (!matches.TryGetValue(source, out var refs)) matches.Add(source, refs = new List<string>());
+                    refs.Add(prefix + mapped.Id.ToString(CultureInfo.InvariantCulture));
+                }
+                var remaining = new HashSet<string>(features.Select(group => group.Key.Item2));
+                if (!MapOsmAreaResults(areas, district, matches)) return null;
+                return deletions.Concat(routes.Where(route => route.Remove).Select(route => route.Original))
+                    .Any(entity => remaining.Contains(OsmEntityIdentity(entity))) ? null : OsmFileResponse(bounds, district, matches);
             }
-            return tool.TryQueueOsmEdit(request, roads, buildings, deletions, CheckCurrent, Readback)
+            BridgeResponse ReadFailure(BridgeErrorKind kind, string message)
+            {
+                OsmDocument district = ReadOsmDocument(bounds);
+                string content = district.Write();
+                BridgeResponse response = BridgeResponse.Json(new
+                {
+                    error = message, kind = kind.ToString().ToLowerInvariant(),
+                    revision = CityOsmFile.Revision(m_System.CityLoadId, bounds, content),
+                    observedChanges = OsmChange.Between(before, district).Write()
+                });
+                response.Success = false;
+                response.ErrorKind = kind;
+                response.Files = new Dictionary<string, byte[]> { ["district.osm"] = System.Text.Encoding.UTF8.GetBytes(content) };
+                return response;
+            }
+            return tool.TryQueueOsmEdit(request, roads, buildings, deletions, routes, areas, CheckCurrent, Readback, ReadFailure)
                 ? null : BridgeResponse.Error(BridgeErrorKind.Conflict, "Another city operation is in progress.");
         }
 
@@ -272,6 +311,18 @@ namespace CS2MCP
             ref TerrainHeightData terrain, List<OsmRoadPlacement> placements)
         {
             bool isUtility = CityOsm.IsUtility(way);
+            Entity source = original;
+            bool invertedWay = originalWay != null && (way.NodeIds[0] == originalWay.NodeIds.Last()
+                || way.NodeIds.Last() == originalWay.NodeIds[0]);
+            bool invertNative = invertedWay != reverse;
+            CompositionFlags existing = source != Entity.Null && EntityManager.HasComponent<Upgraded>(source)
+                ? EntityManager.GetComponentData<Upgraded>(source).m_Flags : default;
+            CompositionFlags requested = isUtility ? existing : OsmRoadUpgrades.Read(way,
+                invertedWay ? NetCompositionHelpers.InvertCompositionFlags(existing) : existing);
+            if (reverse) requested = NetCompositionHelpers.InvertCompositionFlags(requested);
+            CompositionFlags previous = invertNative ? NetCompositionHelpers.InvertCompositionFlags(existing) : existing;
+            CompositionFlags added = requested & ~previous;
+            if (!isUtility && added != default) CheckOsmRoadUpgrades(way.Id, prefab, added);
             MapGrade? grade = isUtility ? (MapGrade?)null : OsmRoadGrade(way);
             bool explicitHeights = way.NodeIds.Any(id => target.Document.Nodes[id].Tags.ContainsKey("ele"));
             int start = 0;
@@ -302,6 +353,9 @@ namespace CS2MCP
                     placements.Add(new OsmRoadPlacement
                     {
                         WayId = way.Id, StartId = startId, EndId = endId, Curve = curve, Original = original,
+                        UpgradeSource = source, InvertUpgrades = invertNative, Upgrades = requested,
+                        WriteUpgrades = !isUtility && (original == Entity.Null || requested != previous),
+                        AddedUpgrades = added,
                         StartPosition = target.Positions[startId], EndPosition = target.Positions[endId],
                         Prefab = prefab, Start = OsmEndpoint(target.Document.Nodes[startId]), End = OsmEndpoint(target.Document.Nodes[endId]),
                         Ground = ground, Grade = approach ? null : grade, Name = OsmRequestedName(originalWay, way),
@@ -313,5 +367,27 @@ namespace CS2MCP
         }
 
         private Entity OsmEndpoint(OsmNode node) => node.Tags.ContainsKey("airimayor:entity") ? OsmOriginal(node) : Entity.Null;
+
+        private void CheckOsmRoadUpgrades(long way, Entity prefab, CompositionFlags added)
+        {
+            var road = EntityManager.GetComponentData<NetData>(prefab);
+            if ((added.m_General & ~road.m_GeneralFlagMask) != 0 ||
+                ((added.m_Left | added.m_Right) & ~road.m_SideFlagMask) != 0)
+                throw new FormatException($"The road asset for way {way} does not support the requested upgrades.");
+            CompositionFlags available = default;
+            using (var assets = NetPrefabQuery.ToEntityArray(Allocator.Temp))
+            {
+                foreach (Entity asset in assets)
+                {
+                    if (!EntityManager.HasComponent<PlaceableNetData>(asset) || IsLocked(asset)) continue;
+                    var upgrade = EntityManager.GetComponentData<PlaceableNetData>(asset);
+                    if ((upgrade.m_PlacementFlags & (PlacementFlags.IsUpgrade | PlacementFlags.UpgradeOnly)) == 0) continue;
+                    available |= upgrade.m_SetUpgradeFlags;
+                }
+            }
+            CompositionFlags.Side sides = available.m_Left | available.m_Right;
+            if ((added.m_General & ~available.m_General) != 0 || ((added.m_Left | added.m_Right) & ~sides) != 0)
+                throw new FormatException($"The city has no unlocked upgrade for the requested features on way {way}.");
+        }
     }
 }

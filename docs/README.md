@@ -65,7 +65,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0057-repository-policy-checks.md](./adr/0057-repository-policy-checks.md) | Deterministic repository contracts and evidence-based semantic review through alint |
 | [0058-local-osm-city-geometry.md](./adr/0058-local-osm-city-geometry.md) | Local OSM district maps and bidirectional road and building geometry conversion |
 | [0059-coordinate-addressed-osm-editing.md](./adr/0059-coordinate-addressed-osm-editing.md) | Read and edit a live district as OSM by its city coordinates |
-| [0060-osm-first-city-tools.md](./adr/0060-osm-first-city-tools.md) | Represent placed features, relationships, observations and build options through the local OSM workflow |
+| [0060-osm-first-city-tools.md](./adr/0060-osm-first-city-tools.md) | Local OSM for placed features and observations, with a separate catalog of construction assets |
 
 ## Guide
 

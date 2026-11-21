@@ -31,7 +31,9 @@ namespace CS2MCP
                 target.Relations.TryGetValue(id, out OsmRelation edited);
                 if (original == null || !original.SameContent(edited))
                 {
-                    throw new FormatException($"Relation {id} has no city construction operation.");
+                    if (CityOsm.Tag(original ?? edited, "type") != "route")
+                        throw new FormatException($"Relation {id} has no city construction operation.");
+                    items.Add(new CityOsmEditItem(original, edited));
                 }
             }
 
@@ -41,6 +43,7 @@ namespace CS2MCP
             {
                 source.Nodes.TryGetValue(id, out OsmNode original);
                 target.Nodes.TryGetValue(id, out OsmNode edited);
+                if (edited == null && CityOsmTransit.RemovedWithRoute(original, source, target)) continue;
                 if (original != null && edited != null && SameNodePosition(original, edited)
                     && original.Tags.Count == edited.Tags.Count
                     && original.Tags.All(tag => tag.Key == "ele" || CityOsm.Tag(edited, tag.Key) == tag.Value))

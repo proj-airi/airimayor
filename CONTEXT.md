@@ -43,7 +43,7 @@ The city-building playbook baked into the system prompt (city building, utility 
 _Avoid_: engineering skills under `.agents/` or `~/.agents/`
 
 **Traffic governance**:
-The mayor's congestion loop over existing tools: a time advance plus fresh reads plus topology QA, `list_networks` ranked by congestion or traffic volume, existing road writes, then `set_simulation` advance and re-measure.
+The mayor's congestion loop over existing tools: a time advance plus fresh reads plus topology QA, mapped streets ranked by congestion or traffic volume, existing road writes, then `set_simulation` advance and re-measure.
 _Avoid_: a new traffic tool, adding lanes to every local street, treating degree-1 dead ends as automatic errors
 
 **Wait simulation**:
@@ -92,6 +92,10 @@ _Avoid_: a second player chat, an automatic report that wakes the root conversat
 An exact named game asset used by a road, building or other city object.
 _Avoid_: a building use or a road class as an exact asset identity
 
+**Construction catalog**:
+The game's inventory of assets the player can select for construction, with each asset's name, dimensions, use and milestone availability. A city can offer an asset before its first instance has been built.
+_Avoid_: the set of places already built in a city
+
 **Local OSM map**:
 An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, utility lines and building lots. Shared nodes connect ways, and platform nodes locate roadside stops.
 _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
@@ -121,7 +125,7 @@ A connected set of typed-network edges that does not reach an outside connection
 _Avoid_: treating every degree-1 dead end as isolated
 
 **Road facts**:
-Native per-prefab road identity on `list_prefabs` and `list_networks`: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
+Native road identity in the construction catalog and on a built street: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
 _Avoid_: width as the highway test; a new traffic tool
 
 **Operational area**:

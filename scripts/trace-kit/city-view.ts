@@ -115,6 +115,7 @@ const reads = new Set([
   'get_labor',
   'list_notifications',
   'list_networks',
+  'query_osm',
   'read_osm',
 ])
 const writeLabels: Record<string, string> = {
@@ -180,8 +181,12 @@ export class CityRecording {
       }
       const result = reads.has(tool) || tool === 'set_simulation' ? parse(data.result, 'result') : {}
       if (data.success === true && reads.has(tool)) {
-        this.observations.push({ index, stamp })
-        if (stamp) this.read(tool, result, index, stamp)
+        const observed = (tool === 'query_osm' ? stampOf(result.observedAt) : undefined) ?? stamp
+        this.observations.push({ index, stamp: observed })
+        if (observed) {
+          this.read(tool, result, index, observed)
+          if (!stamp) this.anchors.push({ index, stamp: observed })
+        }
       }
       if (isObject(data.evidence)) {
         for (const kind of ['before', 'after'] as const) {
@@ -482,17 +487,14 @@ export class CityRecording {
           : [],
       })
     }
-    if (tool === 'list_networks' && data.kind === 'road' && Array.isArray(data.networks)) {
-      for (const road of data.networks) {
-        if (
-          !isObject(road) ||
-          !isObject(road.entity) ||
-          number(road.entity.index) === undefined ||
-          number(road.entity.version) === undefined ||
-          !isObject(road.traffic)
-        )
-          continue
-        const entity = `${road.entity.index}:${road.entity.version}`
+    const features = tool === 'query_osm' && data.view === 'features' ? data.items
+      : tool === 'list_networks' ? data.networks : undefined
+    if (!Array.isArray(features)) return
+    for (const feature of features) {
+      if (!isObject(feature) || !isObject(feature.entity) ||
+          number(feature.entity.index) === undefined || number(feature.entity.version) === undefined) continue
+      const entity = `${feature.entity.index}:${feature.entity.version}`
+      if (data.kind === 'road' && isObject(feature.traffic)) {
         for (const [field, unit] of [
           ['flowPercent', '% flow'],
           ['volumeIndex', 'volume index'],
@@ -501,11 +503,16 @@ export class CityRecording {
         ])
           add(
             `road.${entity}.${field}`,
-            `${road.prefab ?? 'Road'} ${entity}: ${field}`,
-            'Traffic',
-            unit,
-            road.traffic[field],
+            `${feature.prefab ?? 'Road'} ${entity}: ${field}`,
+            'Traffic', unit, feature.traffic[field],
             'One recorded road entity; limited network lists are never treated as a citywide traffic average.',
+          )
+      }
+      if (data.kind === 'low_voltage' && isObject(feature.electricity)) {
+        for (const field of ['flow', 'capacity'])
+          add(
+            `electricity.${entity}.${field}`, `${feature.prefab ?? 'Power cable'} ${entity}: ${field}`,
+            'Services', 'game units', feature.electricity[field], 'One recorded low-voltage connection.',
           )
       }
     }

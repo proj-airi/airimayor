@@ -32,9 +32,9 @@ namespace CS2MCP
             {
                 return error;
             }
-            if (!airimayor.Setting.StaticAllowConstruction)
+            if (!airimayor.Setting.StaticAllowConstruction && !airimayor.Setting.StaticAllowDemolition)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict, "City construction is disabled.");
+                return BridgeResponse.Error(BridgeErrorKind.Conflict, "City construction and demolition are disabled.");
             }
             OsmDocument current = ReadOsmDocument(bounds);
             if (!request.Query.TryGetValue("revision", out string revision)
@@ -45,12 +45,6 @@ namespace CS2MCP
             try
             {
                 OsmDocument edited = current.Edit(request.Body);
-                if (!airimayor.Setting.StaticAllowDemolition
-                    && (current.Ways.Keys.Any(id => !edited.Ways.ContainsKey(id))
-                        || current.Nodes.Values.Any(node => CityOsm.IsPlatform(node) && !edited.Nodes.ContainsKey(node.Id))))
-                {
-                    return BridgeResponse.Error(BridgeErrorKind.Conflict, "Removing a mapped feature requires demolition permission.");
-                }
                 return ApplyOsmEdit(request, bounds, current, edited);
             }
             catch (FormatException exception)
@@ -76,11 +70,17 @@ namespace CS2MCP
             return true;
         }
 
-        private BridgeResponse OsmFileResponse(float4 bounds, OsmDocument document)
+        private BridgeResponse CheckOsmRevision(BridgeRequest request, float4 bounds)
+        {
+            return CityOsmFile.Revision(m_System.CityLoadId, bounds, ReadOsmDocument(bounds).Write()) == request.Query["revision"]
+                ? null : BridgeResponse.Error(BridgeErrorKind.Conflict, "The district changed. Read it again before editing.");
+        }
+
+        private BridgeResponse OsmFileResponse(float4 bounds, OsmDocument document, object realized = null)
         {
             string content = document.Write();
             string revision = CityOsmFile.Revision(m_System.CityLoadId, bounds, content);
-            BridgeResponse response = BridgeResponse.Json(new { revision, content });
+            BridgeResponse response = BridgeResponse.Json(new { revision, content, realized });
             response.Files = new Dictionary<string, byte[]> { ["district.osm"] = Encoding.UTF8.GetBytes(content) };
             return response;
         }
@@ -101,31 +101,13 @@ namespace CS2MCP
         private OsmDocument ReadOsmDocument(float4 bounds)
         {
             var district = new Bounds2(bounds.xy, bounds.zw);
-            var iterator = new OsmDistrictIterator { Bounds = district, Entities = new List<Entity>() };
-            var netTree = World.GetOrCreateSystemManaged<Game.Net.SearchSystem>()
-                .GetNetSearchTree(true, out JobHandle netDependencies);
-            netDependencies.Complete();
-            netTree.Iterate(ref iterator);
             PrefabSystem prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
             var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
             var streetNames = new Dictionary<Entity, string>();
             var roads = new List<CityOsmRoadSource>();
             var roadPrefabs = new Dictionary<Entity, (string Name, RoadPrefabFacts Facts)>();
-            EntityQuery edges = PlacedRoadQuery;
-            foreach (Entity entity in iterator.Entities)
+            foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(district))
             {
-                if (!EntityManager.Exists(entity) || !edges.MatchesIgnoreFilter(entity)) continue;
-                Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
-                TypedNetworkKinds kinds = ClassifyNetPrefab(prefab);
-                if (kinds == TypedNetworkKinds.None)
-                {
-                    continue;
-                }
-                Curve curve = EntityManager.GetComponentData<Curve>(entity);
-                if (!CityOsmSpatial.Intersects(district, curve.m_Bezier.xz))
-                {
-                    continue;
-                }
                 Edge edge = EntityManager.GetComponentData<Edge>(entity);
                 var source = new CityOsmRoadSource
                 {
@@ -145,27 +127,19 @@ namespace CS2MCP
                 if (!roadPrefabs.TryGetValue(prefab, out var asset))
                 {
                     string name = PrefabDisplayName(prefabs, prefab);
-                    asset = (name, ReadRoadPrefabFacts(prefab, prefabs, string.Empty));
+                    asset = (name, ReadRoadPrefabFacts(prefab, prefabs));
                     roadPrefabs.Add(prefab, asset);
                 }
                 var composition = EntityManager.HasComponent<Composition>(entity)
                     ? EntityManager.GetComponentData<Composition>(entity).m_Edge : Entity.Null;
                 var traffic = OsmCarLanes(composition);
-                string streetName = null;
-                if (EntityManager.HasComponent<Aggregated>(entity))
-                {
-                    Entity street = EntityManager.GetComponentData<Aggregated>(entity).m_Aggregate;
-                    if (EntityManager.Exists(street) && !streetNames.TryGetValue(street, out streetName))
-                    {
-                        streetName = names.GetRenderedLabelName(street);
-                        streetNames.Add(street, streetName);
-                    }
-                }
                 float width = EntityManager.HasComponent<NetCompositionData>(composition)
                     ? EntityManager.GetComponentData<NetCompositionData>(composition).m_Width : 0f;
                 source.Prefab = asset.Name;
-                source.Name = streetName;
+                source.Name = OsmStreetName(entity, names, streetNames);
                 source.Highway = OsmHighway(asset.Facts.RoadClass);
+                if (EntityManager.HasComponent<Upgraded>(entity))
+                    source.UpgradeTags = OsmRoadUpgrades.Export(EntityManager.GetComponentData<Upgraded>(entity).m_Flags);
                 source.OneWay = traffic.Direction;
                 source.Lanes = traffic.Count;
                 source.SpeedKmh = asset.Facts.SpeedKmh;
@@ -173,44 +147,22 @@ namespace CS2MCP
                 source.Grade = ReadRoadGrade(EntityManager, composition) ?? MapGrade.Ground;
                 roads.Add(source);
             }
-            iterator.Entities.Clear();
-            float padding = OsmObjectSearchPadding();
-            iterator.Bounds = new Bounds2(district.min - padding, district.max + padding);
-            var objectTree = World.GetOrCreateSystemManaged<Game.Objects.SearchSystem>()
-                .GetStaticSearchTree(true, out JobHandle objectDependencies);
-            objectDependencies.Complete();
-            objectTree.Iterate(ref iterator);
             var buildings = new List<CityOsmBuildingSource>();
             var stops = new List<OsmNode>();
             EntityQuery lots = PlacedBuildingQuery;
-            foreach (Entity entity in iterator.Entities)
+            foreach (Entity entity in OsmDistrictObjects(district))
             {
                 if (!EntityManager.Exists(entity)) continue;
                 if (!lots.MatchesIgnoreFilter(entity))
                 {
                     if (TransitStopQuery.MatchesIgnoreFilter(entity))
                     {
-                        OsmNode stop = ReadOsmStop(entity, district, prefabs, names);
+                        OsmNode stop = ReadOsmStationStop(entity, district, prefabs, names) ?? ReadOsmStop(entity, district, prefabs, names);
                         if (stop != null) stops.Add(stop);
                     }
                     continue;
                 }
-                Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
-                if (!EntityManager.HasComponent<BuildingData>(prefab))
-                {
-                    continue;
-                }
-                float2 lot = (float2)EntityManager.GetComponentData<BuildingData>(prefab).m_LotSize * Game.Zones.ZoneUtils.CELL_SIZE;
-                if (math.any(lot <= 0f))
-                {
-                    continue;
-                }
-                Transform transform = EntityManager.GetComponentData<Transform>(entity);
-                var corners = CityOsm.Corners(transform.m_Position, transform.m_Rotation, lot);
-                if (!MathUtils.Intersect(district, new Quad2(corners[0].xz, corners[1].xz, corners[2].xz, corners[3].xz)))
-                {
-                    continue;
-                }
+                if (!TryOsmBuildingLot(entity, district, out Entity prefab, out Transform transform, out float2 lot, out _)) continue;
                 buildings.Add(new CityOsmBuildingSource
                 {
                     Index = entity.Index,
@@ -225,8 +177,76 @@ namespace CS2MCP
             }
             OsmDocument document = CityOsm.Export(roads, buildings);
             foreach (OsmNode node in stops) document.Nodes.Add(node.Id, node);
+            ReadOsmTransit(document, bounds);
+            AddOsmAreas(document, bounds);
             CityOsmFile.AddBounds(document, bounds);
             return document;
+        }
+
+        private IEnumerable<(Entity Entity, Entity Prefab, TypedNetworkKinds Kinds, Curve Curve)> OsmDistrictNetworks(Bounds2 district)
+        {
+            var iterator = new OsmDistrictIterator { Bounds = district, Entities = new List<Entity>() };
+            var netTree = World.GetOrCreateSystemManaged<Game.Net.SearchSystem>()
+                .GetNetSearchTree(true, out JobHandle netDependencies);
+            netDependencies.Complete();
+            netTree.Iterate(ref iterator);
+            EntityQuery edges = PlacedRoadQuery;
+            foreach (Entity entity in iterator.Entities)
+            {
+                if (!EntityManager.Exists(entity) || !edges.MatchesIgnoreFilter(entity)) continue;
+                Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
+                TypedNetworkKinds kinds = ClassifyNetPrefab(prefab);
+                if (kinds == TypedNetworkKinds.None)
+                {
+                    continue;
+                }
+                Curve curve = EntityManager.GetComponentData<Curve>(entity);
+                if (!CityOsmSpatial.Intersects(district, curve.m_Bezier.xz))
+                {
+                    continue;
+                }
+                yield return (entity, prefab, kinds, curve);
+            }
+        }
+
+        private List<Entity> OsmDistrictObjects(Bounds2 district)
+        {
+            float padding = OsmObjectSearchPadding();
+            var iterator = new OsmDistrictIterator
+            {
+                Bounds = new Bounds2(district.min - padding, district.max + padding),
+                Entities = new List<Entity>(),
+            };
+            var tree = World.GetOrCreateSystemManaged<Game.Objects.SearchSystem>().GetStaticSearchTree(true, out JobHandle dependencies);
+            dependencies.Complete();
+            tree.Iterate(ref iterator);
+            return iterator.Entities;
+        }
+
+        private bool TryOsmBuildingLot(Entity entity, Bounds2 district, out Entity prefab, out Transform transform, out float2 lot, out Quad2 footprint)
+        {
+            prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
+            transform = EntityManager.GetComponentData<Transform>(entity);
+            lot = EntityManager.HasComponent<BuildingData>(prefab)
+                ? (float2)EntityManager.GetComponentData<BuildingData>(prefab).m_LotSize * Game.Zones.ZoneUtils.CELL_SIZE : default;
+            footprint = default;
+            if (math.any(lot <= 0f)) return false;
+            float3[] corners = CityOsm.Corners(transform.m_Position, transform.m_Rotation, lot);
+            footprint = new Quad2(corners[0].xz, corners[1].xz, corners[2].xz, corners[3].xz);
+            return MathUtils.Intersect(district, footprint);
+        }
+
+        private string OsmStreetName(Entity entity, Game.UI.NameSystem names, Dictionary<Entity, string> streetNames)
+        {
+            if (!EntityManager.HasComponent<Aggregated>(entity)) return null;
+            Entity street = EntityManager.GetComponentData<Aggregated>(entity).m_Aggregate;
+            if (!EntityManager.Exists(street)) return null;
+            if (!streetNames.TryGetValue(street, out string name))
+            {
+                name = names.GetRenderedLabelName(street);
+                streetNames.Add(street, name);
+            }
+            return name;
         }
 
         private (Guid City, int Buildings, int Stops) m_OsmAssetVersion;
@@ -298,7 +318,7 @@ namespace CS2MCP
             foreach (NetCompositionLane lane in lanes)
             {
                 LaneFlags flags = lane.m_Flags;
-                if (!IsOsmCarLane(flags))
+                if (!IsCarTravelLane(lane.m_Lane, flags))
                 {
                     continue;
                 }

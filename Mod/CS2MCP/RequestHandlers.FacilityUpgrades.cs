@@ -230,7 +230,7 @@ namespace CS2MCP
                 || !request.TryGetInt("version", out int version))
             {
                 error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "provide ?index=&version= of a building from list_buildings");
+                    "Choose a building from query_osm and supply its index and version.");
                 return false;
             }
             if (!TryResolveExistingEntity(index, version, out Entity entity))

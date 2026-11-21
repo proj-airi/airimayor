@@ -11,6 +11,12 @@ namespace CS2MCP
             return math.length(math.max(0f, math.max(geometry.min + half, half - geometry.max)));
         }
 
+        public static Bounds2 NetworkReadBounds(Bezier4x2 curve, float2 start, float2 end)
+        {
+            Bounds2 bounds = MathUtils.Bounds(curve);
+            return new Bounds2(math.min(bounds.min, math.min(start, end)) - 0.5f, math.max(bounds.max, math.max(start, end)) + 0.5f);
+        }
+
         public static bool Intersects(Bounds2 bounds, Bezier4x2 curve)
         {
             if (MathUtils.Intersect(bounds, curve.a) || MathUtils.Intersect(bounds, curve.d)) return true;

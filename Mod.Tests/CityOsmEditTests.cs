@@ -123,7 +123,7 @@ namespace CS2MCP
         }
 
         [Fact]
-        public void Changing_only_a_relation_or_native_node_identity_has_no_construction_translation()
+        public void Native_node_identity_is_read_only()
         {
             var original = new OsmDocument();
             AddNode(original, 1, 0, 0);
@@ -131,13 +131,6 @@ namespace CS2MCP
             AddRoad(original, 10, 1, 2);
             var edited = original.Copy();
             edited.Nodes[2].Tags["airimayor:entity"] = "2:9";
-            Assert.Throws<FormatException>(() => CityOsmEdit.Changes(CityOsm.Import(original), CityOsm.Import(edited), Bounds));
-
-            edited = original.Copy();
-            var relation = new OsmRelation(11);
-            relation.Tags["type"] = "route";
-            relation.Members.Add(new OsmMember(OsmKind.Way, 10, ""));
-            edited.Relations.Add(relation.Id, relation);
             Assert.Throws<FormatException>(() => CityOsmEdit.Changes(CityOsm.Import(original), CityOsm.Import(edited), Bounds));
         }
 

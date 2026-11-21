@@ -80,7 +80,10 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["advance", "pause"],
+            "enum": [
+              "advance",
+              "pause"
+            ],
             "description": "advance runs in-game time then restores the previous speed or pause. pause pauses immediately."
           },
           "hours": {
@@ -90,7 +93,9 @@
             "description": "In-game hours to advance when action is advance (default 1). Ignored for pause."
           }
         },
-        "required": ["action"]
+        "required": [
+          "action"
+        ]
       },
       "route": "/sim/clock/set",
       "query": [
@@ -175,8 +180,157 @@
       "response": "png"
     },
     {
+      "name": "query_osm",
+      "description": "Find existing buildings, roads and utilities, read traffic and electricity load, or locate connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "xMin": {
+            "type": "number",
+            "description": "West side of the district in city meters"
+          },
+          "zMin": {
+            "type": "number",
+            "description": "Minimum district Z in city meters"
+          },
+          "xMax": {
+            "type": "number",
+            "description": "East side of the district in city meters"
+          },
+          "zMax": {
+            "type": "number",
+            "description": "Maximum district Z in city meters"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "building",
+              "road",
+              "water",
+              "sewage",
+              "low_voltage"
+            ]
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "features",
+              "topology"
+            ],
+            "description": "Default features. Topology reports road or utility network findings."
+          },
+          "query": {
+            "type": "string",
+            "description": "Filter placed features by name or asset name."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "power",
+              "water",
+              "sewage",
+              "garbage",
+              "healthcare",
+              "fire",
+              "police",
+              "education",
+              "transport",
+              "post",
+              "telecom",
+              "specialized-industry"
+            ],
+            "description": "Typed role such as power, water, sewage, garbage, or specialized-industry"
+          },
+          "operational_area": {
+            "type": "string",
+            "enum": [
+              "any",
+              "storage",
+              "extractor"
+            ],
+            "description": "Require an owner-linked operational area of this kind"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "distance",
+              "traffic_volume",
+              "congestion",
+              "load"
+            ],
+            "description": "Sort from the rectangle center, or rank road traffic or power load."
+          },
+          "include_dead_ends": {
+            "type": "boolean",
+            "description": "Include road dead ends in topology results."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": "Maximum rows to return."
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "route": "/city/osm/query",
+      "query": [
+        {
+          "key": "xMin",
+          "arg": "xMin"
+        },
+        {
+          "key": "zMin",
+          "arg": "zMin"
+        },
+        {
+          "key": "xMax",
+          "arg": "xMax"
+        },
+        {
+          "key": "zMax",
+          "arg": "zMax"
+        },
+        {
+          "key": "kind",
+          "arg": "kind"
+        },
+        {
+          "key": "view",
+          "arg": "view"
+        },
+        {
+          "key": "query",
+          "arg": "query"
+        },
+        {
+          "key": "role",
+          "arg": "role"
+        },
+        {
+          "key": "operational_area",
+          "arg": "operational_area"
+        },
+        {
+          "key": "sort",
+          "arg": "sort"
+        },
+        {
+          "key": "include_dead_ends",
+          "arg": "include_dead_ends"
+        },
+        {
+          "key": "limit",
+          "arg": "limit"
+        }
+      ],
+      "response": "json"
+    },
+    {
       "name": "read_osm",
-      "description": "Read a district's roads, junctions, buildings, underground utilities and transit stops. Returns its revision and editable OpenStreetMap XML in content. Use city coordinates in meters for all four bounds.",
+      "description": "Read the complete local OSM file for a rectangle in city meters, including roads, utilities, building lots, zoning, operational areas, boarding points and passenger lines. Returns editable content and a revision. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -227,7 +381,7 @@
     },
     {
       "name": "edit_osm",
-      "description": "Apply a district edit to the city. Reuse the bounds and revision from read_osm. Submit the full edited OSM map or an OsmChange patch in content. Preserve nearby features and share node references at road junctions. Use standard OSM tags, with airimayor:prefab for a particular city asset. Removing an existing mapped feature requires demolition permission. Returns the updated district and revision.",
+      "description": "Edit a district using the bounds and revision from read_osm, with full OSM XML or an OsmChange patch. Roads share junction nodes. Use airimayor:prefab to request a named asset. Set directional road upgrades, edit zoning or operational boundaries, or order platform members in a passenger route. Physical removal requires demolition permission. A successful edit returns the city's district and revision.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -497,7 +651,7 @@
     },
     {
       "name": "list_prefabs",
-      "description": "Search game prefabs by name and/or typed role. Requires role and/or query. Use role for infrastructure/services; query for name substrings like 'Highway' or 'School'. role=transport includes stations, depots, and roadside stops. role=post includes the post office and mailboxes. category=object lists other roadside objects such as a bicycle rack. Check 'locked' for milestone blocks. Road rows also return road{roadClass, speedKmh, carLanes, highwayRules, zonable}: roadClass is the game's road category (highway = the Highways category), speedKmh is the speed limit, carLanes counts car lanes. Default limit 16, max 64.",
+      "description": "Browse the construction menu by asset category, service role or name. Defaults to buildings available for construction, including designs never placed in this city. Returns exact asset names, sizes, road facts and availability. Continue a page with nextOffset. Construction still depends on the site.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -514,7 +668,7 @@
           },
           "query": {
             "type": "string",
-            "description": "Name substring filter. Required if role is omitted."
+            "description": "Optional asset name substring."
           },
           "role": {
             "type": "string",
@@ -532,7 +686,7 @@
               "telecom",
               "specialized-industry"
             ],
-            "description": "Typed capability filter (power, water, sewage, ...). Prefer over name guessing for infrastructure and services. At least one of role or query is required."
+            "description": "Optional service or infrastructure role."
           },
           "limit": {
             "type": "integer",
@@ -540,6 +694,20 @@
             "maximum": 64,
             "description": "Max results. Default 16, max 64.",
             "default": 16
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "available",
+              "locked",
+              "all"
+            ],
+            "description": "Default available. Use locked for assets awaiting a milestone, or all to include both locked assets and unique assets already placed."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Starting catalog row. Use nextOffset for the following page."
           }
         },
         "required": []
@@ -562,23 +730,31 @@
           "key": "limit",
           "arg": "limit",
           "default": "16"
+        },
+        {
+          "key": "availability",
+          "arg": "availability"
+        },
+        {
+          "key": "offset",
+          "arg": "offset"
         }
       ],
       "response": "json"
     },
     {
       "name": "inspect_operational_area",
-      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from list_buildings.",
+      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from query_osm.",
       "parameters": {
         "type": "object",
         "properties": {
           "index": {
             "type": "integer",
-            "description": "Building entity index from list_buildings"
+            "description": "Building entity index from query_osm"
           },
           "version": {
             "type": "integer",
-            "description": "Building entity version from list_buildings"
+            "description": "Building entity version from query_osm"
           }
         },
         "required": [
@@ -600,62 +776,18 @@
       "response": "json"
     },
     {
-      "name": "expand_operational_area",
-      "description": "Expand one owner-linked landfill storage or specialized-industry extractor area to a requested total surface. Keeps the building edge, grows a near-circle around obstacles, and stays on owned land clear of buildings and roads. Extractors rank clear candidates by resource coverage; fertile land, ore, oil and fish use the natural-resource map while forest scans productive trees. Call inspect_operational_area afterward to verify production.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "integer",
-            "description": "Building entity index from list_buildings; use an expandable storage or extractor capability"
-          },
-          "version": {
-            "type": "integer",
-            "description": "Building entity version from list_buildings"
-          },
-          "target_area_m2": {
-            "type": "number",
-            "minimum": 64,
-            "maximum": 250000,
-            "description": "Requested total polygon surface in square metres; must exceed the current surface"
-          }
-        },
-        "required": [
-          "index",
-          "version",
-          "target_area_m2"
-        ]
-      },
-      "route": "/build/operational-area/expand",
-      "query": [
-        {
-          "key": "index",
-          "arg": "index"
-        },
-        {
-          "key": "version",
-          "arg": "version"
-        },
-        {
-          "key": "target_area_m2",
-          "arg": "target_area_m2"
-        }
-      ],
-      "response": "json"
-    },
-    {
       "name": "list_facility_upgrades",
-      "description": "List installable and already-installed facility upgrades for one building from list_buildings. Returns prefab names plus installed, enabled and locked state. Read-only; use set_facility_upgrade to install a missing upgrade or toggle Out of Service.",
+      "description": "List installable and already-installed facility upgrades for one building from query_osm. Returns prefab names plus installed, enabled and locked state. Read-only; use set_facility_upgrade to install a missing upgrade or toggle Out of Service.",
       "parameters": {
         "type": "object",
         "properties": {
           "index": {
             "type": "integer",
-            "description": "Building entity index from list_buildings"
+            "description": "Building entity index from query_osm"
           },
           "version": {
             "type": "integer",
-            "description": "Building entity version from list_buildings"
+            "description": "Building entity version from query_osm"
           }
         },
         "required": [
@@ -684,11 +816,11 @@
         "properties": {
           "index": {
             "type": "integer",
-            "description": "Building entity index from list_buildings"
+            "description": "Building entity index from query_osm"
           },
           "version": {
             "type": "integer",
-            "description": "Building entity version from list_buildings"
+            "description": "Building entity version from query_osm"
           },
           "upgrade": {
             "type": "string",
@@ -729,7 +861,7 @@
     },
     {
       "name": "list_transit_stops",
-      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Use these entity ids with add_transit_line.",
+      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Read the district for boarding point references when editing a passenger line.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -844,167 +976,8 @@
       "response": "json"
     },
     {
-      "name": "add_transit_line",
-      "description": "Create a simple passenger line. stops is an ordered list of list_transit_stops ids as index:version,index:version. Default type is bus. The line closes back to the first stop and uses native route pathfinding. Vehicles spawn from depots.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "stops": {
-            "type": "string",
-            "description": "Ordered stop list from list_transit_stops: index:version,index:version. At least two stops of the same passenger type."
-          },
-          "type": {
-            "type": "string",
-            "description": "Passenger line type; default bus. Must match the stops."
-          }
-        },
-        "required": [
-          "stops"
-        ]
-      },
-      "route": "/build/transit/line",
-      "query": [
-        {
-          "key": "stops",
-          "arg": "stops"
-        },
-        {
-          "key": "type",
-          "arg": "type"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "remove_transit_line",
-      "description": "Delete one transit line from list_transit_lines; stops and stations remain.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "integer",
-            "description": "Line entity index from list_transit_lines"
-          },
-          "version": {
-            "type": "integer",
-            "description": "Line entity version from list_transit_lines"
-          }
-        },
-        "required": [
-          "index",
-          "version"
-        ]
-      },
-      "route": "/build/transit/line/delete",
-      "query": [
-        {
-          "key": "index",
-          "arg": "index"
-        },
-        {
-          "key": "version",
-          "arg": "version"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "list_buildings",
-      "description": "Find buildings existing in the city by typed service role, operational-area capability, prefab-name substring, or location. Returns roles, capabilities, world position, current entity id and footprint. Prefer role over guessing internal prefab names; use role=garbage for landfills, role=police for police facilities, and role=specialized-industry with operational_area=extractor for farms/extractors. Entity ids change after save reload. Hard max 128 results.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Case-insensitive prefab-name substring filter"
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "power",
-              "water",
-              "sewage",
-              "garbage",
-              "healthcare",
-              "fire",
-              "police",
-              "education",
-              "transport",
-              "post",
-              "telecom",
-              "specialized-industry"
-            ],
-            "description": "Typed role such as power, water, sewage, garbage, or specialized-industry"
-          },
-          "operational_area": {
-            "type": "string",
-            "enum": [
-              "any",
-              "storage",
-              "extractor"
-            ],
-            "description": "Require an owner-linked operational area of this kind"
-          },
-          "x": {
-            "type": "number",
-            "description": "Center X for spatial filter"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z for spatial filter"
-          },
-          "radius": {
-            "type": "number",
-            "minimum": 1,
-            "description": "Radius in meters for spatial filter (default 250 with x/z)"
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 64,
-            "description": "Max results. Default 16, max 64.",
-            "default": 16
-          }
-        },
-        "required": []
-      },
-      "route": "/city/buildings",
-      "query": [
-        {
-          "key": "query",
-          "arg": "query"
-        },
-        {
-          "key": "role",
-          "arg": "role"
-        },
-        {
-          "key": "operational_area",
-          "arg": "operational_area"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "limit",
-          "arg": "limit",
-          "default": "16"
-        }
-      ],
-      "response": "json"
-    },
-    {
       "name": "list_zone_types",
-      "description": "All zone TYPES (residential low/medium/high, commercial, industrial, office...) with internal name, area type and locked state. Small type list (not painted cells); use get_zone_counts for per-type cell counts. Use the exact name with zone.",
+      "description": "All zone TYPES (residential low/medium/high, commercial, industrial, office...) with internal name, area type and locked state. Small type list (not painted cells); use get_zone_counts for per-type cell counts. Use the exact name on an airimayor:zone area in edit_osm.",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -1012,310 +985,6 @@
       },
       "route": "/zones",
       "query": [],
-      "response": "json"
-    },
-    {
-      "name": "zone",
-      "description": "Paint zoning inside one rotated rectangle along straight road frontage: choose a center, width, depth and rotation that cover fresh zonable strips clear of occupied neighboring blocks. Width follows the rectangle's local X axis; depth follows local Z; rotation is clockwise in world-view degrees. Generic residential/commercial names automatically resolve to the current map theme. Buildings grow while the simulation runs.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "zone": {
-            "type": "string",
-            "description": "Zone name from list_zone_types, a generic residential/commercial name that will resolve to the map theme, or 'None' to dezone"
-          },
-          "x": {
-            "type": "number",
-            "description": "Rectangle center X (meters)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Rectangle center Z (meters)"
-          },
-          "width": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 1000,
-            "description": "Full rectangle width in meters along its local X axis"
-          },
-          "depth": {
-            "type": "number",
-            "minimum": 8,
-            "maximum": 1000,
-            "description": "Full rectangle depth in meters along its local Z axis"
-          },
-          "rotation": {
-            "type": "number",
-            "description": "Rectangle rotation in degrees (default 0)"
-          }
-        },
-        "required": [
-          "zone",
-          "x",
-          "z",
-          "width",
-          "depth"
-        ]
-      },
-      "route": "/build/zone",
-      "query": [
-        {
-          "key": "zone",
-          "arg": "zone"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "width",
-          "arg": "width"
-        },
-        {
-          "key": "depth",
-          "arg": "depth"
-        },
-        {
-          "key": "rotation",
-          "arg": "rotation"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "set_road_features",
-      "description": "Set composition features on an existing road segment from list_networks: grass, trees, wideSidewalk, soundBarrier, parking, lighting, medianGrass, medianTrees.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "integer",
-            "description": "Road segment entity index"
-          },
-          "version": {
-            "type": "integer",
-            "description": "Road segment entity version"
-          },
-          "upgrades": {
-            "type": "string",
-            "description": "Comma-separated upgrade names, e.g. 'grass,lighting'"
-          },
-          "side": {
-            "type": "string",
-            "enum": [
-              "both",
-              "left",
-              "right"
-            ],
-            "description": "Which side for side upgrades (default both)"
-          }
-        },
-        "required": [
-          "index",
-          "version",
-          "upgrades"
-        ]
-      },
-      "route": "/build/road/features",
-      "query": [
-        {
-          "key": "index",
-          "arg": "index"
-        },
-        {
-          "key": "version",
-          "arg": "version"
-        },
-        {
-          "key": "upgrades",
-          "arg": "upgrades"
-        },
-        {
-          "key": "side",
-          "arg": "side"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "list_networks",
-      "description": "Inventory of typed network edges for one required kind (road, water, sewage, low_voltage). Isolation QA lives in inspect_network_topology. Shared fields: entity, prefab, start, end, length; distanceM when x/z given. Road also returns widthM, road{roadClass, speedKmh, carLanes, highwayRules, zonable} and traffic{volumeIndex, congestionIndex, activeBottlenecks, flowPercent}. Keep flowPercent at 70 or above; roadClass is the game's road category (highway = the Highways category). Water and sewage are geometry only. Low-voltage also returns electricity{flow, capacity, bottleneck}. Sort: distance (with x/z); traffic_volume|congestion for road; load for low_voltage. Default limit 16, max 64.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "road",
-              "water",
-              "sewage",
-              "low_voltage"
-            ],
-            "description": "Required typed-network kind"
-          },
-          "query": {
-            "type": "string",
-            "description": "Prefab-name substring filter"
-          },
-          "x": {
-            "type": "number",
-            "description": "Center X for spatial filter"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z for spatial filter"
-          },
-          "radius": {
-            "type": "number",
-            "description": "Radius in meters for spatial filter (default 250)"
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 64,
-            "description": "Max results. Default 16, max 64.",
-            "default": 16
-          },
-          "sort": {
-            "type": "string",
-            "description": "Optional ranking: distance (needs x/z); traffic_volume or congestion (kind=road only); load (kind=low_voltage, highest electricity flow/capacity first)"
-          }
-        },
-        "required": [
-          "kind"
-        ]
-      },
-      "route": "/city/networks",
-      "query": [
-        {
-          "key": "kind",
-          "arg": "kind"
-        },
-        {
-          "key": "query",
-          "arg": "query"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "limit",
-          "arg": "limit",
-          "default": "16"
-        },
-        {
-          "key": "sort",
-          "arg": "sort"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "inspect_network_topology",
-      "description": "Topology QA for one required kind. kind=road: near_miss, unnoded_crossing, too_close_junctions, isolated_road (optional dead ends with include_dead_ends). kind=water|sewage|low_voltage: only isolated_* components that do not reach a road edge. Each finding carries at{x,z}, the location to inspect. Findings capped at 64. Optional x/z/radius.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "road",
-              "water",
-              "sewage",
-              "low_voltage"
-            ],
-            "description": "Required typed-network kind to inspect"
-          },
-          "x": {
-            "type": "number",
-            "description": "Center X for spatial filter"
-          },
-          "z": {
-            "type": "number",
-            "description": "Center Z for spatial filter"
-          },
-          "radius": {
-            "type": "number",
-            "description": "Radius in meters for spatial filter (default 500)"
-          },
-          "include_dead_ends": {
-            "type": "boolean",
-            "description": "If true, also list degree-1 dead ends as facts"
-          }
-        },
-        "required": [
-          "kind"
-        ]
-      },
-      "route": "/city/networks/topology",
-      "query": [
-        {
-          "key": "kind",
-          "arg": "kind"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "include_dead_ends",
-          "arg": "include_dead_ends"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "demolish",
-      "description": "Demolish (bulldoze) one building from list_buildings or one typed-network edge from list_networks (road, water pipe, sewage pipe, or low-voltage cable), identified by entity index and version. Trees, plants, districts, tracks and other nets are unsupported. Irreversible; double-check the target first.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "integer",
-            "description": "Entity index from list_buildings or list_networks"
-          },
-          "version": {
-            "type": "integer",
-            "description": "Entity version from list_buildings or list_networks"
-          }
-        },
-        "required": [
-          "index",
-          "version"
-        ]
-      },
-      "route": "/build/demolish",
-      "query": [
-        {
-          "key": "index",
-          "arg": "index"
-        },
-        {
-          "key": "version",
-          "arg": "version"
-        }
-      ],
       "response": "json"
     },
     {
@@ -1535,7 +1204,7 @@
     },
     {
       "name": "list_notifications",
-      "description": "Citywide warning-icon summary. countsByType and topIssues are always complete citywide. Optional x/z/radius and limit filter detail items only (default limit 16, max 64). Use type as a substring filter. Inspect targets with inspect.",
+      "description": "Citywide warning-icon summary. countsByType and topIssues are always complete citywide. Optional x/z/radius and limit filter detail items only (default limit 16, max 64). Use type as a substring filter. Inspect targets with inspect_entity.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -1746,7 +1415,12 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["snapshot", "click", "fill", "press"],
+            "enum": [
+              "snapshot",
+              "click",
+              "fill",
+              "press"
+            ],
             "description": "snapshot, click, fill, or press"
           },
           "ref": {
@@ -1762,7 +1436,9 @@
             "description": "One key for press, such as Escape."
           }
         },
-        "required": ["action"]
+        "required": [
+          "action"
+        ]
       },
       "route": "/panel",
       "query": [

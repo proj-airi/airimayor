@@ -5,19 +5,19 @@ namespace CS2MCP
     public sealed class RoadFactsMathTests
     {
         [Fact]
-        public void Highway_group_wins()
+        public void Highway_group_maps_to_highway()
         {
             Assert.Equal(
                 RoadFactsMath.RoadClassHighway,
-                RoadFactsMath.Classify("Highways", "Highway Ramp"));
+                RoadFactsMath.ClassifyGroup("Highways"));
         }
 
         [Fact]
-        public void Medium_group_wins()
+        public void Medium_group_maps_to_medium()
         {
             Assert.Equal(
                 RoadFactsMath.RoadClassMedium,
-                RoadFactsMath.Classify("Medium Roads", "Medium Road"));
+                RoadFactsMath.ClassifyGroup("Medium Roads"));
         }
 
         [Fact]
@@ -25,23 +25,17 @@ namespace CS2MCP
         {
             Assert.Equal(
                 RoadFactsMath.RoadClassMinor,
-                RoadFactsMath.Classify("Small Roads", "Two-Lane Road"));
+                RoadFactsMath.ClassifyGroup("Small Roads"));
         }
 
-        [Fact]
-        public void Missing_group_falls_back_to_prefab_name()
-        {
-            Assert.Equal(
-                RoadFactsMath.RoadClassHighway,
-                RoadFactsMath.Classify(null, "Two-Lane Two-Way Highway"));
-        }
-
-        [Fact]
-        public void Missing_group_and_name_stays_unknown()
+        [Theory]
+        [InlineData(null)]
+        [InlineData("Miscellaneous")]
+        public void Unclassified_group_stays_unknown(string group)
         {
             Assert.Equal(
                 RoadFactsMath.RoadClassUnknown,
-                RoadFactsMath.Classify(null, null));
+                RoadFactsMath.ClassifyGroup(group));
         }
 
         [Fact]

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Colossal.Collections;
 using Colossal.Mathematics;
 using Game.Areas;
@@ -12,6 +14,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Transform = Game.Objects.Transform;
+using SubArea = Game.Areas.SubArea;
 
 namespace CS2MCP
 {
@@ -77,53 +80,59 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse ExpandOperationalArea(BridgeRequest request)
+        private OsmPerimeter PlanOsmOperationalArea(OsmDocument before, OsmDocument after, OsmWay old, OsmWay next, float4 bounds)
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
+            CityOsmEdit.CheckEditedTags(old, next, CityOsmAreas.TargetArea);
+            var current = CityOsmAreas.Ring(before, old, bounds);
+            var desired = CityOsmAreas.Ring(after, next, bounds);
+            for (int i = 0; i < desired.Count; i++)
+                if (before.Nodes.TryGetValue(next.NodeIds[i], out OsmNode previousNode)
+                    && CityOsmEdit.SameNodePosition(previousNode, after.Nodes[next.NodeIds[i]]))
+                    desired[i] = CityOsm.Position(previousNode).xz;
+            var area = OsmOriginal(old);
+            long ownerId = before.Relations[old.Id].Members.Single(m => m.Role == "owner").Id;
+            string[] identity = CityOsm.Tag(before.Nodes[ownerId], "airimayor:facility").Split(':');
+            if (!TryResolveExistingEntity(int.Parse(identity[0]), int.Parse(identity[1]), out Entity building))
+                throw new FormatException("The facility that owns this area changed.");
+            if (!TryResolveExpandableOperationalArea(building, area, out Entity owner, out Entity prefabEntity,
+                out DynamicBuffer<Node> currentNodes, out ExtractorAreaData? extractorData, out string error)) throw new FormatException(error);
+            string requestedArea = CityOsm.Tag(next, CityOsmAreas.TargetArea);
+            Node[] expandedNodeArray;
+            if (requestedArea == null)
             {
-                return error;
+                CityOsmAreas.CheckExpansion(current, desired);
+                TerrainHeightData heightData = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
+                expandedNodeArray = new Node[desired.Count];
+                expandedNodeArray[0] = currentNodes[0];
+                expandedNodeArray[1] = currentNodes[1];
+                for (int i = 2; i < desired.Count; i++)
+                    expandedNodeArray[i] = CreateOperationalAreaNode(FindNearestOperationalAreaNode(currentNodes, desired[i]), desired[i], ref heightData);
+                if (!IsOperationalAreaCandidateClear(building, expandedNodeArray, out string obstacle))
+                    throw new FormatException(obstacle);
+                if (extractorData.HasValue && !TryScoreOperationalAreaResource(expandedNodeArray, extractorData.Value, out _, out string resource))
+                    throw new FormatException(resource);
             }
-            if (!request.TryGetInt("index", out int index)
-                || !request.TryGetInt("version", out int version))
+            else
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "provide ?index=&version= of a landfill building from /city/buildings");
+                if (!current.SequenceEqual(desired) || !float.TryParse(requestedArea, NumberStyles.Float, CultureInfo.InvariantCulture, out float target)
+                    || !math.isfinite(target) || target < 64f || target > 250000f)
+                    throw new FormatException("Give either a new perimeter or a target area between 64 and 250000 square meters.");
+                expandedNodeArray = PlanOsmOperationalExpansion(building, currentNodes, extractorData, target, bounds);
             }
-            if (!request.TryGetFloat("target_area_m2", out float targetArea)
-                || targetArea < 64f
-                || targetArea > 250000f)
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "target_area_m2 must be between 64 and 250000 square metres");
-            }
+            return new OsmPerimeter { Building = building, Area = area, Owner = owner, Prefab = prefabEntity, Nodes = expandedNodeArray };
+        }
 
-            if (!TryResolveExistingEntity(index, version, out Entity building)
-                || !EntityManager.HasComponent<Game.Buildings.Building>(building))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.NotFound,
-                    $"entity {index}:{version} is not an existing building");
-            }
-            if (!TryResolveExpandableOperationalArea(
-                    building,
-                    out Entity area,
-                    out Entity owner,
-                    out Entity prefabEntity,
-                    out DynamicBuffer<Node> currentNodes,
-                    out bool isStorage,
-                    out ExtractorAreaData? extractorData,
-                    out BridgeResponse areaError))
-            {
-                return areaError;
-            }
-
+        private Node[] PlanOsmOperationalExpansion(Entity building, DynamicBuffer<Node> currentNodes,
+            ExtractorAreaData? extractorData, float targetArea, float4 bounds)
+        {
+            Node[] expandedNodeArray = null;
             float2 lockedStart = currentNodes[0].m_Position.xz;
             float2 lockedEnd = currentNodes[1].m_Position.xz;
             float2 lockedEdge = lockedEnd - lockedStart;
             float lockedLength = math.length(lockedEdge);
             if (lockedLength < 8f)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "the building-side locked edge is too short to expand safely");
+                throw new FormatException("The building-side edge is too short to expand safely.");
             }
 
             float2 tangent = lockedEdge / lockedLength;
@@ -138,8 +147,7 @@ namespace CS2MCP
             float signedDepth = math.dot(areaCenter - lockedMid, normal);
             if (math.abs(signedDepth) < 8f)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "the operational area does not have a usable free side away from the building");
+                throw new FormatException("The operational area has no usable free side away from the building.");
             }
             if (signedDepth < 0f)
             {
@@ -149,20 +157,15 @@ namespace CS2MCP
             float previousPolygonArea = CalculatePolygonArea(currentNodes);
             if (targetArea <= previousPolygonArea + 1f)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    $"target_area_m2 must exceed the current {previousPolygonArea:F1} m2 area; shrinking is not supported");
+                throw new FormatException($"The target area must exceed the current {previousPolygonArea:F1} square meters.");
             }
 
-            TerrainSystem terrain = World.GetOrCreateSystemManaged<TerrainSystem>();
-            TerrainHeightData heightData = terrain.GetHeightData();
             List<OperationalAreaObstacle> obstacles = CollectOperationalAreaObstacles(building);
-            Node[] expandedNodeArray = null;
+            TerrainHeightData heightData = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
             OperationalResourceScore selectedResourceScore = default;
-            int candidatesTested = 0;
             string lastRejection = null;
             foreach (float tangentShift in OperationalAreaPlanningMath.CenterShifts(lockedLength))
             {
-                candidatesTested++;
                 if (!TryPlanOperationalAreaExpansion(
                         currentNodes,
                         lockedStart,
@@ -174,10 +177,14 @@ namespace CS2MCP
                         obstacles,
                         ref heightData,
                         out Node[] candidateNodes,
-                        out _,
                         out string planError))
                 {
                     lastRejection = planError;
+                    continue;
+                }
+                if (Array.Exists(candidateNodes, node => math.any(node.m_Position.xz < bounds.xy) || math.any(node.m_Position.xz > bounds.zw)))
+                {
+                    lastRejection = "the expansion extends outside the selected rectangle";
                     continue;
                 }
                 if (!IsOperationalAreaCandidateClear(
@@ -214,120 +221,42 @@ namespace CS2MCP
             }
             if (expandedNodeArray == null)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    $"no clear expansion could reach {targetArea:F1} m2 after {candidatesTested} candidates: {lastRejection ?? "no valid geometry"}");
+                throw new FormatException($"The facility cannot expand to {targetArea:F1} m2. {lastRejection}");
             }
 
-            Geometry geometry = EntityManager.GetComponentData<Geometry>(area);
-            int previousCapacity = isStorage
-                ? AreaUtils.CalculateStorageCapacity(
-                    geometry,
-                    EntityManager.GetComponentData<StorageAreaData>(prefabEntity))
-                : -1;
-            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-            PrefabBase prefab = prefabSystem.GetPrefab<PrefabBase>(prefabEntity);
-            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            if (!tool.TryQueueOperationalAreaExpansion(
-                    area,
-                    owner,
-                    prefabEntity,
-                    prefab,
-                    expandedNodeArray,
-                    geometry.m_SurfaceArea,
-                    previousCapacity,
-                    targetArea,
-                    isStorage ? "storage" : "extractor",
-                    extractorData.HasValue ? extractorData.Value.m_MapFeature.ToString() : null,
-                    selectedResourceScore.RemainingAmount,
-                    selectedResourceScore.Coverage,
-                    selectedResourceScore.SampleCount,
-                    selectedResourceScore.MaxConcentration,
-                    request))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "another build operation is in progress, retry shortly");
-            }
-            return null;
+            return expandedNodeArray;
         }
 
         private bool TryResolveExpandableOperationalArea(
-            Entity building,
-            out Entity area,
-            out Entity owner,
-            out Entity prefabEntity,
-            out DynamicBuffer<Node> nodes,
-            out bool isStorage,
-            out ExtractorAreaData? extractorData,
-            out BridgeResponse error)
+            Entity building, Entity area, out Entity owner, out Entity prefabEntity,
+            out DynamicBuffer<Node> nodes, out ExtractorAreaData? extractorData, out string error)
         {
-            area = Entity.Null;
             owner = Entity.Null;
             prefabEntity = Entity.Null;
             nodes = default;
-            isStorage = false;
             extractorData = null;
             error = null;
-            if (!EntityManager.HasBuffer<Game.Areas.SubArea>(building))
+            if (!EntityManager.HasBuffer<SubArea>(building) || !IsAreaOwnedBy(area, building)
+                || !EntityManager.HasComponent<Lot>(area) || !EntityManager.HasComponent<Geometry>(area)
+                || !EntityManager.HasBuffer<Node>(area) || !EntityManager.HasComponent<PrefabRef>(area))
             {
-                error = BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "building has no owned operational areas");
+                error = "The operational area is no longer owned by that facility.";
                 return false;
             }
-
-            DynamicBuffer<Game.Areas.SubArea> subAreas =
-                EntityManager.GetBuffer<Game.Areas.SubArea>(building, isReadOnly: true);
-            foreach (Game.Areas.SubArea subArea in subAreas)
+            bool attached = false;
+            foreach (SubArea part in EntityManager.GetBuffer<SubArea>(building, true))
+                if (part.m_Area == area) attached = true;
+            owner = EntityManager.GetComponentData<Owner>(area).m_Owner;
+            prefabEntity = EntityManager.GetComponentData<PrefabRef>(area).m_Prefab;
+            nodes = EntityManager.GetBuffer<Node>(area, true);
+            bool isStorage = EntityManager.HasComponent<Storage>(area) && EntityManager.HasComponent<StorageAreaData>(prefabEntity)
+                && (EntityManager.GetComponentData<StorageAreaData>(prefabEntity).m_Resources & Game.Economy.Resource.Garbage) != 0;
+            if (EntityManager.HasComponent<Extractor>(area) && EntityManager.HasComponent<ExtractorAreaData>(prefabEntity))
+                extractorData = EntityManager.GetComponentData<ExtractorAreaData>(prefabEntity);
+            if (!attached || (!isStorage && !extractorData.HasValue) || nodes.Length < OperationalAreaPlanningMath.MinNodeCount
+                || nodes.Length > OperationalAreaPlanningMath.MaxNodeCount)
             {
-                Entity candidate = subArea.m_Area;
-                if (candidate == Entity.Null
-                    || !EntityManager.Exists(candidate)
-                    || EntityManager.HasComponent<Deleted>(candidate)
-                    || !EntityManager.HasComponent<Lot>(candidate)
-                    || !EntityManager.HasComponent<Geometry>(candidate)
-                    || !EntityManager.HasComponent<PrefabRef>(candidate)
-                    || !EntityManager.HasComponent<Owner>(candidate)
-                    || !EntityManager.HasBuffer<Node>(candidate)
-                    || !IsAreaOwnedBy(candidate, building))
-                {
-                    continue;
-                }
-
-                Entity candidatePrefab =
-                    EntityManager.GetComponentData<PrefabRef>(candidate).m_Prefab;
-                DynamicBuffer<Node> candidateNodes =
-                    EntityManager.GetBuffer<Node>(candidate, isReadOnly: true);
-                bool candidateStorage = EntityManager.HasComponent<Storage>(candidate)
-                    && EntityManager.HasComponent<StorageAreaData>(candidatePrefab)
-                    && (EntityManager.GetComponentData<StorageAreaData>(candidatePrefab).m_Resources
-                        & Game.Economy.Resource.Garbage) != 0;
-                bool candidateExtractor = EntityManager.HasComponent<Extractor>(candidate)
-                    && EntityManager.HasComponent<ExtractorAreaData>(candidatePrefab);
-                if (candidateNodes.Length < 4
-                    || candidateNodes.Length > 16
-                    || (!candidateStorage && !candidateExtractor))
-                {
-                    continue;
-                }
-                if (area != Entity.Null)
-                {
-                    error = BridgeResponse.Error(BridgeErrorKind.Conflict,
-                        "building has multiple expandable storage areas; v0 requires exactly one");
-                    return false;
-                }
-                area = candidate;
-                owner = EntityManager.GetComponentData<Owner>(candidate).m_Owner;
-                prefabEntity = candidatePrefab;
-                nodes = candidateNodes;
-                isStorage = candidateStorage;
-                extractorData = candidateExtractor
-                    ? EntityManager.GetComponentData<ExtractorAreaData>(candidatePrefab)
-                    : (ExtractorAreaData?)null;
-            }
-
-            if (area == Entity.Null)
-            {
-                error = BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "no supported owner-linked landfill storage or extractor area is available");
+                error = "This perimeter is not an expandable landfill storage or extractor area.";
                 return false;
             }
             return true;
@@ -368,11 +297,9 @@ namespace CS2MCP
             IReadOnlyList<OperationalAreaObstacle> obstacles,
             ref TerrainHeightData heightData,
             out Node[] result,
-            out float resultArea,
             out string error)
         {
             result = null;
-            resultArea = 0f;
             error = null;
             var existing = new List<float2>(nodes.Length);
             for (int i = 0; i < nodes.Length; i++)
@@ -402,7 +329,6 @@ namespace CS2MCP
                 Node template = FindNearestOperationalAreaNode(nodes, oriented[i]);
                 result[i] = CreateOperationalAreaNode(template, oriented[i], ref heightData);
             }
-            resultArea = CalculatePolygonArea(result);
             if (!HasMinimumOperationalAreaSpacing(
                     result,
                     OperationalAreaPlanningMath.MinNodeDistance))
@@ -411,7 +337,7 @@ namespace CS2MCP
                 result = null;
                 return false;
             }
-            if (resultArea < targetArea - 1f)
+            if (CalculatePolygonArea(result) < targetArea - 1f)
             {
                 error = "planned expansion fell below the requested area after terrain projection";
                 result = null;

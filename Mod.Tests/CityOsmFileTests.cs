@@ -43,6 +43,11 @@ namespace CS2MCP
             var crossing = new Bezier4x2(new float2(-30, 0), new float2(-10, 0), new float2(10, 0), new float2(30, 0));
             var arch = new Bezier4x2(new float2(-30, 0), new float2(-30, 40), new float2(30, 40), new float2(30, 0));
             var atOrigin = new Bounds2(new float2(-1), new float2(1));
+            var endJunction = new float2(35, 0);
+            Bounds2 readBounds = CityOsmSpatial.NetworkReadBounds(crossing, crossing.a, endJunction);
+            Assert.True(CityOsmFile.ValidBounds(new float4(readBounds.min, readBounds.max)));
+            Assert.True(MathUtils.Intersect(readBounds, crossing.a));
+            Assert.True(MathUtils.Intersect(readBounds, endJunction));
             Assert.True(CityOsmSpatial.Intersects(atOrigin, crossing));
             Assert.False(CityOsmSpatial.Intersects(atOrigin, arch));
             Assert.True(CityOsmSpatial.Intersects(new Bounds2(new float2(-1, 29), new float2(1, 31)), arch));

@@ -149,14 +149,23 @@ test('road histories compare entity and version, never average a changing or tru
     traffic: { flowPercent },
   })
   trace.tool('list_networks', 10, { kind: 'road', truncated: true, networks: [road(1, 1, 20), road(2, 1, 40)] })
-  trace.tool('list_networks', 20, { kind: 'road', networks: [road(1, 1, 60), road(1, 2, 80)] })
+  trace.tool('query_osm', 30, {
+    kind: 'road', view: 'features', observedAt: trace.stamp(20), items: [road(1, 1, 60), road(1, 2, 80)],
+  })
+  trace.tool('query_osm', undefined, {
+    kind: 'low_voltage', view: 'features', observedAt: trace.stamp(35),
+    items: [{ wayId: 8, entity: { index: 7, version: 2 }, electricity: { flow: 40, capacity: 50, bottleneck: false } }],
+  })
   const { session, end } = await trace.open()
   const view = session.city(end, { metric: 'road.1:1.flowPercent' })
   assert.deepEqual(
     view.points.map((point) => point.value),
     [20, 60],
   )
-  assert.equal(view.metrics.length, 3)
+  assert.equal(view.metrics.find((metric) => metric.key === 'electricity.7:2.flow')?.latest?.value, 40)
+  assert.equal(view.metrics.find((metric) => metric.key === 'electricity.7:2.capacity')?.latest?.frame, 35)
+  assert.equal(view.metrics.length, 5)
+  assert.equal(view.points.at(-1)?.frame, 20)
   assert.equal(view.metrics.find((metric) => metric.key === 'road.2:1.flowPercent')?.latest?.frame, 10)
   assert.match(view.selected!.scope!, /never treated as a citywide/)
 })

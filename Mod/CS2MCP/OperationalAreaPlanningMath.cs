@@ -662,16 +662,24 @@ namespace CS2MCP
             return -1;
         }
 
-        private static bool ContainsPolygon(
-            IReadOnlyList<float2> outer,
-            IReadOnlyList<float2> inner)
+        internal static bool ContainsPolygon(IReadOnlyList<float2> outer, IReadOnlyList<float2> inner)
         {
             for (int i = 0; i < inner.Count; i++)
             {
-                if (DistanceToPolygon(inner[i], outer) > 0.5f)
+                float2 a = inner[i], b = inner[(i + 1) % inner.Count];
+                var cuts = new List<float> { 0f, 1f };
+                for (int j = 0; j < outer.Count; j++)
                 {
-                    return false;
+                    float2 c = outer[j], d = outer[(j + 1) % outer.Count];
+                    float det = Cross(b - a, d - c);
+                    if (math.abs(det) <= 0.000001f) continue;
+                    float u = Cross(c - a, b - a) / det;
+                    if (u >= 0f && u <= 1f) cuts.Add(math.saturate(Cross(c - a, d - c) / det));
                 }
+                cuts.Sort();
+                for (int k = 1; k < cuts.Count; k++)
+                    if (DistanceToPolygon(math.lerp(a, b, (cuts[k - 1] + cuts[k]) * 0.5f), outer) > 0.001f)
+                        return false;
             }
             return true;
         }

@@ -28,8 +28,7 @@ namespace CS2MCP
         /// </summary>
         private RoadPrefabFacts ReadRoadPrefabFacts(
             Entity prefabEntity,
-            PrefabSystem prefabSystem,
-            string prefabName)
+            PrefabSystem prefabSystem)
         {
             var facts = new RoadPrefabFacts
             {
@@ -47,17 +46,24 @@ namespace CS2MCP
                 facts.Zonable = (road.m_Flags & RoadFlags.EnableZoning) != 0;
             }
             facts.CarLanes = CountRoadCarLanes(prefabEntity, prefabSystem);
-            facts.RoadClass = RoadFactsMath.Classify(
-                ReadUiGroupName(prefabEntity, prefabSystem),
-                prefabName);
+            facts.RoadClass = RoadFactsMath.ClassifyGroup(ReadUiGroupName(prefabEntity, prefabSystem));
             return facts;
         }
 
+        private bool IsCarTravelLane(Entity lane, LaneFlags flags) =>
+            (flags & (LaneFlags.Master | LaneFlags.Parking | LaneFlags.Virtual | LaneFlags.BicyclesOnly)) == 0
+            && EntityManager.HasComponent<CarLaneData>(lane)
+            && (EntityManager.GetComponentData<CarLaneData>(lane).m_RoadTypes & Game.Net.RoadTypes.Car) != 0;
+
         private int? CountRoadCarLanes(Entity prefabEntity, PrefabSystem prefabSystem)
         {
-            // Lanes live in the authoring sections, not in SubNet buffers.
-            // Conditional pieces (elevated/tunnel variants of the same lanes)
-            // are skipped so each lane counts once.
+            if (EntityManager.HasBuffer<DefaultNetLane>(prefabEntity))
+            {
+                int count = 0;
+                foreach (DefaultNetLane lane in EntityManager.GetBuffer<DefaultNetLane>(prefabEntity, true))
+                    if (IsCarTravelLane(lane.m_Lane, lane.m_Flags)) count++;
+                return count;
+            }
             NetGeometryPrefab geometry = prefabSystem.GetPrefab<NetGeometryPrefab>(prefabEntity);
             if (geometry == null || geometry.m_Sections == null)
             {
@@ -84,7 +90,9 @@ namespace CS2MCP
                     }
                     foreach (NetLaneInfo lane in pieceLanes.m_Lanes)
                     {
-                        if (lane.m_Lane != null && lane.m_Lane.TryGet<CarLane>(out _))
+                        if (lane.m_Lane != null && prefabSystem.TryGetEntity(lane.m_Lane, out Entity lanePrefab)
+                            && EntityManager.HasComponent<NetLaneData>(lanePrefab)
+                            && IsCarTravelLane(lanePrefab, EntityManager.GetComponentData<NetLaneData>(lanePrefab).m_Flags))
                         {
                             lanes++;
                         }

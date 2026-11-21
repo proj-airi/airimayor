@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Colossal.Mathematics;
 using Unity.Mathematics;
 using Xunit;
 
@@ -26,10 +27,8 @@ namespace CS2MCP
                 Pipe(2, 20, 21, Xz(100f, 100f), Xz(110f, 100f)),
             };
 
-            bool[] isolated = TypedNetworkMath.IsolatedFlags(edges);
-
-            Assert.False(isolated[0]);
-            Assert.True(isolated[1]);
+            var finding = Assert.Single(TypedNetworkMath.FindUtilityIsolatedFindings(edges, TypedNetworkKinds.Water));
+            Assert.Equal(1, finding.EdgeA);
         }
 
         [Fact]
@@ -41,19 +40,16 @@ namespace CS2MCP
                 Pipe(2, 11, 21, Xz(20f, 0f), Xz(20f, 15f)),
             };
 
-            bool[] isolated = TypedNetworkMath.IsolatedFlags(edges);
-
-            Assert.False(isolated[0]);
-            Assert.False(isolated[1]);
+            Assert.Empty(TypedNetworkMath.FindUtilityIsolatedFindings(edges, TypedNetworkKinds.Water));
         }
 
         [Fact]
-        public void Smaller_road_component_without_outside_connection_is_isolated()
+        public void A_larger_road_component_without_an_outside_connection_remains_isolated()
         {
             TypedNetworkEdge[] edges =
             {
                 Road(1, 10, 11, Xz(0f, 0f), Xz(20f, 0f)),
-                Road(2, 11, 12, Xz(20f, 0f), Xz(40f, 0f)),
+                Road(2, 11, 12, Xz(20f, 0f), Xz(40f, 0f), outsideEnd: true),
                 Road(3, 20, 21, Xz(0f, 100f), Xz(20f, 100f)),
                 Road(4, 21, 22, Xz(20f, 100f), Xz(40f, 100f)),
                 Road(5, 22, 23, Xz(40f, 100f), Xz(60f, 100f)),
@@ -62,8 +58,8 @@ namespace CS2MCP
             List<NetworkTopologyFinding> findings = TypedNetworkMath.FindRoadIssues(edges);
 
             NetworkTopologyFinding isolated = Assert.Single(findings, f => f.Class == NetworkTopologyClass.IsolatedRoad);
-            Assert.Equal(2, isolated.ComponentSize);
-            Assert.Equal(0, isolated.EdgeA);
+            Assert.Equal(3, isolated.ComponentSize);
+            Assert.Equal(2, isolated.EdgeA);
         }
 
         [Fact]
@@ -154,23 +150,41 @@ namespace CS2MCP
 
             Assert.Equal(0, finding.EdgeA);
             Assert.Equal(3, finding.EdgeB);
-            Assert.True(finding.HasAnchor);
             Assert.Equal(41f, finding.Anchor.x, 3);
             Assert.Equal(0f, finding.Anchor.y, 3);
         }
 
         [Fact]
-        public void Too_close_junctions_follow_the_midpoint_into_a_radius()
+        public void District_filters_use_the_junction_midpoint_and_the_actual_crossing_location()
         {
-            TypedNetworkEdge[] edges = TwoJunctions(Xz(1000f, 1000f), Xz(1018f, 1000f));
-            NetworkTopologyFinding finding = Assert.Single(
-                TypedNetworkMath.FindRoadIssues(edges),
-                f => f.Class == NetworkTopologyClass.TooCloseJunctions);
+            TypedNetworkEdge[] junctions = TwoJunctions(Xz(1000f, 1000f), Xz(1018f, 1000f));
+            var bounds = new Bounds2(new float2(1008f, 999f), new float2(1010f, 1001f));
+            Assert.Contains(TypedNetworkMath.FindRoadIssues(junctions, bounds), f => f.Class == NetworkTopologyClass.TooCloseJunctions);
+            Assert.Empty(TypedNetworkMath.FindRoadIssues(junctions, new Bounds2(new float2(-10f), new float2(10f))));
 
-            Assert.False(TypedNetworkMath.InsideQuery(
-                finding, edges, new float2(0f, 0f), 220f));
-            Assert.True(TypedNetworkMath.InsideQuery(
-                finding, edges, new float2(1009f, 1000f), 220f));
+            var roads = new[] {
+                new TypedNetworkEdge(10, 20, 21, new[] { Xz(-100f, 15f), Xz(0f, 15f), Xz(100f, 15f) }, TypedNetworkKinds.Road, true, false),
+                Road(11, 22, 23, Xz(0f, 0f), Xz(0f, 80f), outsideEnd: true),
+            };
+            var crossing = Assert.Single(TypedNetworkMath.FindRoadIssues(roads, new Bounds2(new float2(-1f, 14f), new float2(1f, 16f))));
+            Assert.Equal(NetworkTopologyClass.UnnodedCrossing, crossing.Class);
+            Assert.Equal(new float2(0f, 15f), crossing.Anchor);
+        }
+
+        [Fact]
+        public void Bounded_utility_findings_keep_citywide_connections_and_pick_a_local_component_member()
+        {
+            var district = new Bounds2(new float2(-5f), new float2(5f));
+            var pipes = new[] {
+                Road(1, 10, 11, Xz(-120f, 0f), Xz(-100f, 0f), outsideStart: true),
+                Pipe(2, 11, 12, Xz(-100f, 0f), Xz(10f, 0f)),
+                Pipe(3, 20, 21, Xz(-100f, 3f), Xz(-30f, 3f)),
+                Pipe(4, 21, 22, Xz(-30f, 3f), Xz(30f, 3f)),
+            };
+            var isolated = Assert.Single(TypedNetworkMath.FindUtilityIsolatedFindings(pipes, TypedNetworkKinds.Water, district));
+            Assert.Equal(2, isolated.ComponentSize);
+            Assert.Equal(3, isolated.EdgeA);
+            Assert.True(MathUtils.Intersect(district, isolated.Anchor));
         }
 
         [Fact]
@@ -190,7 +204,6 @@ namespace CS2MCP
             Assert.Contains(
                 findings,
                 f => f.Class == NetworkTopologyClass.NearMiss
-                    && f.HasAnchor
                     && math.distancesq(f.Anchor, new float2(20f, 24f)) < 0.01f);
         }
 
@@ -200,8 +213,8 @@ namespace CS2MCP
             TypedNetworkEdge[] edges =
             {
                 Road(1, 10, 11, Xz(0f, 0f), Xz(40f, 0f), outsideStart: true),
-                Road(2, 11, 12, Xz(40f, 0f), Xz(44f, 0f), length: 4f),
-                Road(3, 10, 13, Xz(0f, 0f), Xz(0f, 30f), length: 30f),
+                Road(2, 11, 12, Xz(40f, 0f), Xz(44f, 0f)),
+                Road(3, 10, 13, Xz(0f, 0f), Xz(0f, 30f)),
             };
 
             Assert.Empty(TypedNetworkMath.FindRoadIssues(edges));
@@ -268,7 +281,6 @@ namespace CS2MCP
                 TypedNetworkMath.TryParseNetworkSort(
                     null,
                     TypedNetworkKinds.Road,
-                    false,
                     out string empty,
                     out _));
             Assert.Null(empty);
@@ -276,7 +288,6 @@ namespace CS2MCP
                 TypedNetworkMath.TryParseNetworkSort(
                     "traffic_volume",
                     TypedNetworkKinds.Road,
-                    false,
                     out string volume,
                     out _));
             Assert.Equal("traffic_volume", volume);
@@ -284,7 +295,6 @@ namespace CS2MCP
                 TypedNetworkMath.TryParseNetworkSort(
                     "traffic_volume",
                     TypedNetworkKinds.Water,
-                    false,
                     out _,
                     out string waterTraffic));
             Assert.Contains("kind=road", waterTraffic);
@@ -292,7 +302,6 @@ namespace CS2MCP
                 TypedNetworkMath.TryParseNetworkSort(
                     "load",
                     TypedNetworkKinds.Road,
-                    false,
                     out _,
                     out string roadLoad));
             Assert.Contains("low_voltage", roadLoad);
@@ -300,23 +309,14 @@ namespace CS2MCP
                 TypedNetworkMath.TryParseNetworkSort(
                     "load",
                     TypedNetworkKinds.LowVoltage,
-                    false,
                     out string load,
                     out _));
             Assert.Equal("load", load);
-            Assert.False(
-                TypedNetworkMath.TryParseNetworkSort(
-                    "distance",
-                    TypedNetworkKinds.Sewage,
-                    false,
-                    out _,
-                    out string distanceError));
-            Assert.Contains("x and z", distanceError);
+            Assert.True(TypedNetworkMath.TryParseNetworkSort("distance", TypedNetworkKinds.Sewage, out _, out _));
             Assert.False(
                 TypedNetworkMath.TryParseNetworkSort(
                     "lanes",
                     TypedNetworkKinds.Road,
-                    true,
                     out _,
                     out string unknown));
             Assert.Contains("congestion", unknown);
@@ -380,16 +380,13 @@ namespace CS2MCP
             float3 a,
             float3 b,
             bool outsideStart = false,
-            bool outsideEnd = false,
-            float length = -1f)
+            bool outsideEnd = false)
         {
             return new TypedNetworkEdge(
                 id,
-                1,
                 start,
                 end,
                 new[] { a, b },
-                length >= 0f ? length : math.distance(a.xz, b.xz),
                 TypedNetworkKinds.Road,
                 outsideStart,
                 outsideEnd);
@@ -399,11 +396,9 @@ namespace CS2MCP
         {
             return new TypedNetworkEdge(
                 id,
-                1,
                 start,
                 end,
                 new[] { a, b },
-                math.distance(a.xz, b.xz),
                 TypedNetworkKinds.Water,
                 false,
                 false);
@@ -413,11 +408,9 @@ namespace CS2MCP
         {
             return new TypedNetworkEdge(
                 id,
-                1,
                 start,
                 end,
                 new[] { a, b },
-                math.distance(a.xz, b.xz),
                 TypedNetworkKinds.LowVoltage,
                 false,
                 false);

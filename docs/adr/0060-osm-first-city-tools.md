@@ -1,12 +1,16 @@
 # Use the local OSM map as the editing interface for city places
 
-An agent can design a whole block when it can read, change and compare the same objects. Extend the coordinate-addressed [local OSM map](./0059-coordinate-addressed-osm-editing.md) with the editable state of those objects. Keep the game authoritative for the result. The ten legacy tools listed below are in scope for retirement or migration.
+An agent can design a whole block when it can read, change and compare the same objects. Extend the coordinate-addressed [local OSM map](./0059-coordinate-addressed-osm-editing.md) with the editable state of those objects. Keep the game authoritative for the result. Nine legacy tools move their spatial capabilities into the local OSM workflow. The construction asset catalog remains an independent read.
 
 ## What the agent reads
 
 The complete district file carries geometry, shared nodes, editable properties and relationships. An existing road way identifies one native segment. Its local OSM ID supports references between elements. Its read-only `airimayor:entity` carries the native index and generation for this city load. Splitting a road can produce several segments. The edit result should associate the submitted reference with all realized references in the city's readback so the agent can continue editing the right pieces.
 
-A coordinate query can also return matching places and bounds, dated observations, topology findings, and build options on request. Only a complete district read supplies a revision for full-file replacement. Filtered or zoomed-out results cannot imply deletion by omission. Traffic and electricity measurements carry the observation time and the measured feature identity. Changes to those readings do not invalidate a street edit. Build options come from the loaded city's prefab catalog, including assets without a placed instance and their lock state. An empty rectangle can still offer building choices.
+A coordinate query can also return matching places and bounds, dated observations and topology findings. Only a complete district read supplies a revision for full-file replacement. Filtered or zoomed-out results cannot imply deletion by omission. Traffic and electricity measurements carry the observation time and the measured feature identity. Changes to those readings do not invalidate a street edit.
+
+The construction catalog reads the game's asset menu before the player selects a site. It supports category, role, name and availability filters. Its default view omits locked designs and unique assets already placed. The full catalog retains those entries and reports their status. An exact asset name from the catalog can be used in the `airimayor:prefab` tag on a map feature.
+
+The catalog and road editor use the same road class and default car-lane count. An unrecognized native road menu group yields an unknown class. The game's default lane composition identifies lanes that carry cars. Where it is absent, the count comes from unconditional lane sections in the road design. A placed road's OSM geometry uses the lanes of its actual composition.
 
 ## What the agent edits
 
@@ -19,7 +23,6 @@ A coordinate query can also return matching places and bounds, dated observation
 | `expand_operational_area` | Link the facility to its area polygon. An edit can supply an expanded boundary or a requested total area for the existing planner. Keep the building-side edge fixed. Account for ownership, obstacles and productive resources, then return the realized boundary. |
 | `list_buildings`, `list_networks` | Search placed features by geography, kind, service role and capability. Rank traffic or electrical load on request and return OSM references and bounds for the next edit. |
 | `inspect_network_topology` | Return findings at the implicated ways and nodes. Compute reachability against the city graph before filtering by the requested bounds. A road that reaches an outside connection through another district is connected. |
-| `list_prefabs` | Offer searchable build options by role, name and native properties. Allow an exact prefab choice and report availability even where the asset has never been built. |
 
 Use established OSM semantics when they describe the feature precisely. Use `airimayor:*` for game-specific facts such as the legally assigned game zone and an operational area's owner. A route uses the [ordered members of an OSM route relation](https://wiki.openstreetmap.org/wiki/Relation:route). [Road sides](https://wiki.openstreetmap.org/wiki/Forward_%26_backward,_left_%26_right) follow the way's direction.
 

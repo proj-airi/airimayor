@@ -42,6 +42,8 @@ flowchart TD
 
 ## Local OSM maps
 
+Use `list_prefabs` to choose a construction asset before choosing a site. For example, `{"role":"education"}` lists available education assets with their exact names and lot sizes. Use `availability=all` to include locked assets and unique assets already placed. Pass the returned `nextOffset` as `offset` for the next page. To find an existing school, use `query_osm` with `kind=building` and `role=education`. The search accepts a district or the whole city. A search result identifies where to read the complete district.
+
 Ask the mayor to read the streets around a school and edit their layout. The mayor calls `read_osm` with the west, south, east and north edges of a rectangle in city meters (`xMin`, `zMin`, `xMax`, `zMax`). The result contains a `revision` and the complete XML `content`. A crossing road or building lot appears in full even when its endpoints or corners lie outside the rectangle. Narrow the coordinates to inspect a smaller area. The file's `<bounds>` locates even an empty district. Longitude measures east from the fictional origin at 111319.490793 meters per degree and latitude measures north at 110574.275822 meters per degree.
 
 Call `edit_osm` with the same rectangle and revision. Send the edited file or a standard `<osmChange>` patch as `content`. For example, this patch draws a residential road about 111 meters long in a district containing the origin:
@@ -63,7 +65,9 @@ Reuse a node reference where roads should meet. Use separate nodes for an overpa
 
 The city resolves road categories to unlocked assets and reports their native class on readback. For example, a `motorway_link` can return as a one-way `motorway`. Building lots must fit an available asset. Standalone utilities accept `power=cable` or `man_made=pipeline` with `substance=water`, `sewage` or `water;sewage`. A roadside platform node uses `public_transport=platform` with `bus=yes`, `tram=yes` or `taxi=yes`. Place it within eight meters of an existing mapped curb. The edit snaps the point to the nearest eligible curb. The game checks the stop asset and its road attachment.
 
-A successful edit returns the current file and revision, including the city's assigned IDs. Deleting a feature requires the player's demolition permission. On a revision conflict, reread the district and reapply the intended change to the new file. Each successful read or edit keeps a `district.osm` attachment in the city recording.
+An existing road way carries its native segment identity in `airimayor:entity`. Set `airimayor:upgrade:trees:right=yes` for trees on the right in way order. Paint frontage using a closed way with `airimayor:zone` set to an unlocked zone name. The returned map shows the assigned cells. A facility perimeter can grow to an explicit boundary or to the total surface in `airimayor:target_area_m2`. Define a passenger line with a `type=route` relation, its passenger mode such as `route=bus`, and platform node members in travel order. A cross-boundary line supplies the bounds needed to edit it.
+
+A successful edit returns the current file and revision, including the city's assigned IDs. For roads, junctions, buildings, stops and passenger lines the `realized` field maps submitted references to the resulting features. Physical demolition requires demolition permission. Withdrawing a passenger service or clearing zoning uses construction permission. On a revision conflict, reread the district and reapply the intended change to the new file. Each successful read or edit keeps a `district.osm` attachment in the city recording.
 
 Run `dotnet test Mod.Tests --filter FullyQualifiedName~Osm` for the offline conversion, edit and spatial tests, including the [district and interchange fixtures](docs/research/examples/2026-11-21-osm/trials.json). The [district editing decision](docs/adr/0059-coordinate-addressed-osm-editing.md) describes native construction and live acceptance.
 

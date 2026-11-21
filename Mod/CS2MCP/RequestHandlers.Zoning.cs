@@ -18,7 +18,7 @@ namespace CS2MCP
     /// </summary>
     public sealed partial class RequestHandlers
     {
-        private const float kCellSize = 8f;
+        private const float kCellSize = ZoneUtils.CELL_SIZE;
 
         private EntityQuery m_ZonePrefabQuery;
         private bool m_ZonePrefabQueryCreated;
@@ -96,82 +96,41 @@ namespace CS2MCP
 
             return BridgeResponse.Json(new
             {
-                note = "use 'name' with zone; zone 'None' clears zoning (dezone). Generic names automatically resolve to the current map theme when a themed variant exists",
+                note = "Choose a zone by name. None clears zoning. Generic names use the city's theme when a themed variant exists.",
                 stalenessWarning = LockStalenessWarning,
                 zones,
             });
         }
 
-        private BridgeResponse Zone(BridgeRequest request)
-        {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
-            if (!request.TryGetFloat("x", out float x) || !request.TryGetFloat("z", out float z))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?x=&z= center coordinates");
-            }
-            if (!request.TryGetFloat("width", out float rawWidth)
-                || !request.TryGetFloat("depth", out float rawDepth))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?width=&depth= rectangle dimensions in meters");
-            }
-            float width = math.clamp(rawWidth, kCellSize, 1000f);
-            float depth = math.clamp(rawDepth, kCellSize, 1000f);
-            request.TryGetFloat("rotation", out float rotationDegrees);
-            if (!TryResolveZone(request, out ZoneType targetZone, out string resolvedName, out error))
-            {
-                return error;
-            }
-
-            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            if (!tool.TryQueueZone(
-                    targetZone,
-                    resolvedName,
-                    new float2(x, z),
-                    new float2(width, depth),
-                    rotationDegrees,
-                    request))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict, "another build operation is in progress, retry shortly");
-            }
-            return null;
-        }
-
         private bool TryResolveZone(
-            BridgeRequest request,
+            string zoneName,
             out ZoneType targetZone,
-            out string resolvedName,
-            out BridgeResponse error)
+            out string error)
         {
             targetZone = ZoneType.None;
-            resolvedName = null;
             error = null;
-            if (!request.Query.TryGetValue("zone", out string zoneName) || string.IsNullOrEmpty(zoneName))
+            if (string.IsNullOrEmpty(zoneName))
             {
-                error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?zone=<name from /zones, or 'None' to dezone>");
+                error = "Give the zone prefab name or None to clear the cells.";
                 return false;
             }
             if (string.Equals(zoneName, "None", StringComparison.OrdinalIgnoreCase))
             {
-                resolvedName = "None";
                 return true;
             }
 
             string lookupName = ResolveZoneNameForTheme(zoneName);
             if (!TryFindPrefabByName(ZonePrefabQuery, lookupName, out Entity zonePrefabEntity, out PrefabBase zonePrefab))
             {
-                error = BridgeResponse.Error(BridgeErrorKind.NotFound, $"unknown zone '{zoneName}'; list via /zones");
+                error = $"Unknown zone '{zoneName}'. Read the available zone types.";
                 return false;
             }
             if (IsLocked(zonePrefabEntity))
             {
-                error = BridgeResponse.Error(BridgeErrorKind.Conflict, $"zone '{zonePrefab.name}' is locked (milestone not reached)");
+                error = $"Zone '{zonePrefab.name}' is locked.";
                 return false;
             }
             targetZone = EntityManager.GetComponentData<ZoneData>(zonePrefabEntity).m_ZoneType;
-            resolvedName = zonePrefab.name;
             return true;
         }
 

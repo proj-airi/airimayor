@@ -18,11 +18,8 @@ namespace CS2MCP
             CityOsmEdit.CheckEditedTags(original, target, "power", "man_made", "substance", "location", "airimayor:prefab");
             TypedNetworkKinds wanted = CityOsmInfrastructure.UtilityKinds(target);
             string name = CityOsm.Tag(target, "airimayor:prefab");
-            return FindOsmInfrastructureAsset(NetPrefabQuery, name, existing, entity =>
-                EntityManager.HasComponent<PlaceableNetData>(entity)
-                && (EntityManager.GetComponentData<PlaceableNetData>(entity).m_PlacementFlags
-                    & (PlacementFlags.UpgradeOnly | PlacementFlags.IsUpgrade)) == 0
-                && ClassifyNetPrefab(entity) == wanted);
+            return FindOsmInfrastructureAsset(NetPrefabQuery, name, existing,
+                entity => IsPlaceableNetworkPrefab(entity) && ClassifyNetPrefab(entity) == wanted);
         }
 
         private float OsmUtilityHeight(Entity prefab, float3 position, ref TerrainHeightData terrain)
@@ -95,6 +92,8 @@ namespace CS2MCP
             if (!(original is OsmNode || edited is OsmNode)) return false;
             var previous = original as OsmNode;
             var node = edited as OsmNode;
+            if (CityOsmTransit.StationOwned(previous) || CityOsmTransit.StationOwned(node))
+                throw new FormatException($"Boarding point {(previous ?? node).Id} belongs to its station.");
             if (!CityOsm.IsPlatform(previous) && !CityOsm.IsPlatform(node)) return false;
             Entity existing = OsmOriginal(previous);
             if (previous != null && (!CityOsm.IsPlatform(previous) || !TransitStopQuery.MatchesIgnoreFilter(existing)))

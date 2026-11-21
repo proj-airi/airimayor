@@ -18,6 +18,9 @@ namespace CS2MCP
     {
         public long WayId, StartId, EndId;
         public Entity Original, Prefab, Start, End;
+        public Entity UpgradeSource;
+        public CompositionFlags Upgrades, AddedUpgrades;
+        public bool WriteUpgrades, InvertUpgrades;
         public float3 StartPosition, EndPosition;
         public RoadPath Curve;
         public Bezier4x3 Bezier => new Bezier4x3(Curve.A, Curve.B, Curve.C, Curve.D);
@@ -43,11 +46,14 @@ namespace CS2MCP
             public IReadOnlyList<OsmRoadPlacement> Roads;
             public IReadOnlyList<OsmBuildingPlacement> Buildings;
             public IReadOnlyList<Entity> Deletions;
+            public IReadOnlyList<OsmTransitEdit> Routes;
+            public OsmAreaPlan Areas;
             public Func<BridgeResponse> CheckCurrent;
-            public Func<IEnumerable<Entity>, BridgeResponse> Readback;
+            public Func<IEnumerable<(OsmKind Kind, long Source, Entity Entity)>, BridgeResponse> Readback;
+            public Func<BridgeErrorKind, string, BridgeResponse> ReadFailure;
             public bool NamesApplied;
             public readonly List<OsmRoadWitness> Edges = new List<OsmRoadWitness>();
-            public readonly Dictionary<Entity, float3> Junctions = new Dictionary<Entity, float3>();
+            public readonly Dictionary<Entity, (long Id, float3 Position)> Junctions = new Dictionary<Entity, (long, float3)>();
             public readonly List<(OsmBuildingPlacement Placement, Entity Entity)> Objects =
                 new List<(OsmBuildingPlacement, Entity)>();
         }
@@ -66,14 +72,16 @@ namespace CS2MCP
 
         internal bool TryQueueOsmEdit(BridgeRequest request, IReadOnlyList<OsmRoadPlacement> roads,
             IReadOnlyList<OsmBuildingPlacement> buildings, IReadOnlyList<Entity> deletions,
-            Func<BridgeResponse> checkCurrent, Func<IEnumerable<Entity>, BridgeResponse> readback)
+            IReadOnlyList<OsmTransitEdit> routes, OsmAreaPlan areas, Func<BridgeResponse> checkCurrent,
+            Func<IEnumerable<(OsmKind Kind, long Source, Entity Entity)>, BridgeResponse> readback,
+            Func<BridgeErrorKind, string, BridgeResponse> readFailure)
         {
             if (IsBusy) return false;
             m_OsmEdit = new OsmEdit
             {
                 CityLoad = BridgeSystem.Instance.CityLoadId,
-                Roads = roads, Buildings = buildings, Deletions = deletions,
-                CheckCurrent = checkCurrent, Readback = readback
+                Roads = roads, Buildings = buildings, Deletions = deletions, Routes = routes, Areas = areas,
+                CheckCurrent = checkCurrent, Readback = readback, ReadFailure = readFailure
             };
             m_PendingRequest = request;
             Activate();
@@ -88,7 +96,7 @@ namespace CS2MCP
                 string reason = m_Stage == Stage.Readback
                     ? "The city received the edit before the active tool changed. Read the district again."
                     : "The active tool changed before the city applied the edit.";
-                CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, reason));
+                CompletePending(OsmFailure(BridgeErrorKind.Conflict, reason));
                 Deactivate();
             }
             base.OnStopRunning();
@@ -110,6 +118,8 @@ namespace CS2MCP
                     if (m_OsmEdit.CityLoad != BridgeSystem.Instance.CityLoadId)
                         throw new InvalidOperationException("Another city was loaded before the district could be checked.");
                     VerifyAppliedOsmEdit();
+                    if (!AppliedOsmAreasMatch()) return;
+                    if (!VerifyOsmTransitResult(m_OsmEdit.Routes)) return;
                     if (!CheckOsmNames(preview: false)) return;
                     BridgeResponse result = m_OsmEdit.Readback(AppliedOsmEntities());
                     if (result == null) return;
@@ -124,6 +134,7 @@ namespace CS2MCP
                     m_Stage = Stage.Finish;
                     return;
                 }
+                if (m_Stage == Stage.Apply && !OsmTransitPreviewReady(m_OsmEdit.Routes)) return;
                 BridgeResponse conflict = m_OsmEdit.CheckCurrent();
                 if (conflict != null)
                 {
@@ -141,18 +152,24 @@ namespace CS2MCP
                         CreateOsmCourse(road, ref terrain);
                     }
                     foreach (OsmBuildingPlacement building in m_OsmEdit.Buildings) CreateOsmObject(building);
-                    foreach (Entity target in m_OsmEdit.Deletions) CreateModifyDefinitions(target, CreationFlags.Delete, default);
+                    foreach (Entity target in m_OsmEdit.Deletions) CreateDemolitionDefinition(target);
+                    CreateOsmTransitDefinitions(m_OsmEdit.Routes);
+                    foreach (var perimeter in m_OsmEdit.Areas.Perimeters) CreateOperationalAreaDefinition(perimeter);
                     m_Stage = Stage.Apply;
                     return;
                 }
-                if (!m_ErrorQuery.IsEmptyIgnoreFilter || !GetAllowApply())
+                bool nativeDefinitions = m_OsmEdit.Roads.Count + m_OsmEdit.Buildings.Count + m_OsmEdit.Deletions.Count
+                    + m_OsmEdit.Routes.Count + m_OsmEdit.Areas.Perimeters.Count > 0;
+                if (!m_ErrorQuery.IsEmptyIgnoreFilter || (nativeDefinitions && !GetAllowApply()))
                 {
                     throw new InvalidOperationException(DescribeValidationBlock());
                 }
                 CaptureOsmPreview();
                 CheckOsmNames(preview: true);
-                applyMode = ApplyMode.Apply;
+                CheckOsmAreaPreview();
                 m_Stage = Stage.Readback;
+                PaintOsmZoneCells();
+                applyMode = nativeDefinitions ? ApplyMode.Apply : ApplyMode.None;
             }
             catch (Exception exception)
             {
@@ -160,10 +177,26 @@ namespace CS2MCP
                 string message = submitted
                     ? "The city received the edit. Read the district again before editing. "
                     : "The city declined the edit before applying it. ";
-                CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, message + exception.Message));
+                CompletePending(OsmFailure(BridgeErrorKind.Conflict, message + exception.Message));
                 applyMode = submitted ? ApplyMode.None : ApplyMode.Clear;
                 m_Stage = Stage.Finish;
             }
+        }
+
+        private BridgeResponse OsmFailure(BridgeErrorKind kind, string message)
+        {
+            if (m_Stage == Stage.Readback && m_OsmEdit != null && m_OsmEdit.CityLoad == BridgeSystem.Instance?.CityLoadId)
+            {
+                try
+                {
+                    return m_OsmEdit.ReadFailure(kind, message);
+                }
+                catch (Exception error)
+                {
+                    message += " The district could not be read: " + error.Message;
+                }
+            }
+            return BridgeResponse.Error(kind, message);
         }
 
         private void CreateOsmCourse(OsmRoadPlacement road, ref TerrainHeightData terrain)
@@ -202,6 +235,21 @@ namespace CS2MCP
                 flags = CreationFlags.Align | CreationFlags.SubElevation;
                 Edge original = EntityManager.GetComponentData<Edge>(road.Original);
                 if (road.Start == original.m_End || road.End == original.m_Start) flags |= CreationFlags.Invert;
+            }
+            if (road.WriteUpgrades)
+            {
+                if (road.Original != Entity.Null) flags |= CreationFlags.Upgrade | CreationFlags.Parent;
+                buffer.AddComponent(definition, new Upgraded { m_Flags = road.Upgrades });
+                if (road.UpgradeSource != Entity.Null && EntityManager.HasBuffer<SubReplacement>(road.UpgradeSource))
+                {
+                    var replacements = buffer.AddBuffer<SubReplacement>(definition);
+                    foreach (SubReplacement item in EntityManager.GetBuffer<SubReplacement>(road.UpgradeSource, true))
+                    {
+                        SubReplacement copy = item;
+                        if (road.InvertUpgrades) copy.m_Side = (SubReplacementSide)(-(int)copy.m_Side);
+                        replacements.Add(copy);
+                    }
+                }
             }
             buffer.AddComponent(definition, new CreationDefinition
             {

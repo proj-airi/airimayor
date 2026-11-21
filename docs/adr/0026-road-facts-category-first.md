@@ -1,6 +1,6 @@
 # Native road facts; category first, width never promotes
 
-Status: accepted. `build_road` renamed `build_network` by [0027](./0027-tool-surface-renaming.md). Remainder still stands.
+Status: accepted. [0027](./0027-tool-surface-renaming.md) renamed the construction tool. [0060](./0060-osm-first-city-tools.md) moved spatial reads to local OSM and revised how the catalog and map resolve road classes and lane counts.
 
 `list_prefabs`, `list_networks`, `map_text` and `map_image` share one road
 identity: UI-group category, speed limit, car-lane count, highway-rules

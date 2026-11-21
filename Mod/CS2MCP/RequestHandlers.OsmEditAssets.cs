@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Game.Net;
 using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
@@ -33,24 +32,12 @@ namespace CS2MCP
             {
                 foreach (Entity prefab in entities)
                 {
-                    if (IsLocked(prefab) || !EntityManager.HasComponent<PlaceableNetData>(prefab)
-                        || !EntityManager.HasComponent<NetGeometryData>(prefab)
-                        || (EntityManager.GetComponentData<PlaceableNetData>(prefab).m_PlacementFlags
-                            & (PlacementFlags.UpgradeOnly | PlacementFlags.IsUpgrade)) != 0)
+                    if (IsLocked(prefab) || !IsPlaceableNetworkPrefab(prefab))
                     {
                         continue;
                     }
                     var flags = EntityManager.GetComponentData<RoadData>(prefab).m_Flags;
-                    RoadPrefabFacts facts = ReadRoadPrefabFacts(prefab, prefabs, string.Empty);
-                    int? lanes = facts.CarLanes;
-                    if (EntityManager.HasBuffer<DefaultNetLane>(prefab))
-                    {
-                        lanes = 0;
-                        foreach (DefaultNetLane lane in EntityManager.GetBuffer<DefaultNetLane>(prefab, true))
-                        {
-                            if (IsOsmCarLane(lane.m_Flags)) lanes++;
-                        }
-                    }
+                    RoadPrefabFacts facts = ReadRoadPrefabFacts(prefab, prefabs);
                     assets.Add(new OsmEditRoadAsset
                     {
                         Prefab = prefab,
@@ -58,7 +45,7 @@ namespace CS2MCP
                         Highway = OsmHighway(facts.RoadClass),
                         OneWay = (flags & (Game.Prefabs.RoadFlags.DefaultIsForward | Game.Prefabs.RoadFlags.DefaultIsBackward)) != 0,
                         Backward = (flags & Game.Prefabs.RoadFlags.DefaultIsBackward) != 0,
-                        Lanes = lanes,
+                        Lanes = facts.CarLanes,
                         Speed = facts.SpeedKmh,
                         Width = NativeRoadWidthM(prefab),
                     });
@@ -66,9 +53,6 @@ namespace CS2MCP
             }
             return assets;
         }
-
-        private static bool IsOsmCarLane(LaneFlags flags) => (flags & LaneFlags.Road) != 0
-            && (flags & (LaneFlags.Master | LaneFlags.Parking | LaneFlags.Virtual | LaneFlags.BicyclesOnly)) == 0;
 
         private Entity ResolveOsmRoad(ref List<OsmEditRoadAsset> assets, OsmWay original, OsmWay way, Entity existing, out bool reverse)
         {
@@ -187,8 +171,7 @@ namespace CS2MCP
                 {
                     foreach (Entity candidate in candidates)
                     {
-                        if (IsLocked(candidate) || !IsIndependentBuildingPrefab(candidate)
-                            || !EntityManager.HasComponent<PlaceableObjectData>(candidate)) continue;
+                        if (IsLocked(candidate) || !IsIndependentBuildingPrefab(candidate)) continue;
                         string name = PrefabDisplayName(prefabs, candidate);
                         if (requested != null && requested != name) continue;
                         if (amenity == "school" && !EntityManager.HasComponent<SchoolData>(candidate)) continue;

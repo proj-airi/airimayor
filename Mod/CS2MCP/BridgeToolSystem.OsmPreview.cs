@@ -17,6 +17,8 @@ namespace CS2MCP
     {
         private struct OsmRoadWitness
         {
+            public long WayId;
+            public CompositionFlags Upgrades;
             public Entity Entity, Preview, Prefab, Start, End;
             public Bezier4x3 Curve;
             public MapGrade? Grade;
@@ -132,6 +134,15 @@ namespace CS2MCP
                 if (found == Entity.Null) throw new InvalidOperationException("The preview changed the course or its junctions for OSM way " + road.WayId + ".");
                 if (road.Grade.HasValue && !MatchesOsmGrade(found, road.Grade.Value))
                     throw new InvalidOperationException("The preview changed the road grade for OSM way " + road.WayId + ".");
+                if (RoadUpgrades(found) != road.Upgrades)
+                    throw new InvalidOperationException("The preview changed road upgrades for OSM way " + road.WayId + ".");
+                if (road.AddedUpgrades != default)
+                {
+                    Entity composition = EntityManager.GetComponentData<Composition>(found).m_Edge;
+                    var effective = EntityManager.GetComponentData<NetCompositionData>(composition).m_Flags;
+                    if ((effective & road.AddedUpgrades) != road.AddedUpgrades)
+                        throw new InvalidOperationException("The requested upgrades do not appear on the preview of way " + road.WayId + ".");
+                }
                 Edge match = EntityManager.GetComponentData<Edge>(found);
                 Entity start = OsmAppliedIdentity(match.m_Start);
                 Entity finish = OsmAppliedIdentity(match.m_End);
@@ -143,7 +154,7 @@ namespace CS2MCP
                 foundOriginal |= EntityManager.GetComponentData<Temp>(found).m_Original == road.Original;
                 m_OsmEdit.Edges.Add(new OsmRoadWitness
                 {
-                    Entity = OsmAppliedIdentity(found), Preview = found, Prefab = road.Prefab, Start = start, End = finish,
+                    WayId = road.WayId, Upgrades = road.Upgrades, Entity = OsmAppliedIdentity(found), Preview = found, Prefab = road.Prefab, Start = start, End = finish,
                     Curve = EntityManager.GetComponentData<Curve>(found).m_Bezier, Grade = road.Grade, Name = road.Name
                 });
                 nextNode = match.m_End;
@@ -183,7 +194,7 @@ namespace CS2MCP
                 throw new InvalidOperationException("The preview changed the connection at OSM node " + id + ".");
             nodes[id] = node;
             nodeIds[node] = id;
-            m_OsmEdit.Junctions[node] = position;
+            m_OsmEdit.Junctions[node] = (id, position);
         }
 
         private bool HasUnmappedConnection(Entity node, HashSet<Entity> courseNodes)
@@ -224,7 +235,7 @@ namespace CS2MCP
             foreach (var junction in m_OsmEdit.Junctions)
             {
                 if (!IsAppliedOsmFeature(junction.Key) || !EntityManager.HasComponent<Node>(junction.Key) ||
-                    math.distance(junction.Value, EntityManager.GetComponentData<Node>(junction.Key).m_Position) > 0.5f)
+                    math.distance(junction.Value.Position, EntityManager.GetComponentData<Node>(junction.Key).m_Position) > 0.5f)
                     throw new InvalidOperationException("A junction differs from the accepted preview.");
             }
             foreach (Entity target in m_OsmEdit.Deletions)
@@ -238,7 +249,7 @@ namespace CS2MCP
                     throw new InvalidOperationException("A street or utility segment could not be confirmed.");
                 Edge edge = EntityManager.GetComponentData<Edge>(entity);
                 Bezier4x3 curve = EntityManager.GetComponentData<Curve>(entity).m_Bezier;
-                if (edge.m_Start != item.Start || edge.m_End != item.End ||
+                if (edge.m_Start != item.Start || edge.m_End != item.End || RoadUpgrades(entity) != item.Upgrades ||
                     math.distance(curve.a, item.Curve.a) > 0.5f || math.distance(curve.b, item.Curve.b) > 0.5f ||
                     math.distance(curve.c, item.Curve.c) > 0.5f || math.distance(curve.d, item.Curve.d) > 0.5f ||
                     (item.Grade.HasValue && !MatchesOsmGrade(entity, item.Grade.Value)))
@@ -255,10 +266,17 @@ namespace CS2MCP
             !EntityManager.HasComponent<Deleted>(entity) && !EntityManager.HasComponent<Temp>(entity) &&
             EntityManager.HasComponent<PrefabRef>(entity);
 
-        private IEnumerable<Entity> AppliedOsmEntities()
+        private CompositionFlags RoadUpgrades(Entity entity) => EntityManager.HasComponent<Upgraded>(entity)
+            ? EntityManager.GetComponentData<Upgraded>(entity).m_Flags : default;
+
+        private IEnumerable<(OsmKind, long, Entity)> AppliedOsmEntities()
         {
-            foreach (OsmRoadWitness road in m_OsmEdit.Edges) yield return road.Entity;
-            foreach (var obj in m_OsmEdit.Objects) yield return obj.Entity;
+            foreach (var junction in m_OsmEdit.Junctions) yield return (OsmKind.Node, junction.Value.Id, junction.Key);
+            foreach (OsmRoadWitness road in m_OsmEdit.Edges) yield return (OsmKind.Way, road.WayId, road.Entity);
+            foreach (var obj in m_OsmEdit.Objects)
+                yield return (obj.Placement.AttachParent == Entity.Null ? OsmKind.Way : OsmKind.Node, obj.Placement.WayId, obj.Entity);
+            foreach (var route in m_OsmEdit.Routes)
+                if (!route.Remove) yield return (OsmKind.Relation, route.RelationId, route.Realized);
         }
 
         private bool CheckOsmNames(bool preview)

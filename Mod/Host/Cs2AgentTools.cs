@@ -13,18 +13,6 @@ namespace airimayor.Host
     /// </summary>
     internal sealed class Cs2AgentTools : IAgentTools
     {
-        private static readonly HashSet<string> s_Construction =
-            new HashSet<string>(StringComparer.Ordinal)
-            {
-                "edit_osm",
-                "zone",
-                "set_road_features",
-                "expand_operational_area",
-                "set_facility_upgrade",
-                "add_transit_line",
-                "remove_transit_line",
-            };
-
         private static readonly HashSet<string> s_Treasury =
             new HashSet<string>(StringComparer.Ordinal)
             {
@@ -99,15 +87,14 @@ namespace airimayor.Host
         /// <summary>Tools that change the city; their record carries ledger evidence (ADR 0047).</summary>
         private static bool IsWrite(string name)
         {
-            return s_Construction.Contains(name) ||
+            return name == "set_facility_upgrade" || name == "edit_osm" ||
                 s_Treasury.Contains(name) ||
-                name == "demolish" ||
                 name == "purchase_development_node";
         }
 
         private static bool IsAllowed(string name, bool visionAvailable)
         {
-            if (s_Construction.Contains(name))
+            if (name == "set_facility_upgrade")
             {
                 return Setting.StaticAllowConstruction;
             }
@@ -127,9 +114,9 @@ namespace airimayor.Host
             {
                 return Setting.StaticAllowClock;
             }
-            if (name == "demolish")
+            if (name == "edit_osm")
             {
-                return Setting.StaticAllowDemolition;
+                return Setting.StaticAllowDemolition || Setting.StaticAllowConstruction;
             }
             if (name == "save_game")
             {
