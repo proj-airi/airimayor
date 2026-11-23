@@ -35,6 +35,7 @@ namespace airimayor.Host
         private readonly CancellationTokenSource m_Life = new CancellationTokenSource();
         private readonly string m_SessionId;
         private readonly StringBuilder m_Stderr = new StringBuilder();
+        private readonly TaskCompletionSource<bool> m_StderrDrained = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly StringBuilder m_TurnReply = new StringBuilder();
         private readonly Dictionary<string, string> m_ChildText =
             new Dictionary<string, string>(StringComparer.Ordinal);
@@ -214,10 +215,16 @@ namespace airimayor.Host
             catch (Exception)
             {
             }
-            m_Process?.Dispose();
+            if (m_Process != null) _ = ReleaseProcessAsync(m_Process);
             m_Bridge?.Dispose();
             m_Record.Dispose();
             m_Life.Dispose();
+        }
+
+        private async Task ReleaseProcessAsync(Process process)
+        {
+            await m_StderrDrained.Task.ConfigureAwait(false);
+            process.Dispose();
         }
 
         public void OnDisconnected(Connection connection)
@@ -389,10 +396,12 @@ namespace airimayor.Host
             var process = new Process { StartInfo = start, EnableRaisingEvents = true };
             process.ErrorDataReceived += (sender, args) =>
             {
-                if (string.IsNullOrEmpty(args.Data))
+                if (args.Data == null)
                 {
+                    m_StderrDrained.TrySetResult(true);
                     return;
                 }
+                if (args.Data.Length == 0) return;
                 m_Record.System("acp", args.Data);
                 lock (m_Stderr)
                 {
