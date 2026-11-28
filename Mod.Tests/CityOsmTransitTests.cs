@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CS2MCP;
+using Game.Prefabs;
 using Unity.Mathematics;
 using Xunit;
 
@@ -40,10 +41,35 @@ namespace airimayor.Tests
         public void A_partial_route_names_the_bounds_needed_for_an_edit()
         {
             var route = OsmDocument.Read(District).Relations[8];
-            string bounds = CityOsmTransit.Extent(new float4(0.1f, -2.1f, 9.6f, 20));
+            var extent = new float4(0.1f, -2.1f, 9.6f, 20);
+            Assert.Equal(new float4(-1, -4, 11, 21), CityOsmTransit.ReadBounds(extent));
+            string bounds = CityOsmTransit.Extent(extent);
             route.Tags[CityOsmTransit.RequiredBounds] = bounds;
             Assert.Equal("-1,-4,11,21", bounds);
             Assert.Contains(bounds, Assert.Throws<FormatException>(() => CityOsmTransit.CheckScope(route)).Message);
+        }
+
+        [Theory]
+        [InlineData("bus", TransportType.Bus)]
+        [InlineData("Train", TransportType.Train)]
+        [InlineData("ship", TransportType.Ship)]
+        [InlineData("taxi", TransportType.Taxi)]
+        [InlineData("post", TransportType.Post)]
+        public void Transit_query_accepts_named_native_modes(string value, TransportType mode)
+        {
+            Assert.True(CityOsmTransit.TryReadTransportType(value, out TransportType actual));
+            Assert.Equal(mode, actual);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("none")]
+        [InlineData("count")]
+        [InlineData("road")]
+        [InlineData("bus,train")]
+        public void Transit_query_rejects_invalid_mode_filters(string value)
+        {
+            Assert.False(CityOsmTransit.TryReadTransportType(value, out _));
         }
 
         [Fact]

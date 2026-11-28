@@ -119,10 +119,6 @@ namespace CS2MCP
                     return ListFacilityUpgrades(request);
                 case "/build/facility-upgrade":
                     return SetFacilityUpgrade(request);
-                case "/city/transit/stops":
-                    return ListTransitStops(request);
-                case "/city/transit/lines":
-                    return ListTransitLines(request);
                 case "/city/layer":
                     return ProbeLayer(request);
                 case "/city/zoning":

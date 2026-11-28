@@ -29,11 +29,12 @@ namespace CS2MCP
             request.Query.TryGetValue("kind", out string kind);
             bool buildings = kind == "building";
             bool districts = kind == "district";
+            bool transit = kind == "stop" || kind == "route";
             TypedNetworkKinds filter = CityOsmTransportWays.Kind(kind);
-            if (!buildings && !districts && filter == TypedNetworkKinds.None && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, district, road, footway, rail, tram, subway, water, sewage or low_voltage.");
+            if (!buildings && !districts && !transit && filter == TypedNetworkKinds.None && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, district, stop, route, road, footway, rail, tram, subway, water, sewage or low_voltage.");
             string view = request.Query.TryGetValue("view", out string selectedView) ? selectedView : "features";
-            if (view != "features" && (view != "topology" || buildings || districts || CityOsmTransportWays.IsTransport(filter)))
+            if (view != "features" && (view != "topology" || buildings || districts || transit || CityOsmTransportWays.IsTransport(filter)))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose features, or topology for a street or utility network.");
             if (request.Query.TryGetValue("road_classes", out string requestedRoadClasses)
                 && (filter != TypedNetworkKinds.Road || view != "features"))
@@ -51,6 +52,13 @@ namespace CS2MCP
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, error.Message);
             }
+            TransportType? transportType = null;
+            if (request.Query.TryGetValue("transport_type", out string mode))
+            {
+                if (!transit || !CityOsmTransit.TryReadTransportType(mode, out var selectedType))
+                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Use a named transport_type such as bus, tram or train with kind=stop or kind=route.");
+                transportType = selectedType;
+            }
             request.Query.TryGetValue("query", out string search);
             request.Query.TryGetValue("role", out string role);
             request.Query.TryGetValue("operational_area", out string area);
@@ -61,9 +69,9 @@ namespace CS2MCP
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "The operational area filter selects buildings with any, storage or extractor areas.");
             if (view == "topology" && search != null)
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Name searches apply to features.");
-            if (sort != null && sort != "distance" && (buildings || districts || view == "topology"))
+            if (sort != null && sort != "distance" && (buildings || districts || transit || view == "topology"))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "These results are ranked by distance from the center of the search area.");
-            if (!buildings && !districts && !TypedNetworkMath.TryParseNetworkSort(sort, filter, out sort, out string sortError))
+            if (!buildings && !districts && !transit && !TypedNetworkMath.TryParseNetworkSort(sort, filter, out sort, out string sortError))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, sortError);
             bool deadEnds = false;
             if (request.Query.ContainsKey("include_dead_ends") && (view != "topology" || filter != TypedNetworkKinds.Road
@@ -76,6 +84,8 @@ namespace CS2MCP
             IEnumerable<(float Rank, int Id, object Item)> matches;
             if (buildings) matches = OsmBuildingRows(district, buildingTypes, search, role, area);
             else if (districts) matches = OsmAdministrativeRows(bounds, search);
+            else if (kind == "stop") matches = OsmStopRows(district, search, transportType);
+            else if (kind == "route") matches = OsmRouteRows(district, search, transportType);
             else if (view == "topology") matches = OsmTopologyRows(district, filter, deadEnds);
             else matches = OsmNetworkRows(district, filter, roadClasses, search, sort);
             var rows = new List<(float Rank, int Id, object Item)>(limit);

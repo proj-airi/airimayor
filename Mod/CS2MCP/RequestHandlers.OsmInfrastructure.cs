@@ -60,10 +60,9 @@ namespace CS2MCP
         private OsmNode ReadOsmStop(Entity entity, Bounds2 district, PrefabSystem prefabs, Game.UI.NameSystem names)
         {
             Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
-            if (!IsMenuCurbObject(prefab) || !EntityManager.HasComponent<TransportStopData>(prefab)) return null;
             float3 position = EntityManager.GetComponentData<Transform>(entity).m_Position;
             if (!MathUtils.Intersect(district, position.xz)) return null;
-            string mode = StopMode(prefab);
+            string mode = OsmCurbStopMode(prefab);
             if (mode == null) return null;
             OsmNode node = CityOsm.ToNode(CityOsm.NativeId(entity.Index), position);
             node.Tags["public_transport"] = "platform";
@@ -74,8 +73,9 @@ namespace CS2MCP
             return node;
         }
 
-        private string StopMode(Entity prefab)
+        private string OsmCurbStopMode(Entity prefab)
         {
+            if (!IsMenuCurbObject(prefab) || !EntityManager.HasComponent<TransportStopData>(prefab)) return null;
             switch (EntityManager.GetComponentData<TransportStopData>(prefab).m_TransportType)
             {
                 case TransportType.Bus: return "bus";
@@ -106,7 +106,7 @@ namespace CS2MCP
             CityOsmEdit.CheckEditedTags(previous, node, "name", "public_transport", "highway", "bus", "tram", "taxi", "ele", "airimayor:prefab");
             string mode = CityOsmInfrastructure.PlatformMode(node);
             Entity prefab = FindOsmInfrastructureAsset(CurbObjectPrefabQuery, CityOsm.Tag(node, "airimayor:prefab"), existing,
-                asset => IsMenuCurbObject(asset) && EntityManager.HasComponent<TransportStopData>(asset) && StopMode(asset) == mode);
+                asset => OsmCurbStopMode(asset) == mode);
             float3 point = after.Positions[node.Id];
             if (node.Tags.ContainsKey("ele") && !math.isfinite(point.y)) throw new FormatException($"Stop {node.Id} needs a numeric elevation.");
             var placement = new OsmBuildingPlacement { Kind = OsmKind.Node, WayId = node.Id, Original = existing, Prefab = prefab };

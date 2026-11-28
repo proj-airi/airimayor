@@ -181,7 +181,7 @@
     },
     {
       "name": "query_osm",
-      "description": "Find existing buildings, administrative districts, roads, footways, tracks and utilities. Choose a network kind, road classes, building uses or a service role for the task. Read traffic and electricity load or locate road and utility connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
+      "description": "Find existing buildings, administrative districts, roads, footways, tracks, utilities, stops and routes. Choose a network kind, road class, building use, service role or transport type. Read traffic, electricity load, road and utility connectivity, or route vehicles and usage. Pass a rectangle in city meters or omit all four bounds to search citywide. Results give bounds and OSM references when available. Use read_osm to obtain an editable district.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -206,6 +206,8 @@
             "enum": [
               "building",
               "district",
+              "stop",
+              "route",
               "road",
               "footway",
               "rail",
@@ -223,6 +225,10 @@
               "topology"
             ],
             "description": "Default features. Topology reports road or utility network findings."
+          },
+          "transport_type": {
+            "type": "string",
+            "description": "Transport mode such as bus, tram, train, subway or ferry. Applies to stops and routes."
           },
           "road_classes": {
             "type": "array",
@@ -323,6 +329,10 @@
         {
           "key": "view",
           "arg": "view"
+        },
+        {
+          "key": "transport_type",
+          "arg": "transport_type"
         },
         {
           "key": "road_classes",
@@ -887,122 +897,6 @@
         {
           "key": "enabled",
           "arg": "enabled"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "list_transit_stops",
-      "description": "List existing transit stops (station sub-stops and roadside stops) with type, position and how many lines already use them. Read-only. Read the district for boarding point references when editing a passenger line.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "description": "Optional passenger type filter such as bus, tram, train, subway or ferry"
-          },
-          "x": {
-            "type": "number",
-            "description": "Optional search center X; with z, keeps the nearest stops inside radius"
-          },
-          "z": {
-            "type": "number",
-            "description": "Optional search center Z"
-          },
-          "radius": {
-            "type": "number",
-            "description": "Search radius in meters when x and z are set (default 250)"
-          },
-          "limit": {
-            "type": "integer",
-            "description": "Maximum stops to return. Default 16, max 64.",
-            "minimum": 1,
-            "maximum": 64,
-            "default": 16
-          }
-        },
-        "required": []
-      },
-      "route": "/city/transit/stops",
-      "query": [
-        {
-          "key": "type",
-          "arg": "type"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
-        },
-        {
-          "key": "limit",
-          "arg": "limit",
-          "default": "16"
-        }
-      ],
-      "response": "json"
-    },
-    {
-      "name": "list_transit_lines",
-      "description": "List transit lines. Optional x/z/radius keeps lines with a stop/waypoint inside the range. Optional type filter. Default limit 16, max 64.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "description": "Optional passenger type filter such as bus, tram, train, subway or ferry"
-          },
-          "limit": {
-            "type": "integer",
-            "description": "Maximum lines to return. Default 16, max 64.",
-            "minimum": 1,
-            "maximum": 64,
-            "default": 16
-          },
-          "x": {
-            "type": "number",
-            "description": "Optional center X (requires z)"
-          },
-          "z": {
-            "type": "number",
-            "description": "Optional center Z (requires x)"
-          },
-          "radius": {
-            "type": "number",
-            "description": "Radius in meters (default 250 when center given)"
-          }
-        },
-        "required": []
-      },
-      "route": "/city/transit/lines",
-      "query": [
-        {
-          "key": "type",
-          "arg": "type"
-        },
-        {
-          "key": "limit",
-          "arg": "limit",
-          "default": "16"
-        },
-        {
-          "key": "x",
-          "arg": "x"
-        },
-        {
-          "key": "z",
-          "arg": "z"
-        },
-        {
-          "key": "radius",
-          "arg": "radius"
         }
       ],
       "response": "json"

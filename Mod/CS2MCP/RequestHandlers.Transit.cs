@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Colossal.Mathematics;
 using Game.Common;
 using Game.Prefabs;
 using Game.Routes;
@@ -15,9 +16,6 @@ namespace CS2MCP
 {
     public sealed partial class RequestHandlers
     {
-        private const int TransitListDefaultLimit = 16;
-        private const int TransitListHardMax = 64;
-
         private EntityQuery m_TransitStopQuery;
         private bool m_TransitStopQueryCreated;
         private EntityQuery m_TransitLineQuery;
@@ -93,284 +91,122 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse ListTransitStops(BridgeRequest request)
+        private IEnumerable<(float Rank, int Id, object Item)> OsmStopRows(
+            Bounds2 district, string search, TransportType? transportType)
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
+            float2 center = (district.min + district.max) * 0.5f;
+            using (var stops = TransitStopQuery.ToEntityArray(Allocator.Temp))
             {
-                return error;
-            }
-
-            if (!TryReadOptionalTransportType(request, out TransportType? typeFilter, out BridgeResponse typeError))
-            {
-                return typeError;
-            }
-
-            int limit = request.TryGetInt("limit", out int rawLimit)
-                ? math.clamp(rawLimit, 1, TransitListHardMax)
-                : TransitListDefaultLimit;
-            if (!TryGetOptionalCenter(request, out bool hasCenter, out float2 center, out BridgeResponse centerError))
-            {
-                return centerError;
-            }
-            float radius = request.TryGetFloat("radius", out float rawRadius) ? math.max(rawRadius, 1f) : 250f;
-
-            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-            var found = new List<(float distance, object item)>();
-            int total = 0;
-            using (NativeArray<Entity> entities = TransitStopQuery.ToEntityArray(Allocator.Temp))
-            {
-                foreach (Entity entity in entities)
+                foreach (Entity stop in stops)
                 {
-                    PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(entity);
-                    if (!EntityManager.HasComponent<TransportStopData>(prefabRef.m_Prefab))
-                    {
-                        continue;
-                    }
-                    TransportStopData stopData =
-                        EntityManager.GetComponentData<TransportStopData>(prefabRef.m_Prefab);
-                    if (typeFilter.HasValue && stopData.m_TransportType != typeFilter.Value)
-                    {
-                        continue;
-                    }
-                    Transform transform = EntityManager.GetComponentData<Transform>(entity);
-                    if (hasCenter && math.distance(transform.m_Position.xz, center) > radius)
-                    {
-                        continue;
-                    }
-                    total++;
-                    float distance = hasCenter ? math.distance(transform.m_Position.xz, center) : 0f;
-                    int connectedLines = 0;
-                    if (EntityManager.HasBuffer<ConnectedRoute>(entity))
-                    {
-                        connectedLines = EntityManager.GetBuffer<ConnectedRoute>(entity, isReadOnly: true).Length;
-                    }
-                    string ownerPrefab = null;
-                    if (EntityManager.HasComponent<Owner>(entity))
-                    {
-                        ownerPrefab = GetEntityPrefabName(
-                            prefabSystem,
-                            EntityManager.GetComponentData<Owner>(entity).m_Owner);
-                    }
-                    var item = new
-                    {
-                        entity = new { index = entity.Index, version = entity.Version },
-                        prefab = GetEntityPrefabName(prefabSystem, entity),
-                        type = FormatTransportType(stopData.m_TransportType),
-                        passenger = stopData.m_PassengerTransport,
-                        cargo = stopData.m_CargoTransport,
-                        connectedLines,
-                        ownerPrefab,
-                        position = new
-                        {
-                            x = transform.m_Position.x,
-                            y = transform.m_Position.y,
-                            z = transform.m_Position.z,
-                        },
-                        distanceM = hasCenter ? (double?)Math.Round(distance, 1) : null,
-                    };
-                    AddBoundedItem(found, item, distance, limit, hasCenter);
-                }
-            }
+                    float3 position = EntityManager.GetComponentData<Transform>(stop).m_Position;
+                    if (!MathUtils.Intersect(district, position.xz)) continue;
+                    Entity prefab = EntityManager.GetComponentData<PrefabRef>(stop).m_Prefab;
+                    if (!EntityManager.HasComponent<TransportStopData>(prefab)) continue;
+                    var data = EntityManager.GetComponentData<TransportStopData>(prefab);
+                    if (transportType.HasValue && data.m_TransportType != transportType.Value) continue;
+                    string asset = PrefabDisplayName(prefabs, prefab);
+                    string name = names.GetRenderedLabelName(stop);
+                    if (!MatchesOsmName(search, name, asset)) continue;
 
-            if (hasCenter)
-            {
-                found.Sort((a, b) => a.distance.CompareTo(b.distance));
-            }
-            var stops = new List<object>(found.Count);
-            foreach ((float _, object item) in found)
-            {
-                stops.Add(item);
-            }
-            return BridgeResponse.Json(new
-            {
-                stopCount = stops.Count,
-                total,
-                truncated = total > stops.Count,
-                stops,
-                note = "Passenger lines can connect these existing stops.",
-            });
-        }
-
-        private BridgeResponse ListTransitLines(BridgeRequest request)
-        {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
-
-            if (!TryReadOptionalTransportType(request, out TransportType? typeFilter, out BridgeResponse typeError))
-            {
-                return typeError;
-            }
-
-            int limit = request.TryGetInt("limit", out int rawLimit)
-                ? math.clamp(rawLimit, 1, TransitListHardMax)
-                : TransitListDefaultLimit;
-            if (!TryGetOptionalCenter(request, out bool hasCenter, out float2 center, out BridgeResponse centerError))
-            {
-                return centerError;
-            }
-            float radius = request.TryGetFloat("radius", out float rawRadius) ? math.max(rawRadius, 1f) : 250f;
-            PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-            NativeArray<UITransportLineData> sorted =
-                TransportUIUtils.GetSortedLines(TransitLineQuery, EntityManager, prefabSystem);
-            try
-            {
-                var lines = new List<object>();
-                int total = 0;
-                for (int i = 0; i < sorted.Length; i++)
-                {
-                    UITransportLineData line = sorted[i];
-                    if (typeFilter.HasValue && line.type != typeFilter.Value)
+                    Entity station = StationOwningPassengerStop(stop, data);
+                    var extent = new Bounds2(position.xz, position.xz);
+                    if (EntityManager.HasComponent<Transform>(station))
+                        extent |= EntityManager.GetComponentData<Transform>(station).m_Position.xz;
+                    long? nodeId = station != Entity.Null || OsmCurbStopMode(prefab) != null
+                        ? CityOsm.NativeId(stop.Index) : (long?)null;
+                    Entity owner = EntityManager.HasComponent<Owner>(stop)
+                        ? EntityManager.GetComponentData<Owner>(stop).m_Owner : Entity.Null;
+                    float distance = math.distance(center, position.xz);
+                    yield return (distance, stop.Index, new
                     {
-                        continue;
-                    }
-                    if (hasCenter && !TransitLineIntersectsRadius(line.entity, center, radius))
-                    {
-                        continue;
-                    }
-                    total++;
-                    if (lines.Count >= limit)
-                    {
-                        continue;
-                    }
-                    lines.Add(new
-                    {
-                        entity = new { index = line.entity.Index, version = line.entity.Version },
-                        prefab = GetEntityPrefabName(prefabSystem, line.entity),
-                        type = FormatTransportType(line.type),
-                        active = line.active,
-                        isCargo = line.isCargo,
-                        lengthM = Math.Round(line.length, 1),
-                        stops = line.stops,
-                        vehicles = line.vehicles,
-                        usage = Math.Round(line.usage, 3),
+                        nodeId,
+                        entity = new { index = stop.Index, version = stop.Version },
+                        prefab = asset,
+                        name,
+                        type = FormatTransportType(data.m_TransportType),
+                        passenger = data.m_PassengerTransport,
+                        cargo = data.m_CargoTransport,
+                        connectedLines = EntityManager.HasBuffer<ConnectedRoute>(stop)
+                            ? EntityManager.GetBuffer<ConnectedRoute>(stop, isReadOnly: true).Length : 0,
+                        ownerPrefab = owner == Entity.Null ? null : GetEntityPrefabName(prefabs, owner),
+                        position = new { x = position.x, y = position.y, z = position.z },
+                        bounds = OsmTransitQueryBounds(extent),
+                        distanceM = Math.Round(distance, 1),
                     });
                 }
-                return BridgeResponse.Json(new
+            }
+        }
+
+        private IEnumerable<(float Rank, int Id, object Item)> OsmRouteRows(
+            Bounds2 district, string search, TransportType? transportType)
+        {
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
+            foreach (Entity entity in OsmRouteCandidates(district))
+            {
+                Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
+                if (!EntityManager.HasComponent<TransportLineData>(prefab)) continue;
+                var data = EntityManager.GetComponentData<TransportLineData>(prefab);
+                if (transportType.HasValue && data.m_TransportType != transportType.Value) continue;
+                string asset = PrefabDisplayName(prefabs, prefab);
+                string name = names.GetRenderedLabelName(entity);
+                if (!MatchesOsmName(search, name, asset)) continue;
+                if (!TryMeasureOsmRoute(entity, district, out Bounds2 extent, out float distance)) continue;
+
+                UITransportLineData line = TransportUIUtils.BuildTransportLine(entity, EntityManager, prefabs);
+                yield return (distance, entity.Index, new
                 {
-                    lineCount = lines.Count,
-                    total,
-                    truncated = total > lines.Count,
-                    lines,
-                    note = "read-only snapshot; optional x/z/radius keeps lines with a stop inside the range; vehicles spawn from depots",
+                    relationId = IsMappedPassengerRoute(data) ? CityOsm.NativeId(entity.Index) : (long?)null,
+                    entity = new { index = entity.Index, version = entity.Version },
+                    prefab = asset,
+                    name,
+                    type = FormatTransportType(line.type),
+                    active = line.active,
+                    isCargo = line.isCargo,
+                    lengthM = Math.Round(line.length, 1),
+                    stops = line.stops,
+                    vehicles = line.vehicles,
+                    usage = Math.Round(line.usage, 3),
+                    bounds = OsmTransitQueryBounds(extent),
+                    distanceM = Math.Round(distance, 1),
                 });
             }
-            finally
-            {
-                if (sorted.IsCreated)
-                {
-                    sorted.Dispose();
-                }
-            }
         }
 
-        private bool TryReadOptionalTransportType(
-            BridgeRequest request,
-            out TransportType? typeFilter,
-            out BridgeResponse error)
+        private bool TryMeasureOsmRoute(Entity line, Bounds2 district, out Bounds2 extent, out float distance)
         {
-            typeFilter = null;
-            error = null;
-            if (!request.Query.TryGetValue("type", out string typeRaw)
-                || string.IsNullOrWhiteSpace(typeRaw))
+            extent = new Bounds2(float.PositiveInfinity, float.NegativeInfinity);
+            distance = float.PositiveInfinity;
+            float2 center = (district.min + district.max) * 0.5f;
+            bool intersects = false;
+            foreach (RouteWaypoint entry in EntityManager.GetBuffer<RouteWaypoint>(line, true))
             {
-                return true;
+                if (!TryReadOsmRoutePoint(entry.m_Waypoint, out _, out float3 position)) continue;
+                extent |= position.xz;
+                intersects |= MathUtils.Intersect(district, position.xz);
+                distance = math.min(distance, math.distance(center, position.xz));
             }
-            if (!TryParsePassengerTransportType(typeRaw, out TransportType parsedType, out error))
+            foreach (Bezier4x3 curve in OsmTransitPath.Curves(EntityManager, line))
             {
-                return false;
+                extent |= MathUtils.Bounds(curve.xz);
+                intersects = intersects || CityOsmSpatial.Intersects(district, curve.xz);
+                distance = math.min(distance, MathUtils.Distance(curve.xz, center, out _));
             }
-            typeFilter = parsedType;
-            return true;
+            return intersects;
         }
 
-        private bool TryParsePassengerTransportType(
-            string raw,
-            out TransportType transportType,
-            out BridgeResponse error)
+        private static object OsmTransitQueryBounds(Bounds2 extent)
         {
-            transportType = TransportType.None;
-            error = null;
-            if (!Enum.TryParse(raw.Trim(), true, out transportType)
-                || transportType == TransportType.None
-                || transportType == TransportType.Count)
-            {
-                error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "type must be a passenger transport kind such as bus, tram, train, subway or ferry");
-                return false;
-            }
-            if (transportType == TransportType.Taxi
-                || transportType == TransportType.Work
-                || transportType == TransportType.Post
-                || transportType == TransportType.Bicycle
-                || transportType == TransportType.Car)
-            {
-                error = BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    $"{FormatTransportType(transportType)} is not a simple passenger line; use bus (default) or another passenger type with matching stops");
-                return false;
-            }
-            return true;
+            float4 bounds = CityOsmTransit.ReadBounds(new float4(extent.min, extent.max));
+            return OsmQueryBounds(new Bounds2(bounds.xy, bounds.zw));
         }
 
         private static string FormatTransportType(TransportType type)
         {
             return Enum.GetName(typeof(TransportType), type)?.ToLowerInvariant() ?? type.ToString();
-        }
-
-        private bool TransitLineIntersectsRadius(Entity line, float2 center, float radius)
-        {
-            if (!EntityManager.HasBuffer<RouteWaypoint>(line))
-            {
-                return false;
-            }
-            DynamicBuffer<RouteWaypoint> waypoints =
-                EntityManager.GetBuffer<RouteWaypoint>(line, isReadOnly: true);
-            float radiusSq = radius * radius;
-            foreach (RouteWaypoint waypoint in waypoints)
-            {
-                if (!EntityManager.Exists(waypoint.m_Waypoint)
-                    || !EntityManager.HasComponent<Position>(waypoint.m_Waypoint))
-                {
-                    continue;
-                }
-                float3 position = EntityManager.GetComponentData<Position>(waypoint.m_Waypoint).m_Position;
-                if (math.distancesq(position.xz, center) <= radiusSq)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static void AddBoundedItem(
-            List<(float distance, object item)> found,
-            object item,
-            float distance,
-            int limit,
-            bool hasCenter)
-        {
-            if (found.Count < limit)
-            {
-                found.Add((distance, item));
-                return;
-            }
-            if (!hasCenter)
-            {
-                return;
-            }
-            int worst = 0;
-            for (int j = 1; j < found.Count; j++)
-            {
-                if (found[j].distance > found[worst].distance)
-                {
-                    worst = j;
-                }
-            }
-            if (distance < found[worst].distance)
-            {
-                found[worst] = (distance, item);
-            }
         }
     }
 }

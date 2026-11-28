@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Game.Prefabs;
 using Unity.Mathematics;
 
 namespace CS2MCP
@@ -21,10 +22,19 @@ namespace CS2MCP
             return owners.Length != 0 && owners.All(route => !after.Relations.ContainsKey(route.Id));
         }
 
-        internal static string Extent(float4 bounds) => string.Join(",", new[]
+        internal static bool TryReadTransportType(string value, out TransportType type) =>
+            Enum.TryParse(value, true, out type) && type != TransportType.None && type != TransportType.Count
+            && string.Equals(value, Enum.GetName(typeof(TransportType), type), StringComparison.OrdinalIgnoreCase);
+
+        internal static float4 ReadBounds(float4 bounds) =>
+            new float4(math.floor(bounds.xy) - 1, math.ceil(bounds.zw) + 1);
+
+        internal static string Extent(float4 bounds)
         {
-            math.floor(bounds.x) - 1, math.floor(bounds.y) - 1, math.ceil(bounds.z) + 1, math.ceil(bounds.w) + 1
-        }.Select(value => value.ToString("0", CultureInfo.InvariantCulture)));
+            float4 read = ReadBounds(bounds);
+            return string.Join(",", new[] { read.x, read.y, read.z, read.w }
+                .Select(value => value.ToString("0", CultureInfo.InvariantCulture)));
+        }
 
         internal static void CheckScope(OsmRelation original)
         {

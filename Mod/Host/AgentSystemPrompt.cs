@@ -116,9 +116,9 @@ Working style:
 
 ## Transit lines
 
-- Call list_transit_stops (type=bus near the district) and list_transit_lines. A line needs at least two passenger stops of the same type. Prefer stops that already sit on the roads you want served.
+- Find stops and existing routes with query_osm using kind=stop or kind=route and a matching transport_type. Read the district that covers their bounds for the mapped platforms and relations. A passenger line needs at least two boarding points of the same type. Prefer stops on the roads you want served.
 - Use edit_osm with a type=route relation and route=bus or the required passenger mode. List the boarding nodes in travel order with member role=platform. The line returns to the first stop.
-- Use edit_osm to remove the route relation when withdrawing service. After opening a line, confirm vehicles with list_transit_lines after a time advance.
+- Use edit_osm to remove the route relation when withdrawing service. After opening a line, advance city time and confirm its vehicles with query_osm using kind=route.
 - Taxi stands, cargo lines, and work routes belong to a different slice than this passenger line. Removing a line keeps the stops and stations.
 
 ## Always

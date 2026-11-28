@@ -33,12 +33,11 @@ namespace CS2MCP
             if (!TransitStopQuery.MatchesIgnoreFilter(stop)) return null;
             float3 position = EntityManager.GetComponentData<Transform>(stop).m_Position;
             if (!MathUtils.Intersect(district, position.xz)) return null;
-            Entity station = StationOwningStop(stop);
-            if (station == Entity.Null) return null;
             Entity prefab = EntityManager.GetComponentData<PrefabRef>(stop).m_Prefab;
             if (!EntityManager.HasComponent<TransportStopData>(prefab)) return null;
             var data = EntityManager.GetComponentData<TransportStopData>(prefab);
-            if (!data.m_PassengerTransport) return null;
+            Entity station = StationOwningPassengerStop(stop, data);
+            if (station == Entity.Null) return null;
             var node = CityOsm.ToNode(CityOsm.NativeId(stop.Index), position);
             node.Tags["public_transport"] = "platform";
             node.Tags[FormatTransportType(data.m_TransportType)] = "yes";
@@ -61,25 +60,12 @@ namespace CS2MCP
                 OsmNode platform = ReadOsmStationStop(child, district, prefabs, names);
                 if (platform != null) document.Nodes[platform.Id] = platform;
             }
-            var iterator = new OsmRouteIterator { Bounds = district, Parts = new HashSet<Entity>() };
-            var tree = World.GetOrCreateSystemManaged<Game.Routes.SearchSystem>().GetSearchTree(true, out JobHandle dependencies);
-            dependencies.Complete();
-            tree.Iterate(ref iterator);
-            var lines = new HashSet<Entity>();
-            foreach (Entity part in iterator.Parts)
-            {
-                if (EntityManager.HasComponent<Owner>(part))
-                {
-                    Entity line = EntityManager.GetComponentData<Owner>(part).m_Owner;
-                    if (EntityManager.Exists(line) && TransitLineQuery.MatchesIgnoreFilter(line)) lines.Add(line);
-                }
-            }
-            foreach (Entity line in lines)
+            foreach (Entity line in OsmRouteCandidates(district))
             {
                 Entity prefab = EntityManager.GetComponentData<PrefabRef>(line).m_Prefab;
                 if (!EntityManager.HasComponent<TransportLineData>(prefab)) continue;
                 var data = EntityManager.GetComponentData<TransportLineData>(prefab);
-                if (!data.m_PassengerTransport || data.m_CargoTransport) continue;
+                if (!IsMappedPassengerRoute(data)) continue;
                 var relation = new OsmRelation(CityOsm.NativeId(line.Index));
                 var extent = new Bounds2(float.PositiveInfinity, float.NegativeInfinity);
                 bool intersects = false;
@@ -87,16 +73,11 @@ namespace CS2MCP
                 foreach (RouteWaypoint entry in EntityManager.GetBuffer<RouteWaypoint>(line, true))
                 {
                     Entity waypoint = entry.m_Waypoint;
-                    if (!EntityManager.HasComponent<Position>(waypoint))
+                    if (!TryReadOsmRoutePoint(waypoint, out Entity stop, out float3 position))
                     {
                         complete = false;
                         continue;
                     }
-                    Entity stop = EntityManager.HasComponent<Connected>(waypoint)
-                        ? EntityManager.GetComponentData<Connected>(waypoint).m_Connected : Entity.Null;
-                    float3 position = EntityManager.HasComponent<Transform>(stop)
-                        ? EntityManager.GetComponentData<Transform>(stop).m_Position
-                        : EntityManager.GetComponentData<Position>(waypoint).m_Position;
                     extent |= position.xz;
                     if (!MathUtils.Intersect(district, position.xz)) continue;
                     intersects = true;
@@ -135,6 +116,41 @@ namespace CS2MCP
                 document.Relations.Add(relation.Id, relation);
             }
         }
+
+        private HashSet<Entity> OsmRouteCandidates(Bounds2 district)
+        {
+            var iterator = new OsmRouteIterator { Bounds = district, Parts = new HashSet<Entity>() };
+            var tree = World.GetOrCreateSystemManaged<Game.Routes.SearchSystem>().GetSearchTree(true, out JobHandle dependencies);
+            dependencies.Complete();
+            tree.Iterate(ref iterator);
+            var lines = new HashSet<Entity>();
+            foreach (Entity part in iterator.Parts)
+            {
+                if (!EntityManager.HasComponent<Owner>(part)) continue;
+                Entity line = EntityManager.GetComponentData<Owner>(part).m_Owner;
+                if (EntityManager.Exists(line) && TransitLineQuery.MatchesIgnoreFilter(line)) lines.Add(line);
+            }
+            return lines;
+        }
+
+        private bool TryReadOsmRoutePoint(Entity waypoint, out Entity stop, out float3 position)
+        {
+            stop = Entity.Null;
+            position = default;
+            if (!EntityManager.HasComponent<Position>(waypoint)) return false;
+            if (EntityManager.HasComponent<Connected>(waypoint))
+                stop = EntityManager.GetComponentData<Connected>(waypoint).m_Connected;
+            position = EntityManager.HasComponent<Transform>(stop)
+                ? EntityManager.GetComponentData<Transform>(stop).m_Position
+                : EntityManager.GetComponentData<Position>(waypoint).m_Position;
+            return true;
+        }
+
+        private static bool IsMappedPassengerRoute(TransportLineData data) =>
+            data.m_PassengerTransport && !data.m_CargoTransport;
+
+        private Entity StationOwningPassengerStop(Entity stop, TransportStopData data) =>
+            data.m_PassengerTransport ? StationOwningStop(stop) : Entity.Null;
 
         private Entity StationOwningStop(Entity stop)
         {

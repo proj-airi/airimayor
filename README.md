@@ -75,7 +75,7 @@ To expand a landfill, farm or forestry area, read the whole area. Edit its close
 
 Use `list_facility_upgrades` to find upgrade names for an existing building. Add a tag with key `airimayor:facility_upgrade:<exact upgrade name>` and value `yes` to the building way. Keep the same lot. The game places the upgrade, and the district map shows the installed tag.
 
-Define a passenger line with a `type=route` relation, its passenger mode such as `route=bus`, and platform node members in travel order. A cross-boundary line supplies the bounds needed to edit it.
+Find stops and routes with `query_osm` using `kind=stop` or `kind=route`. Filter by `transport_type` and use the returned bounds for a district read. A route query also shows vehicles and usage. Define a passenger line with a `type=route` relation, its passenger mode such as `route=bus`, and platform node members in travel order. A cross-boundary line supplies the bounds needed to edit it.
 
 A successful edit returns the current file and revision, including the city's assigned IDs. `observedChanges` is the OsmChange from the original read to the game result. For roads, junctions, buildings, stops and passenger lines the `realized` field maps submitted references to the resulting features. Physical demolition requires demolition permission. Withdrawing a passenger service or clearing zoning uses construction permission. On a revision conflict, reread the district and reapply the intended change to the new file. Each successful read or edit keeps a `district.osm` attachment in the city recording.
 
