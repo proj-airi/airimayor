@@ -35,6 +35,22 @@ namespace CS2MCP
             string view = request.Query.TryGetValue("view", out string selectedView) ? selectedView : "features";
             if (view != "features" && (view != "topology" || buildings || districts || CityOsmTransportWays.IsTransport(filter)))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose features, or topology for a street or utility network.");
+            if (request.Query.TryGetValue("road_classes", out string requestedRoadClasses)
+                && (filter != TypedNetworkKinds.Road || view != "features"))
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Use road_classes when finding roads.");
+            if (request.Query.TryGetValue("building_types", out string requestedBuildingTypes) && !buildings)
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Use building_types when finding buildings.");
+            CityOsmQueryTypes roadClasses;
+            CityOsmQueryTypes buildingTypes;
+            try
+            {
+                roadClasses = CityOsmQueryTypes.RoadClasses(requestedRoadClasses);
+                buildingTypes = CityOsmQueryTypes.BuildingTypes(requestedBuildingTypes);
+            }
+            catch (FormatException error)
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, error.Message);
+            }
             request.Query.TryGetValue("query", out string search);
             request.Query.TryGetValue("role", out string role);
             request.Query.TryGetValue("operational_area", out string area);
@@ -58,10 +74,10 @@ namespace CS2MCP
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "The result limit is 1 to 64.");
             var district = new Bounds2(bounds.xy, bounds.zw);
             IEnumerable<(float Rank, int Id, object Item)> matches;
-            if (buildings) matches = OsmBuildingRows(district, search, role, area);
+            if (buildings) matches = OsmBuildingRows(district, buildingTypes, search, role, area);
             else if (districts) matches = OsmAdministrativeRows(bounds, search);
             else if (view == "topology") matches = OsmTopologyRows(district, filter, deadEnds);
-            else matches = OsmNetworkRows(district, filter, search, sort);
+            else matches = OsmNetworkRows(district, filter, roadClasses, search, sort);
             var rows = new List<(float Rank, int Id, object Item)>(limit);
             int total = 0;
             foreach (var row in matches)
@@ -86,7 +102,8 @@ namespace CS2MCP
             });
         }
 
-        private IEnumerable<(float Rank, int Id, object Item)> OsmBuildingRows(Bounds2 bounds, string search, string role, string area)
+        private IEnumerable<(float Rank, int Id, object Item)> OsmBuildingRows(
+            Bounds2 bounds, CityOsmQueryTypes types, string search, string role, string area)
         {
             var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
             var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
@@ -96,6 +113,8 @@ namespace CS2MCP
             {
                 if (!EntityManager.Exists(entity) || !lots.MatchesIgnoreFilter(entity)
                     || !TryOsmBuildingLot(entity, bounds, out Entity prefab, out Transform transform, out float2 lot, out Quad2 footprint)) continue;
+                string buildingType = CityOsmQueryTypes.BuildingType(OsmBuildingKind(prefab));
+                if (!types.Includes(buildingType)) continue;
                 string asset = PrefabDisplayName(prefabs, prefab);
                 names.TryGetCustomName(entity, out string name);
                 if (!MatchesOsmName(search, name, asset)) continue;
@@ -110,7 +129,7 @@ namespace CS2MCP
                     wayId = CityOsm.NativeId(entity.Index),
                     entity = new { index = entity.Index, version = entity.Version },
                     prefab = asset,
-                    name, roles, bounds = OsmQueryBounds(MathUtils.Bounds(footprint)),
+                    name, buildingType, roles, bounds = OsmQueryBounds(MathUtils.Bounds(footprint)),
                     capabilities = new
                     {
                         operationalArea = storage || extractor, storageArea = storage, extractorArea = extractor,
@@ -123,21 +142,23 @@ namespace CS2MCP
             }
         }
 
-        private IEnumerable<(float Rank, int Id, object Item)> OsmNetworkRows(Bounds2 bounds, TypedNetworkKinds kind, string search, string sort)
+        private IEnumerable<(float Rank, int Id, object Item)> OsmNetworkRows(
+            Bounds2 bounds, TypedNetworkKinds kind, CityOsmQueryTypes roadClasses, string search, string sort)
         {
             var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
             var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
             var streets = new Dictionary<Entity, string>();
-            var assets = new Dictionary<Entity, (string Name, object Road)>();
+            var assets = new Dictionary<Entity, (string Name, string RoadClass, object Road)>();
             foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(bounds))
             {
                 if (kinds != kind && !TypedNetworkMath.MatchesFilter(kinds, kind)) continue;
                 if (!assets.TryGetValue(prefab, out var asset))
                 {
-                    asset = (PrefabDisplayName(prefabs, prefab), null);
+                    asset = (PrefabDisplayName(prefabs, prefab), null, null);
                     if (kind == TypedNetworkKinds.Road)
                     {
                         RoadPrefabFacts facts = ReadRoadPrefabFacts(prefab, prefabs);
+                        asset.RoadClass = facts.RoadClass;
                         asset.Road = new
                         {
                             roadClass = facts.RoadClass, speedKmh = facts.SpeedKmh, carLanes = facts.CarLanes,
@@ -146,6 +167,7 @@ namespace CS2MCP
                     }
                     assets.Add(prefab, asset);
                 }
+                if (!roadClasses.Includes(asset.RoadClass)) continue;
                 string name = kind == TypedNetworkKinds.Road ? OsmStreetName(entity, names, streets) : null;
                 if (!MatchesOsmName(search, name, asset.Name)) continue;
                 float distance = MathUtils.Distance(curve.m_Bezier.xz, (bounds.min + bounds.max) * 0.5f, out float t);

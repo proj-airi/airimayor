@@ -181,7 +181,7 @@
     },
     {
       "name": "query_osm",
-      "description": "Find existing buildings, administrative districts, roads, footways, tracks and utilities. Read traffic and electricity load or locate road and utility connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
+      "description": "Find existing buildings, administrative districts, roads, footways, tracks and utilities. Choose a network kind, road classes, building uses or a service role for the task. Read traffic and electricity load or locate road and utility connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -223,6 +223,24 @@
               "topology"
             ],
             "description": "Default features. Topology reports road or utility network findings."
+          },
+          "road_classes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": ["highway", "large", "medium", "minor", "unknown"]
+            },
+            "description": "Match any selected road class when kind=road and view=features."
+          },
+          "building_types": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": ["residential", "commercial", "industrial", "office", "school", "other"]
+            },
+            "description": "Match any selected building use when kind=building. Use role for services such as healthcare or garbage."
           },
           "query": {
             "type": "string",
@@ -305,6 +323,14 @@
         {
           "key": "view",
           "arg": "view"
+        },
+        {
+          "key": "road_classes",
+          "arg": "road_classes"
+        },
+        {
+          "key": "building_types",
+          "arg": "building_types"
         },
         {
           "key": "query",
