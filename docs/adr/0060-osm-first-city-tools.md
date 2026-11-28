@@ -4,7 +4,7 @@ An agent can design a whole block when it can read, change and compare the same 
 
 ## What the agent reads
 
-The complete district file carries geometry, shared nodes, editable properties and relationships. An existing road way identifies one native segment. Its local OSM ID supports references between elements. Its read-only `airimayor:entity` carries the native index and generation for this city load. Splitting a road can produce several segments. The edit result should associate the submitted reference with all realized references in the city's readback so the agent can continue editing the right pieces.
+The complete district file carries geometry, shared nodes, editable properties and relationships. An existing road way identifies one native segment. Its local OSM ID supports references between elements. Its read-only `airimayor:entity` carries the native index and generation for this city load. Splitting a road can produce several segments. The edit result links each submitted reference to its realized references in the city. It returns the observed OsmChange from the original read to the game result.
 
 A coordinate query can also return matching places and bounds, dated observations and topology findings. Only a complete district read supplies a revision for full-file replacement. Filtered or zoomed-out results cannot imply deletion by omission. Traffic and electricity measurements carry the observation time and the measured feature identity. Changes to those readings do not invalidate a street edit.
 

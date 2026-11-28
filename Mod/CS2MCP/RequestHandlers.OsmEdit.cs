@@ -22,7 +22,7 @@ namespace CS2MCP
             List<CityOsmEditItem> changes = CityOsmEdit.Changes(current, target, bounds);
             if (changes.Count == 0)
             {
-                return OsmFileResponse(bounds, before);
+                return OsmFileResponse(bounds, before, editBase: before);
             }
             var areas = PlanOsmAreas(bounds, before, after, changes);
 
@@ -204,7 +204,7 @@ namespace CS2MCP
                 var remaining = new HashSet<string>(features.Select(group => group.Key.Item2));
                 if (!MapOsmAreaResults(areas, district, matches)) return null;
                 return deletions.Concat(routes.Where(route => route.Remove).Select(route => route.Original))
-                    .Any(entity => remaining.Contains(OsmEntityIdentity(entity))) ? null : OsmFileResponse(bounds, district, matches);
+                    .Any(entity => remaining.Contains(OsmEntityIdentity(entity))) ? null : OsmFileResponse(bounds, district, matches, before);
             }
             BridgeResponse ReadFailure(BridgeErrorKind kind, string message)
             {

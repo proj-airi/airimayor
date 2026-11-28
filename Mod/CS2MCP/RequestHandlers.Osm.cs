@@ -76,11 +76,12 @@ namespace CS2MCP
                 ? null : BridgeResponse.Error(BridgeErrorKind.Conflict, "The district changed. Read it again before editing.");
         }
 
-        private BridgeResponse OsmFileResponse(float4 bounds, OsmDocument document, object realized = null)
+        private BridgeResponse OsmFileResponse(float4 bounds, OsmDocument document, object realized = null, OsmDocument editBase = null)
         {
             string content = document.Write();
             string revision = CityOsmFile.Revision(m_System.CityLoadId, bounds, content);
-            BridgeResponse response = BridgeResponse.Json(new { revision, content, realized });
+            string observedChanges = editBase == null ? null : OsmChange.Between(editBase, document).Write();
+            BridgeResponse response = BridgeResponse.Json(new { revision, content, realized, observedChanges });
             response.Files = new Dictionary<string, byte[]> { ["district.osm"] = Encoding.UTF8.GetBytes(content) };
             return response;
         }
