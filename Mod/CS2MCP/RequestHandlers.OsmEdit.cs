@@ -17,6 +17,9 @@ namespace CS2MCP
     {
         private BridgeResponse ApplyOsmEdit(BridgeRequest request, float4 bounds, OsmDocument before, OsmDocument after, bool preview)
         {
+            OsmTerrainLevel? grade = CityOsmTerrain.Read(before, after, bounds);
+            if (grade is OsmTerrainLevel level) return ApplyOsmTerrainEdit(request, bounds, before, after, level, preview);
+
             string proposedChanges = preview ? OsmChange.Between(before, after).Write() : null;
             BridgeResponse Review(IReadOnlyList<(OsmBuildingPlacement Placement, Entity Entity)> objects)
             {

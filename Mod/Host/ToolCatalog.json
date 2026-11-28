@@ -473,7 +473,7 @@
     },
     {
       "name": "edit_osm",
-      "description": "Edit a district using the bounds and revision from read_osm, with full OSM XML or an OsmChange patch. Roads share junction nodes. Use airimayor:prefab to request a named asset. Standalone benches and waste baskets use amenity=bench or amenity=waste_basket nodes. Set directional road upgrades, edit zoning or operational boundaries, or order platform members in a passenger route. Physical removal requires demolition permission. A successful edit returns the district, its revision and the observed OsmChange from the game.",
+      "description": "Edit a district using the bounds and revision from read_osm, with full OSM XML or an OsmChange patch. Roads share junction nodes. Use airimayor:prefab to request a named asset. Standalone benches and waste baskets use amenity=bench or amenity=waste_basket nodes. Set directional road upgrades, edit zoning or operational boundaries, or order platform members in a passenger route. Physical removal requires demolition permission. To level ground, add a closed way with area=yes, airimayor:terrain=level and airimayor:target_height in city meters. Preview the grading by itself, then use the returned terrain revision to apply it. A successful edit returns the district, its revision and the observed OsmChange from the game.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -504,6 +504,10 @@
           "preview": {
             "type": "boolean",
             "description": "Validate the complete proposal with the game before construction. Returns proposedChanges and facility upgrade placements with their previewed placement costs. Submit the same bounds, revision and patch with preview omitted to apply after review."
+          },
+          "terrain_revision": {
+            "type": "string",
+            "description": "Terrain revision from previewing this exact grading proposal. Required when applying a terrain edit."
           }
         },
         "required": [
@@ -540,6 +544,10 @@
         {
           "key": "preview",
           "arg": "preview"
+        },
+        {
+          "key": "terrainRevision",
+          "arg": "terrain_revision"
         }
       ],
       "body": "content",

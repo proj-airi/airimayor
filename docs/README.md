@@ -67,6 +67,7 @@ Vocabulary: [`CONTEXT.md`](../CONTEXT.md). Current open work: [`open-work.md`](.
 | [0059-coordinate-addressed-osm-editing.md](./adr/0059-coordinate-addressed-osm-editing.md) | Read and edit a live district as OSM by its city coordinates |
 | [0060-osm-first-city-tools.md](./adr/0060-osm-first-city-tools.md) | Local OSM for placed features and observations, with a separate catalog of construction assets |
 | [0061-read-only-city-map.md](./adr/0061-read-only-city-map.md) | Draw a city map with SkiaSharp from a city map snapshot |
+| [0062-osm-terrain-grading.md](./adr/0062-osm-terrain-grading.md) | Level terrain with a revision-checked local OSM edit |
 
 ## Guide
 

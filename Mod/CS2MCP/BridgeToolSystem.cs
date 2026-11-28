@@ -56,6 +56,11 @@ namespace CS2MCP
             {
                 return;
             }
+            if (m_OsmTerrain != null)
+            {
+                StopOsmTerrain(BridgeErrorKind.Timeout, "The terrain edit did not finish in time.");
+                return;
+            }
             CompletePending(OsmFailure(BridgeErrorKind.Timeout, m_Stage == Stage.Readback
                 ? "The city received the edit but its result could not be confirmed. Read the district again before editing."
                 : "Construction did not finish in time. Read the site before retrying."));
@@ -68,6 +73,7 @@ namespace CS2MCP
         {
             base.OnCreate();
             CreateOsmQueries();
+            CreateOsmTerrainQueries();
             m_CityConfigurationSystem = base.World.GetOrCreateSystemManaged<CityConfigurationSystem>();
             m_TempRouteQuery = GetEntityQuery(
                 ComponentType.ReadOnly<Route>(),
@@ -97,8 +103,9 @@ namespace CS2MCP
         [Preserve]
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
-            if (m_OsmEdit == null) applyMode = ApplyMode.None;
-            else UpdateOsmEdit();
+            if (m_OsmTerrain != null) UpdateOsmTerrain();
+            else if (m_OsmEdit != null) UpdateOsmEdit();
+            else applyMode = ApplyMode.None;
             return inputDeps;
         }
 
@@ -233,6 +240,7 @@ namespace CS2MCP
         {
             m_Stage = Stage.Idle;
             m_OsmEdit = null;
+            ResetOsmTerrain();
             m_PendingRequest = null;
             if (m_ToolSystem.activeTool == this)
             {

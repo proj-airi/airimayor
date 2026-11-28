@@ -104,6 +104,10 @@ _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 A read-only view of the loaded city for drawing a map in city coordinates. It represents what appeared at the time and place of the read.
 _Avoid_: the editable district, a city save
 
+**Terrain grading**:
+An earthwork operation that changes the city's ground elevations inside a drawn area.
+_Avoid_: moving a road to a different height, drawing an observed shoreline
+
 **Ground**:
 The road level that follows the terrain.
 _Avoid_: an implied bridge at every crossing

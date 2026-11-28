@@ -97,7 +97,9 @@ namespace CS2MCP
         [Preserve]
         protected override void OnStopRunning()
         {
-            if (m_OsmEdit != null)
+            if (m_OsmTerrain != null)
+                StopOsmTerrain(BridgeErrorKind.Conflict, "The active tool changed during the terrain edit.");
+            else if (m_OsmEdit != null)
             {
                 string reason = m_Stage == Stage.Readback
                     ? "The city received the edit before the active tool changed. Read the district again."
