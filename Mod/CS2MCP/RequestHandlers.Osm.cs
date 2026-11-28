@@ -36,6 +36,11 @@ namespace CS2MCP
             {
                 return BridgeResponse.Error(BridgeErrorKind.Conflict, "City construction and demolition are disabled.");
             }
+            bool preview = false;
+            if (request.Query.ContainsKey("preview") && !request.TryGetBool("preview", out preview))
+            {
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Set preview to true or false.");
+            }
             OsmDocument current = ReadOsmDocument(bounds);
             if (!request.Query.TryGetValue("revision", out string revision)
                 || CityOsmFile.Revision(m_System.CityLoadId, bounds, current.Write()) != revision)
@@ -45,7 +50,7 @@ namespace CS2MCP
             try
             {
                 OsmDocument edited = current.Edit(request.Body);
-                return ApplyOsmEdit(request, bounds, current, edited);
+                return ApplyOsmEdit(request, bounds, current, edited, preview);
             }
             catch (FormatException exception)
             {

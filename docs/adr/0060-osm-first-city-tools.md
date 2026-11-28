@@ -25,6 +25,8 @@ The catalog and road editor use the same road class and default car-lane count. 
 | `list_buildings`, `list_networks` | Search placed features by geography, kind, service role and capability. Rank traffic or electrical load on request and return OSM references and bounds for the next edit. |
 | `inspect_network_topology` | Return findings at the implicated ways and nodes. Compute reachability against the city graph before filtering by the requested bounds. A road that reaches an outside connection through another district is connected. |
 
+A player can review an edit with the same bounds, revision and content. The game validates the proposal and discards its preview. The review returns the proposed OsmChange and the native preview pose, parent way and placement cost of each facility upgrade. Submit the reviewed patch against that revision to build. The game runs validation again and returns the observed change after construction.
+
 Standalone footways use `highway=footway`. Standalone tracks use `railway=rail`, `railway=tram`, or `railway=subway`. Resolve their assets from the native path or track type. Keep road traffic and road-side upgrades on streets.
 
 Standalone trees use [`natural=tree`](https://wiki.openstreetmap.org/wiki/Tag:natural=tree). Standalone street lamps use [`highway=street_lamp`](https://wiki.openstreetmap.org/wiki/Tag:highway=street_lamp). Give each point its own node. Lights and trees that belong to a street remain part of that street.

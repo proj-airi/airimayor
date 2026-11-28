@@ -20,11 +20,22 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+export function isOsmPreview(tool: string, data: Record<string, unknown>): boolean {
+  if (tool !== 'edit_osm' || typeof data.arguments !== 'string') return false
+  try {
+    const args: unknown = JSON.parse(data.arguments)
+    if (!object(args)) return false
+    return args.preview === true || (typeof args.preview === 'string' && args.preview.trim().toLowerCase() === 'true')
+  } catch {
+    return false
+  }
+}
+
 export function judgeWrite(
   tool: string,
   data: Record<string, unknown>,
 ): { verdict?: Verdict; message: string; invalid?: boolean } {
-  if (!(tool in WITNESS_FIELDS) && !UNSEEN.has(tool)) return { message: '' }
+  if ((!(tool in WITNESS_FIELDS) && !UNSEEN.has(tool)) || isOsmPreview(tool, data)) return { message: '' }
   const claim = data.success ? 'succeeded' : 'failed'
   if (UNSEEN.has(tool)) return { verdict: 'undetermined', message: `${claim}; the ledger does not see this write` }
   if (!data.evidence) return { verdict: 'undetermined', message: `${claim}; the record holds no ledger evidence` }

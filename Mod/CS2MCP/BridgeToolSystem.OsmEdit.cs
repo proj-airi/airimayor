@@ -53,6 +53,8 @@ namespace CS2MCP
             public Func<BridgeResponse> CheckCurrent;
             public Func<IEnumerable<(OsmKind Kind, long Source, Entity Entity)>, BridgeResponse> Readback;
             public Func<BridgeErrorKind, string, BridgeResponse> ReadFailure;
+            public Func<IReadOnlyList<(OsmBuildingPlacement Placement, Entity Entity)>, BridgeResponse> Review;
+            public BridgeResponse ReviewResult;
             public bool NamesApplied;
             public readonly List<OsmRoadWitness> Edges = new List<OsmRoadWitness>();
             public readonly Dictionary<Entity, (long Id, float3 Position)> Junctions = new Dictionary<Entity, (long, float3)>();
@@ -76,7 +78,8 @@ namespace CS2MCP
             IReadOnlyList<OsmBuildingPlacement> buildings, IReadOnlyList<Entity> deletions,
             IReadOnlyList<OsmTransitEdit> routes, OsmAreaPlan areas, Func<BridgeResponse> checkCurrent,
             Func<IEnumerable<(OsmKind Kind, long Source, Entity Entity)>, BridgeResponse> readback,
-            Func<BridgeErrorKind, string, BridgeResponse> readFailure)
+            Func<BridgeErrorKind, string, BridgeResponse> readFailure,
+            Func<IReadOnlyList<(OsmBuildingPlacement Placement, Entity Entity)>, BridgeResponse> review)
         {
             if (IsBusy) return false;
             m_OsmEdit = new OsmEdit
@@ -84,7 +87,7 @@ namespace CS2MCP
                 CityLoad = BridgeSystem.Instance.CityLoadId,
                 Bounds = bounds,
                 Roads = roads, Buildings = buildings, Deletions = deletions, Routes = routes, Areas = areas,
-                CheckCurrent = checkCurrent, Readback = readback, ReadFailure = readFailure
+                CheckCurrent = checkCurrent, Readback = readback, ReadFailure = readFailure, Review = review
             };
             m_PendingRequest = request;
             Activate();
@@ -112,6 +115,7 @@ namespace CS2MCP
                 if (m_Stage == Stage.Finish)
                 {
                     applyMode = ApplyMode.None;
+                    if (m_OsmEdit.ReviewResult != null) CompletePending(m_OsmEdit.ReviewResult);
                     Deactivate();
                     return;
                 }
@@ -172,6 +176,13 @@ namespace CS2MCP
                 CaptureOsmPreview();
                 CheckOsmNames(preview: true);
                 CheckOsmAreaPreview();
+                if (m_OsmEdit.Review != null)
+                {
+                    m_OsmEdit.ReviewResult = m_OsmEdit.Review(m_OsmEdit.Objects);
+                    applyMode = ApplyMode.Clear;
+                    m_Stage = Stage.Finish;
+                    return;
+                }
                 m_Stage = Stage.Readback;
                 PaintOsmZoneCells();
                 applyMode = nativeDefinitions ? ApplyMode.Apply : ApplyMode.None;

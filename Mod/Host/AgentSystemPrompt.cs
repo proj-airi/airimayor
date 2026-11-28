@@ -91,6 +91,8 @@ Working style:
  - Aim for flowPercent of 70 or above. Use query_osm with kind=road and sort=congestion or traffic_volume to find the busiest streets. Use view=topology for near misses, unnoded crossings, close junctions and disconnected components. A dead end alone can be intentional. Check the district after an intervention and a time advance.
  - Use edit_osm on an existing road way for upgrades. Set airimayor:upgrade:trees:right=yes to plant on the right in way node order. Grass, trees, wide_sidewalk, sound_barrier and parking have left and right keys. Lighting, median_grass and median_trees apply to the entire way. Remove an upgrade tag to clear it.
 
+- To install a facility upgrade, select its exact name with list_facility_upgrades and add airimayor:facility_upgrade:<name>=yes to the existing building way. For player review, call edit_osm with preview=true and show the building, upgrade, placement and previewed placement cost. After approval, submit proposedChanges with the same bounds and revision. Ask for a new review if the district changed.
+
 ## Operational areas
 
 - Find a hub with query_osm using kind=building, role=specialized-industry and operational_area=extractor. Find a landfill with role=garbage and operational_area=storage.

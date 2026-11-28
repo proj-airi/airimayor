@@ -256,6 +256,19 @@ test('missing anchors, invalid results, failed reads and malformed history canno
   assert.equal(view.warnings.length, 2)
 })
 
+test('a district proposal preview stays out of construction events', async () => {
+  const trace = fixture()
+  const content = '<osmChange version="0.6"/>'
+  trace.tool('edit_osm', 10, { preview: true, proposedChanges: content }, {
+    arguments: JSON.stringify({ preview: true, revision: 'current', content }),
+  })
+  const applied = trace.tool('edit_osm', 20, { observedChanges: content }, {
+    arguments: JSON.stringify({ revision: 'current', content }),
+  })
+  const { session, end } = await trace.open()
+  assert.deepEqual(session.city(end).events.map((event) => event.index), [applied])
+})
+
 test('district maps and screenshots follow the replay cursor and open the original files', async () => {
   const trace = fixture()
   const xml = '<osm version="0.6"/>',

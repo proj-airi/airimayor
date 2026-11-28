@@ -1,7 +1,7 @@
 import type { Recording } from './viewer-model'
 import { sampleCityPoints } from './city-chart'
 import { isAsset, isObject, payload } from './viewer-model'
-import { judgeWrite, LEDGER_FIELDS, type Verdict } from './write-evidence'
+import { isOsmPreview, judgeWrite, LEDGER_FIELDS, type Verdict } from './write-evidence'
 
 export type CityCategory =
   | 'Population'
@@ -211,7 +211,7 @@ export class CityRecording {
             )
         }
       }
-      if (Object.hasOwn(writeLabels, tool)) {
+      if (Object.hasOwn(writeLabels, tool) && !isOsmPreview(tool, data)) {
         const args = parse(data.arguments, 'arguments')
         let label = writeLabels[tool]
         if (tool === 'set_budget')

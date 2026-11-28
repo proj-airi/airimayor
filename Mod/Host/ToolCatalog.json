@@ -413,6 +413,10 @@
           "content": {
             "type": "string",
             "description": "Complete edited OSM XML or an OsmChange XML patch"
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Validate the complete proposal with the game before construction. Returns proposedChanges and facility upgrade placements with their previewed placement costs. Submit the same bounds, revision and patch with preview omitted to apply after review."
           }
         },
         "required": [
@@ -445,6 +449,10 @@
         {
           "key": "revision",
           "arg": "revision"
+        },
+        {
+          "key": "preview",
+          "arg": "preview"
         }
       ],
       "body": "content",

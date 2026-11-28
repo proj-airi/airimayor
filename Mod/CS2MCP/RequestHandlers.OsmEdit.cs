@@ -15,14 +15,26 @@ namespace CS2MCP
 {
     public sealed partial class RequestHandlers
     {
-        private BridgeResponse ApplyOsmEdit(BridgeRequest request, float4 bounds, OsmDocument before, OsmDocument after)
+        private BridgeResponse ApplyOsmEdit(BridgeRequest request, float4 bounds, OsmDocument before, OsmDocument after, bool preview)
         {
+            string proposedChanges = preview ? OsmChange.Between(before, after).Write() : null;
+            BridgeResponse Review(IReadOnlyList<(OsmBuildingPlacement Placement, Entity Entity)> objects)
+            {
+                return BridgeResponse.Json(new
+                {
+                    preview = true,
+                    revision = request.Query["revision"],
+                    proposedChanges,
+                    facilityUpgrades = ReadOsmUpgradePreviews(before, objects)
+                });
+            }
+
             CityOsmGeometry current = CityOsm.Import(before);
             CityOsmGeometry target = CityOsm.Import(after);
             List<CityOsmEditItem> changes = CityOsmEdit.Changes(current, target, bounds);
             if (changes.Count == 0)
             {
-                return OsmFileResponse(bounds, before, editBase: before);
+                return preview ? Review(Array.Empty<(OsmBuildingPlacement, Entity)>()) : OsmFileResponse(bounds, before, editBase: before);
             }
             var areas = PlanOsmAreas(bounds, before, after, changes);
 
@@ -221,7 +233,7 @@ namespace CS2MCP
                 response.Files = new Dictionary<string, byte[]> { ["district.osm"] = System.Text.Encoding.UTF8.GetBytes(content) };
                 return response;
             }
-            return tool.TryQueueOsmEdit(request, bounds, roads, buildings, deletions, routes, areas, CheckCurrent, Readback, ReadFailure)
+            return tool.TryQueueOsmEdit(request, bounds, roads, buildings, deletions, routes, areas, CheckCurrent, Readback, ReadFailure, preview ? Review : null)
                 ? null : BridgeResponse.Error(BridgeErrorKind.Conflict, "Another city operation is in progress.");
         }
 

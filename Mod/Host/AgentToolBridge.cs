@@ -58,6 +58,12 @@ namespace airimayor.Host
                 return Error($"invalid arguments for {tool.Name}: {airimayor.Agent.SessionRecord.RedactSecrets(e.Message)}");
             }
 
+            if (tool.Name == "edit_osm" && query.TryGetValue("preview", out string preview)
+                && bool.TryParse(preview, out bool review) && review)
+            {
+                write = false;
+            }
+
             bool advance = string.Equals(tool.Name, "set_simulation", StringComparison.Ordinal) &&
                 query.TryGetValue("action", out string action) &&
                 string.Equals(action, "advance", StringComparison.Ordinal);

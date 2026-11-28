@@ -201,6 +201,31 @@ namespace CS2MCP
             return names;
         }
 
+        private List<object> ReadOsmUpgradePreviews(OsmDocument before,
+            IReadOnlyList<(OsmBuildingPlacement Placement, Entity Entity)> objects)
+        {
+            var upgrades = new List<object>();
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            foreach (var (placement, entity) in objects)
+            {
+                if (placement.UpgradeOwner == Entity.Null) continue;
+                Transform pose = EntityManager.GetComponentData<Transform>(entity);
+                float3 forward = math.mul(pose.m_Rotation, new float3(0f, 0f, 1f));
+                OsmWay owner = before.Ways[placement.WayId];
+                upgrades.Add(new
+                {
+                    owner = "way/" + owner.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    building = CityOsm.Tag(owner, "name") ?? GetEntityPrefabName(prefabs, placement.UpgradeOwner),
+                    asset = prefabs.GetPrefab<PrefabBase>(placement.Prefab).name,
+                    kind = EntityManager.HasComponent<BuildingExtensionData>(placement.Prefab) ? "extension" : "sub-building",
+                    position = new { x = pose.m_Position.x, y = pose.m_Position.y, z = pose.m_Position.z },
+                    headingDegrees = math.degrees(math.atan2(forward.x, forward.z)),
+                    placementCost = EntityManager.GetComponentData<Game.Tools.Temp>(entity).m_Cost,
+                });
+            }
+            return upgrades;
+        }
+
         private OsmBuildingPlacement PlanOsmFacilityUpgrade(Entity building, long wayId, string asset, float4 bounds)
         {
             if (building == Entity.Null || !EntityManager.HasBuffer<InstalledUpgrade>(building))
@@ -209,9 +234,9 @@ namespace CS2MCP
             if (!TryFindPrefabByName(ServiceUpgradePrefabQuery, asset, out Entity upgrade, out PrefabBase prefab)
                 || !string.Equals(prefab.name, asset, StringComparison.Ordinal) || !IsListedFacilityUpgrade(upgrade)
                 || !UpgradeBelongsToBuilding(buildingPrefab, upgrade))
-                throw new FormatException($"Choose an upgrade for building way {wayId} from list_facility_upgrades.");
+                throw new FormatException($"Facility upgrade '{asset}' is unavailable for building way {wayId}. Check list_facility_upgrades.");
             if (IsLocked(upgrade))
-                throw new FormatException($"Facility upgrade '{asset}' is locked.");
+                throw new FormatException($"Facility upgrade '{asset}' is locked for building way {wayId}.");
             ResolveUpgradePose(building, upgrade, out float3 position, out quaternion rotation);
             CityOsmEdit.RequireInside(wayId, position, bounds);
             return new OsmBuildingPlacement { Kind = OsmKind.Way, WayId = wayId, Prefab = upgrade, UpgradeOwner = building, Position = position, Rotation = rotation };
