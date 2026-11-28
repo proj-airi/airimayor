@@ -313,6 +313,29 @@ test('district maps and screenshots follow the replay cursor and open the origin
   assert.deepEqual(new Uint8Array(await (await session.cityFile(second, 'image.png'))!.blob.arrayBuffer()), new Uint8Array([137, 80, 78, 71]))
 })
 
+test('a recorded city map exposes both files and only the matching terrain', async () => {
+  const trace = fixture()
+  const xml = '<osm version="0.6" generator="airimayor-map"/>'
+  const terrain = '{"layout":{"columns":2,"rows":2},"heights":[1,2,3,4]}'
+  const map = new Blob([xml])
+  const elevations = new Blob([terrain])
+  const mapAsset = { $asset: 'assets/map.osm', mediaType: 'application/xml', bytes: map.size }
+  const terrainAsset = { $asset: 'assets/terrain.json', mediaType: 'application/json', bytes: elevations.size }
+  trace.assets.push({ path: 'city/assets/map.osm', file: map }, { path: 'city/assets/terrain.json', file: elevations })
+  const first = trace.tool('read_osm', 10, { view: 'map', content: xml }, { files: [
+    { name: 'map.osm', asset: mapAsset }, { name: 'terrain.json', asset: terrainAsset },
+  ] })
+  const second = trace.tool('read_osm', 20, { view: 'map', content: xml }, { files: [{ name: 'map.osm', asset: mapAsset }] })
+  const { session } = await trace.open()
+
+  assert.deepEqual(session.city(first).media.map((item) => [item.index, item.name]), [
+    [first, 'map.osm'], [first, 'terrain.json'],
+  ])
+  assert.equal(await (await session.cityFile(first, 'map.osm'))!.blob.text(), xml)
+  assert.equal(await (await session.cityFile(first, 'terrain.json'))!.blob.text(), terrain)
+  assert.deepEqual(session.city(second).media.map((item) => [item.index, item.name]), [[second, 'map.osm']])
+})
+
 test('long city series keep all readings in bounded pages while chart points and action markers remain bounded', async () => {
   const trace = fixture()
   for (let frame = 1; frame <= 1500; frame++) {

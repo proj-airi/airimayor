@@ -11,9 +11,24 @@ namespace CS2MCP
         {
             OsmDocument map = ReadOsmDocument(bounds, new Dictionary<int, EdgeGeometry>());
             CityOsmFile.MarkMap(map);
+            OsmTerrainHeightfield? heightfield = ReadOsmSurface(map, bounds);
             string content = map.Write();
-            BridgeResponse response = BridgeResponse.Json(new { view = "map", content });
-            response.Files = new Dictionary<string, byte[]> { ["map.osm"] = Encoding.UTF8.GetBytes(content) };
+            var files = new Dictionary<string, byte[]> { ["map.osm"] = Encoding.UTF8.GetBytes(content) };
+            object terrain = null;
+            if (heightfield is OsmTerrainHeightfield grid)
+            {
+                const string name = "terrain.json";
+                var layout = new
+                {
+                    xMin = grid.XMin, zMin = grid.ZMin, xMax = grid.XMax, zMax = grid.ZMax,
+                    columns = grid.Columns, rows = grid.Rows, xStep = grid.XStep, zStep = grid.ZStep,
+                    sampleOrder = grid.SampleOrder, unit = "city meters",
+                };
+                terrain = new { file = name, layout };
+                files.Add(name, BridgeResponse.Json(new { layout, heights = grid.Heights }).Body);
+            }
+            BridgeResponse response = BridgeResponse.Json(new { view = "map", content, terrain });
+            response.Files = files;
             return response;
         }
     }

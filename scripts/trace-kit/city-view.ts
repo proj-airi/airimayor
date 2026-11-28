@@ -255,9 +255,8 @@ export class CityRecording {
         for (const file of data.files) {
           if (!isObject(file) || !isAsset(file.asset) || typeof file.name !== 'string') continue
           const image = file.asset.mediaType.startsWith('image/')
-          if (image || file.name === 'district.osm') {
+          if (image || ['district.osm', 'map.osm', 'terrain.json'].includes(file.name)) {
             this.media.push({ index, tool, name: file.name, image, ...stamp })
-            break
           }
         }
       }
@@ -591,6 +590,7 @@ export class CityRecording {
       if (item.index > cursor || (frame !== undefined && (item.frame === undefined || item.frame > frame))) continue
       latestFiles.set(item.image ? item.tool : item.name, item)
     }
+    if (latestFiles.get('terrain.json')?.index !== latestFiles.get('map.osm')?.index) latestFiles.delete('terrain.json')
     return {
       index: cursor,
       overview,

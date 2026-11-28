@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CityCategory, CityMetric, CityQuery, CityView } from './city-view'
+import type { CityCategory, CityMedia, CityMetric, CityQuery, CityView } from './city-view'
 import type { ViewerClient } from './viewer-client'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import {
@@ -27,7 +27,7 @@ const result = shallowRef<CityView>(),
   chartLimit = ref<number>(),
   error = ref(''),
   loading = ref(false),
-  fileIndex = ref<number>(),
+  fileSelection = ref<string>(),
   fileUrl = ref('')
 let desired: { client: ViewerClient; position: number; query: CityQuery; serial: number } | undefined,
   pending = false,
@@ -172,15 +172,23 @@ const panels = computed(() =>
     },
   ].filter((item) => item.available),
 )
+const cityFileKey = (item: CityMedia) => item.index + '/' + item.name
+const cityFileLabel = (item: CityMedia) => {
+  if (item.image) return item.tool === 'screenshot' ? 'Screenshot' : item.name
+  if (item.name === 'map.osm') return 'City map'
+  if (item.name === 'terrain.json') return 'Terrain elevations'
+  return 'District map'
+}
 watch(
   () => result.value?.media,
   (media) => {
-    if (!media?.some((item) => item.index === fileIndex.value)) fileIndex.value = media?.[0]?.index
+    if (!media?.some((item) => cityFileKey(item) === fileSelection.value))
+      fileSelection.value = media?.length ? cityFileKey(media[0]) : undefined
   },
 )
-const selectedFile = computed(() => result.value?.media.find((item) => item.index === fileIndex.value))
+const selectedFile = computed(() => result.value?.media.find((item) => cityFileKey(item) === fileSelection.value))
 watch(
-  () => [props.client, panel.value, fileIndex.value, selectedFile.value?.name] as const,
+  () => [props.client, panel.value, selectedFile.value?.index, selectedFile.value?.name] as const,
   async ([client, active, index, name], _old, onCleanup) => {
     let current = true,
       url = ''
@@ -440,18 +448,18 @@ function chooseMetric(card: CityMetric) {
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <select
-            v-model="fileIndex"
+            v-model="fileSelection"
             aria-label="City file"
             class="max-w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
           >
-            <option v-for="item in result.media" :key="item.index" :value="item.index">
-              {{ item.image ? (item.tool === 'screenshot' ? 'Screenshot' : item.name) : 'District map' }} ·
+            <option v-for="item in result.media" :key="cityFileKey(item)" :value="cityFileKey(item)">
+              {{ cityFileLabel(item) }} ·
               {{ cityDate(item.frame === undefined ? undefined : { frame: item.frame, gameTime: item.gameTime }) }}
             </option></select
           ><button
-            v-if="fileIndex !== undefined"
+            v-if="selectedFile"
             class="text-xs text-primary-300 hover:underline"
-            @click="emit('record', fileIndex)"
+            @click="emit('record', selectedFile.index)"
           >
             Open source record
           </button>

@@ -371,7 +371,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. The district view returns editable content and its revision. The map view returns a read-only map with bridge outlines and local crossing order. Use query_osm to locate places first.",
+      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. The district view returns editable content and its revision. The map view returns a read-only map with bridge outlines, crossing order and water areas, with a recorded terrain file where available. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
