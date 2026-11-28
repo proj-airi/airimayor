@@ -120,7 +120,16 @@ namespace CS2MCP
                 if (kinds != TypedNetworkKinds.Road)
                 {
                     source.Prefab = PrefabDisplayName(prefabs, prefab);
-                    source.Utility = kinds;
+                    if (CityOsmTransportWays.IsTransport(kinds))
+                    {
+                        source.Transport = kinds;
+                        if (EntityManager.HasComponent<Composition>(entity))
+                        {
+                            Entity deck = EntityManager.GetComponentData<Composition>(entity).m_Edge;
+                            source.Grade = ReadRoadGrade(EntityManager, deck) ?? MapGrade.Ground;
+                        }
+                    }
+                    else source.Utility = kinds;
                     roads.Add(source);
                     continue;
                 }
@@ -197,6 +206,7 @@ namespace CS2MCP
                 if (!EntityManager.Exists(entity) || !edges.MatchesIgnoreFilter(entity)) continue;
                 Entity prefab = EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab;
                 TypedNetworkKinds kinds = ClassifyNetPrefab(prefab);
+                if (kinds == TypedNetworkKinds.None) kinds = OsmTransportPrefabKind(prefab);
                 if (kinds == TypedNetworkKinds.None)
                 {
                     continue;

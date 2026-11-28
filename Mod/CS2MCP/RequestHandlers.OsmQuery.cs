@@ -28,11 +28,11 @@ namespace CS2MCP
             }
             request.Query.TryGetValue("kind", out string kind);
             bool buildings = kind == "building";
-            TypedNetworkKinds filter = TypedNetworkKinds.None;
-            if (!buildings && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, road, water, sewage or low_voltage.");
+            TypedNetworkKinds filter = CityOsmTransportWays.Kind(kind);
+            if (!buildings && filter == TypedNetworkKinds.None && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, road, footway, rail, tram, subway, water, sewage or low_voltage.");
             string view = request.Query.TryGetValue("view", out string selectedView) ? selectedView : "features";
-            if (view != "features" && (view != "topology" || buildings))
+            if (view != "features" && (view != "topology" || buildings || CityOsmTransportWays.IsTransport(filter)))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose features, or topology for a street or utility network.");
             request.Query.TryGetValue("query", out string search);
             request.Query.TryGetValue("role", out string role);
@@ -129,7 +129,7 @@ namespace CS2MCP
             var assets = new Dictionary<Entity, (string Name, object Road)>();
             foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(bounds))
             {
-                if (!TypedNetworkMath.MatchesFilter(kinds, kind)) continue;
+                if (kinds != kind && !TypedNetworkMath.MatchesFilter(kinds, kind)) continue;
                 if (!assets.TryGetValue(prefab, out var asset))
                 {
                     asset = (PrefabDisplayName(prefabs, prefab), null);

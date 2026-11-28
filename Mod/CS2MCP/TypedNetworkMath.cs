@@ -13,6 +13,10 @@ namespace CS2MCP
         Sewage = 2,
         LowVoltage = 4,
         Road = 8,
+        Footway = 16,
+        Rail = 32,
+        Tram = 64,
+        Subway = 128,
     }
 
     internal enum NetworkTopologyClass : byte

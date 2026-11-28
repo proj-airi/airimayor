@@ -97,7 +97,7 @@ The game's inventory of assets the player can select for construction, with each
 _Avoid_: the set of places already built in a city
 
 **Local OSM map**:
-An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, utility lines and building lots. Shared nodes connect ways, and platform nodes locate roadside stops.
+An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, paths, tracks, utility lines and building lots. Shared nodes connect ways, and platform nodes locate roadside stops.
 _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 
 **Ground**:
@@ -113,7 +113,7 @@ The game's ordinary placement and apply checks. The product does not bypass them
 _Avoid_: Anarchy, `force`, collision bypass
 
 **Network**:
-Roads, pipes, and cables as linear infrastructure.
+Streets, paths, tracks, pipes, and cables as linear infrastructure.
 _Avoid_: "road" as a synonym for every utility line
 
 **Typed network**:

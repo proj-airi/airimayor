@@ -272,7 +272,7 @@ namespace CS2MCP
                 throw new FormatException("A zoning polygon uses frontage on a street being removed. Read the surviving frontage after demolition.");
             foreach (var road in roads)
             {
-                if (!road.Grade.HasValue) continue;
+                if (!road.Grade.HasValue || !EntityManager.HasComponent<RoadData>(road.Prefab)) continue;
                 if (road.Original != Entity.Null && EntityManager.HasComponent<Game.Net.Curve>(road.Original)
                     && EntityManager.GetComponentData<PrefabRef>(road.Original).m_Prefab == road.Prefab)
                 {

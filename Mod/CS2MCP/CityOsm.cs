@@ -22,6 +22,7 @@ namespace CS2MCP
         public string Highway;
         public Dictionary<string, string> UpgradeTags;
         public TypedNetworkKinds Utility;
+        public TypedNetworkKinds Transport;
         public string OneWay;
         public int? Lanes;
         public double? SpeedKmh;
@@ -167,7 +168,8 @@ namespace CS2MCP
             {
                 var way = new OsmWay(NativeId(road.Index));
                 AddNativeWay(document, way, road.Entity, road.Prefab, road.Name);
-                if (road.Utility == TypedNetworkKinds.None)
+                if (CityOsmTransportWays.IsTransport(road.Transport)) CityOsmTransportWays.WriteTags(way, road.Transport);
+                else if (road.Utility == TypedNetworkKinds.None)
                 {
                     way.Tags["highway"] = road.Highway;
                     if (road.UpgradeTags != null)
@@ -292,7 +294,7 @@ namespace CS2MCP
             var junctions = new HashSet<long>();
             foreach (OsmWay way in document.Ways.Values)
             {
-                if (!IsRoad(way) && !IsUtility(way))
+                if (!IsLinearWay(way))
                 {
                     continue;
                 }
@@ -306,7 +308,7 @@ namespace CS2MCP
             }
             foreach (OsmWay way in document.Ways.Values)
             {
-                if (IsRoad(way) || IsUtility(way))
+                if (IsLinearWay(way))
                 {
                     roads.Add(ReadRoad(positions, way, junctions));
                 }
@@ -325,6 +327,8 @@ namespace CS2MCP
                 unprojected.Add("relation/" + relation.Id);
             }
         }
+
+        internal static bool IsLinearWay(OsmWay way) => IsRoad(way) || IsUtility(way) || CityOsmTransportWays.Kind(way) != TypedNetworkKinds.None;
 
         private static bool IsRoad(OsmWay way) => way.Tags.ContainsKey("highway") && Tag(way, "area") != "yes";
 

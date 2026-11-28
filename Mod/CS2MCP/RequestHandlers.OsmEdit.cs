@@ -37,7 +37,7 @@ namespace CS2MCP
             var elevations = new Dictionary<long, float>();
             foreach (CityOsmEditItem change in changes)
             {
-                if (!(change.Edited is OsmWay way) || (!way.Tags.ContainsKey("highway") && !CityOsm.IsUtility(way)))
+                if (!(change.Edited is OsmWay way) || !CityOsm.IsLinearWay(way))
                 {
                     continue;
                 }
@@ -45,7 +45,9 @@ namespace CS2MCP
                 Entity original = OsmOriginal(oldWay);
                 Entity prefab;
                 bool reverse = false;
-                if (CityOsm.IsUtility(way))
+                TypedNetworkKinds transport = CityOsmTransportWays.Kind(way);
+                if (transport != TypedNetworkKinds.None) prefab = ResolveOsmTransportWay(oldWay, way, original, transport);
+                else if (CityOsm.IsUtility(way))
                 {
                     prefab = ResolveOsmUtility(oldWay, way, original);
                 }
@@ -54,11 +56,9 @@ namespace CS2MCP
                     CityOsmEdit.CheckEditedTags(oldWay, way, OsmRoadUpgrades.EditableRoadTags);
                     prefab = ResolveOsmRoad(ref assets, oldWay, way, original, out reverse);
                     CheckOsmStreetName(oldWay, way, original, after);
-                    if (OsmRoadGrade(way) != MapGrade.Ground)
-                    {
-                        AddOsmDeckElevations(way, prefab, target, elevations, ref terrain);
-                    }
                 }
+                if (!CityOsm.IsUtility(way) && OsmRoadGrade(way) != MapGrade.Ground)
+                    AddOsmDeckElevations(way, prefab, target, elevations, ref terrain);
                 changedRoadAssets.Add(way.Id, (prefab, reverse));
             }
             foreach (var pair in elevations)
@@ -90,7 +90,7 @@ namespace CS2MCP
                 }
             }
 
-            var deckNodes = new HashSet<long>(after.Ways.Values.Where(way => way.Tags.ContainsKey("highway")
+            var deckNodes = new HashSet<long>(after.Ways.Values.Where(way => CityOsm.IsLinearWay(way) && !CityOsm.IsUtility(way)
                 && OsmRoadGrade(way) != MapGrade.Ground).SelectMany(way => way.NodeIds));
             var targetRoads = target.Roads.ToDictionary(way => way.Id);
             var targetBuildings = target.Buildings.ToDictionary(way => way.Id);
@@ -117,7 +117,7 @@ namespace CS2MCP
                 {
                     affected.Add(original);
                 }
-                bool wasRoad = originalWay != null && (originalWay.Tags.ContainsKey("highway") || CityOsm.IsUtility(originalWay));
+                bool wasRoad = originalWay != null && CityOsm.IsLinearWay(originalWay);
                 bool wasBuilding = originalWay != null && originalWay.Tags.ContainsKey("building");
                 if (editedWay == null)
                 {
@@ -129,7 +129,8 @@ namespace CS2MCP
                 }
                 else if (targetRoads.TryGetValue(editedWay.Id, out CityOsmRoad road))
                 {
-                    if (wasBuilding || (originalWay != null && CityOsm.IsUtility(originalWay) != CityOsm.IsUtility(editedWay)))
+                    if (wasBuilding || (originalWay != null && (CityOsm.IsUtility(originalWay) != CityOsm.IsUtility(editedWay)
+                        || CityOsmTransportWays.Kind(originalWay) != CityOsmTransportWays.Kind(editedWay))))
                     {
                         throw new FormatException($"Way {editedWay.Id} cannot change its kind while retaining its city identity.");
                     }
@@ -320,18 +321,19 @@ namespace CS2MCP
             ref TerrainHeightData terrain, List<OsmRoadPlacement> placements)
         {
             bool isUtility = CityOsm.IsUtility(way);
+            bool roadUpgrades = !isUtility && CityOsmTransportWays.Kind(way) == TypedNetworkKinds.None;
             Entity source = original;
             bool invertedWay = originalWay != null && (way.NodeIds[0] == originalWay.NodeIds.Last()
                 || way.NodeIds.Last() == originalWay.NodeIds[0]);
             bool invertNative = invertedWay != reverse;
             CompositionFlags existing = source != Entity.Null && EntityManager.HasComponent<Upgraded>(source)
                 ? EntityManager.GetComponentData<Upgraded>(source).m_Flags : default;
-            CompositionFlags requested = isUtility ? existing : OsmRoadUpgrades.Read(way,
+            CompositionFlags requested = !roadUpgrades ? existing : OsmRoadUpgrades.Read(way,
                 invertedWay ? NetCompositionHelpers.InvertCompositionFlags(existing) : existing);
             if (reverse) requested = NetCompositionHelpers.InvertCompositionFlags(requested);
             CompositionFlags previous = invertNative ? NetCompositionHelpers.InvertCompositionFlags(existing) : existing;
             CompositionFlags added = requested & ~previous;
-            if (!isUtility && added != default) CheckOsmRoadUpgrades(way.Id, prefab, added);
+            if (roadUpgrades && added != default) CheckOsmRoadUpgrades(way.Id, prefab, added);
             MapGrade? grade = isUtility ? (MapGrade?)null : OsmRoadGrade(way);
             bool explicitHeights = way.NodeIds.Any(id => target.Document.Nodes[id].Tags.ContainsKey("ele"));
             int start = 0;
@@ -363,7 +365,7 @@ namespace CS2MCP
                     {
                         WayId = way.Id, StartId = startId, EndId = endId, Curve = curve, Original = original,
                         UpgradeSource = source, InvertUpgrades = invertNative, Upgrades = requested,
-                        WriteUpgrades = !isUtility && (original == Entity.Null || requested != previous),
+                        WriteUpgrades = roadUpgrades && (original == Entity.Null || requested != previous),
                         AddedUpgrades = added,
                         StartPosition = target.Positions[startId], EndPosition = target.Positions[endId],
                         Prefab = prefab, Start = OsmEndpoint(target.Document.Nodes[startId]), End = OsmEndpoint(target.Document.Nodes[endId]),
