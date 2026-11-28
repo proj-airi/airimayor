@@ -17,6 +17,8 @@ namespace CS2MCP
             public Entity Prefab;
             public string Name;
             public string Highway;
+            public string Service;
+            public string Surface;
             public bool OneWay;
             public bool Backward;
             public int? Lanes;
@@ -38,11 +40,14 @@ namespace CS2MCP
                     }
                     var flags = EntityManager.GetComponentData<RoadData>(prefab).m_Flags;
                     RoadPrefabFacts facts = ReadRoadPrefabFacts(prefab, prefabs);
+                    var tags = CityOsmRoadTags.Classify(facts.RoadClass, OsmRoadPrefabId(prefab, prefabs));
                     assets.Add(new OsmEditRoadAsset
                     {
                         Prefab = prefab,
                         Name = PrefabDisplayName(prefabs, prefab),
-                        Highway = OsmHighway(facts.RoadClass),
+                        Highway = tags.Highway,
+                        Service = tags.Service,
+                        Surface = tags.Surface,
                         OneWay = (flags & (Game.Prefabs.RoadFlags.DefaultIsForward | Game.Prefabs.RoadFlags.DefaultIsBackward)) != 0,
                         Backward = (flags & Game.Prefabs.RoadFlags.DefaultIsBackward) != 0,
                         Lanes = facts.CarLanes,
@@ -58,6 +63,10 @@ namespace CS2MCP
         {
             string requested = CityOsm.Tag(way, "airimayor:prefab");
             string highway = CityOsm.Tag(way, "highway");
+            string service = CityOsm.Tag(way, "service");
+            if (service != null && (highway != "service" || service != "alley"))
+                throw new FormatException($"Way {way.Id} can use service=alley with highway=service.");
+            string surface = CityOsm.Tag(way, "surface");
             string oneway = CityOsm.Tag(way, "oneway");
             bool backward = oneway == "-1" || oneway == "reverse";
             bool directional = backward || oneway == "yes" || oneway == "true" || oneway == "1"
@@ -68,7 +77,7 @@ namespace CS2MCP
             }
 
             Entity existingPrefab = existing == Entity.Null ? Entity.Null : EntityManager.GetComponentData<PrefabRef>(existing).m_Prefab;
-            string[] selection = { "airimayor:prefab", "highway", "lanes", "maxspeed", "width", "oneway" };
+            string[] selection = { "airimayor:prefab", "highway", "lanes", "maxspeed", "width", "oneway", "service", "surface" };
             if (existingPrefab != Entity.Null && selection.All(key => CityOsm.Tag(original, key) == CityOsm.Tag(way, key)))
             {
                 reverse = false;
@@ -87,11 +96,13 @@ namespace CS2MCP
             assets ??= ReadOsmRoadAssets();
             var choices = assets.Where(a => (requested == null || samePin || a.Name == requested)
                 && (category == null || a.Highway == category)
+                && (service == null || a.Service == service)
+                && (surface == null || a.Surface == surface)
                 && a.OneWay == directional
                 && (lanes == null || a.Lanes == lanes)
                 && (speed == null || a.Speed == speed)
                 && (width == null || math.abs(a.Width - width.Value) < 0.1f)
-                && a.Lanes != 0);
+                && (a.Lanes != 0 || category == "pedestrian"));
             OsmEditRoadAsset best = choices.OrderBy(a => a.Prefab == existingPrefab ? 0 : 1)
                 .ThenBy(a => a.Width).ThenBy(a => a.Name, StringComparer.Ordinal).FirstOrDefault();
             if (best.Prefab == Entity.Null)
@@ -118,8 +129,9 @@ namespace CS2MCP
                 case "tertiary_link":
                 case "unclassified":
                 case "living_street":
-                case "service":
                 case "residential": return "residential";
+                case "service": return "service";
+                case "pedestrian": return "pedestrian";
                 case "road": return null;
                 default: throw new FormatException($"The city has no road class for highway={highway}.");
             }

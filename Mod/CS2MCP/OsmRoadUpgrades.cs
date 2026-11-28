@@ -10,7 +10,7 @@ namespace CS2MCP
         private static readonly Dictionary<string, CompositionFlags> Features = BuildFeatures();
         internal static readonly string[] EditableRoadTags = new[]
         {
-            "highway", "oneway", "lanes", "width", "maxspeed", "bridge", "tunnel", "layer", "airimayor:prefab", "name"
+            "highway", "service", "surface", "oneway", "lanes", "width", "maxspeed", "bridge", "tunnel", "layer", "airimayor:prefab", "name"
         }.Concat(Features.Keys).ToArray();
 
         private static Dictionary<string, CompositionFlags> BuildFeatures()

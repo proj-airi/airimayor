@@ -111,7 +111,8 @@ namespace CS2MCP
             var names = World.GetOrCreateSystemManaged<Game.UI.NameSystem>();
             var streetNames = new Dictionary<Entity, string>();
             var roads = new List<CityOsmRoadSource>();
-            var roadPrefabs = new Dictionary<Entity, (string Name, RoadPrefabFacts Facts)>();
+            var roadPrefabs = new Dictionary<Entity, (string Name, RoadPrefabFacts Facts, (string Highway, string Service, string Surface) Tags)>();
+            var motorwayLinks = new Dictionary<Entity, bool>();
             foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(district))
             {
                 Edge edge = EntityManager.GetComponentData<Edge>(entity);
@@ -142,7 +143,9 @@ namespace CS2MCP
                 if (!roadPrefabs.TryGetValue(prefab, out var asset))
                 {
                     string name = PrefabDisplayName(prefabs, prefab);
-                    asset = (name, ReadRoadPrefabFacts(prefab, prefabs));
+                    RoadPrefabFacts facts = ReadRoadPrefabFacts(prefab, prefabs);
+                    string prefabId = OsmRoadPrefabId(prefab, prefabs);
+                    asset = (name, facts, CityOsmRoadTags.Classify(facts.RoadClass, prefabId));
                     roadPrefabs.Add(prefab, asset);
                 }
                 var composition = EntityManager.HasComponent<Composition>(entity)
@@ -152,7 +155,10 @@ namespace CS2MCP
                     ? EntityManager.GetComponentData<NetCompositionData>(composition).m_Width : 0f;
                 source.Prefab = asset.Name;
                 source.Name = OsmStreetName(entity, names, streetNames);
-                source.Highway = OsmHighway(asset.Facts.RoadClass);
+                source.Highway = asset.Tags.Highway == "motorway" && asset.Facts.HighwayRules && IsOsmMotorwayLink(entity, edge, traffic, motorwayLinks)
+                    ? "motorway_link" : asset.Tags.Highway;
+                source.Service = asset.Tags.Service;
+                source.Surface = asset.Tags.Surface;
                 if (EntityManager.HasComponent<Upgraded>(entity))
                     source.UpgradeTags = OsmRoadUpgrades.Export(EntityManager.GetComponentData<Upgraded>(entity).m_Flags);
                 source.OneWay = traffic.Direction;
@@ -314,18 +320,6 @@ namespace CS2MCP
         }
 
         private static string OsmEntityIdentity(Entity entity) => $"{entity.Index}:{entity.Version}";
-
-        private static string OsmHighway(string roadClass)
-        {
-            switch (roadClass)
-            {
-                case RoadFactsMath.RoadClassHighway: return "motorway";
-                case RoadFactsMath.RoadClassLarge: return "primary";
-                case RoadFactsMath.RoadClassMedium: return "secondary";
-                case RoadFactsMath.RoadClassMinor: return "residential";
-                default: return "road";
-            }
-        }
 
         private (int? Count, string Direction) OsmCarLanes(Entity composition)
         {

@@ -20,6 +20,8 @@ namespace CS2MCP
         public string Prefab;
         public string Name;
         public string Highway;
+        public string Service;
+        public string Surface;
         public Dictionary<string, string> UpgradeTags;
         public TypedNetworkKinds Utility;
         public TypedNetworkKinds Transport;
@@ -172,6 +174,8 @@ namespace CS2MCP
                 else if (road.Utility == TypedNetworkKinds.None)
                 {
                     way.Tags["highway"] = road.Highway;
+                    if (road.Service != null) way.Tags["service"] = road.Service;
+                    if (road.Surface != null) way.Tags["surface"] = road.Surface;
                     if (road.UpgradeTags != null)
                         foreach (var tag in road.UpgradeTags) way.Tags.Add(tag.Key, tag.Value);
                 }

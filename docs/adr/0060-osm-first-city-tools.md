@@ -14,6 +14,8 @@ The construction catalog reads the game's asset menu before the player selects a
 
 The catalog and road editor use the same road class and default car-lane count. An unrecognized native road menu group yields an unknown class. The game's default lane composition identifies lanes that carry cars. Where it is absent, the count comes from unconditional lane sections in the road design. A placed road's OSM geometry uses the lanes of its actual composition.
 
+Map verified pedestrian streets, alleys, service roads and gravel surfaces from the game's built-in asset identities. Identify a motorway link from a one-way branch connected to a wider, continuing motorway in the actual network. A narrow motorway can serve as a mainline and keeps that classification until its connections identify a link.
+
 ## What the agent edits
 
 | Legacy capability | Representation and native effect |
