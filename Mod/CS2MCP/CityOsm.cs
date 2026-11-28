@@ -161,7 +161,7 @@ namespace CS2MCP
         private const string EndsTag = "airimayor:ends";
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-        public static OsmDocument Export(IEnumerable<CityOsmRoadSource> roads, IEnumerable<CityOsmBuildingSource> buildings)
+        public static OsmDocument Export(IEnumerable<CityOsmRoadSource> roads, IEnumerable<CityOsmBuildingSource> buildings, bool assignDeckLayers = true)
         {
             var document = new OsmDocument();
             document.Attributes["upload"] = "never";
@@ -226,7 +226,7 @@ namespace CS2MCP
                 }
                 way.NodeIds.Add(AddJunction(document, road.End));
             }
-            CityOsmLayers.Assign(document, decks);
+            if (assignDeckLayers) CityOsmLayers.Assign(document, decks);
             foreach (CityOsmBuildingSource building in buildings)
             {
                 var way = new OsmWay(NativeId(building.Index));

@@ -100,6 +100,10 @@ _Avoid_: the set of places already built in a city
 An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, paths, tracks, utility lines and building lots. Relations describe administrative boundaries and passenger services. Point objects have their own nodes.
 _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 
+**City map snapshot**:
+A read-only view of the loaded city for drawing a map in city coordinates. It represents what appeared at the time and place of the read.
+_Avoid_: the editable district, a city save
+
 **Ground**:
 The road level that follows the terrain.
 _Avoid_: an implied bridge at every crossing

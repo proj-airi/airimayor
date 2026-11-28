@@ -371,7 +371,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. Returns editable content and a revision. Use query_osm to locate places first.",
+      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. The district view returns editable content and its revision. The map view returns a read-only map with bridge outlines and local crossing order. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -390,6 +390,14 @@
           "zMax": {
             "type": "number",
             "description": "Maximum district Z in city meters"
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "district",
+              "map"
+            ],
+            "description": "Choose the editable district by default or the read-only map for drawing."
           }
         },
         "required": [
@@ -416,6 +424,10 @@
         {
           "key": "zMax",
           "arg": "zMax"
+        },
+        {
+          "key": "view",
+          "arg": "view"
         }
       ],
       "response": "json"

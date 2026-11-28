@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
@@ -9,6 +10,18 @@ namespace CS2MCP
 {
     internal static class CityOsmFile
     {
+        internal const long FirstMapFeatureId = 1L << 61;
+        private const string MapGenerator = "airimayor-map";
+
+        internal static void MarkMap(OsmDocument document) => document.Attributes["generator"] = MapGenerator;
+
+        internal static void RequireEditable(OsmDocument document)
+        {
+            if ((document.Attributes.TryGetValue("generator", out string generator) && generator == MapGenerator)
+                || document.Elements.Any(element => element.Id >= FirstMapFeatureId))
+                throw new FormatException("Read the editable district before proposing construction. The map view is read-only.");
+        }
+
         public static bool ValidBounds(float4 bounds) => math.all(math.isfinite(bounds))
             && math.all(bounds.xy < bounds.zw)
             && math.all(math.abs((double2)bounds.xz) <= 180d * CityOsm.LongitudeMeters)

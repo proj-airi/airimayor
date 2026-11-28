@@ -23,7 +23,10 @@ namespace CS2MCP
             {
                 return error;
             }
-            return OsmFileResponse(bounds, ReadOsmDocument(bounds));
+            if (!request.Query.TryGetValue("view", out string view) || view == "district")
+                return OsmFileResponse(bounds, ReadOsmDocument(bounds));
+            if (view == "map") return ReadOsmMap(bounds);
+            return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose district or map.");
         }
 
         private BridgeResponse EditOsm(BridgeRequest request)
@@ -50,6 +53,7 @@ namespace CS2MCP
             try
             {
                 OsmDocument edited = current.Edit(request.Body);
+                CityOsmFile.RequireEditable(edited);
                 return ApplyOsmEdit(request, bounds, current, edited, preview);
             }
             catch (FormatException exception)
@@ -104,7 +108,7 @@ namespace CS2MCP
             }
         }
 
-        private OsmDocument ReadOsmDocument(float4 bounds)
+        private OsmDocument ReadOsmDocument(float4 bounds, Dictionary<int, EdgeGeometry> mapBridges = null)
         {
             var district = new Bounds2(bounds.xy, bounds.zw);
             PrefabSystem prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
@@ -113,7 +117,7 @@ namespace CS2MCP
             var roads = new List<CityOsmRoadSource>();
             var roadPrefabs = new Dictionary<Entity, (string Name, RoadPrefabFacts Facts, (string Highway, string Service, string Surface) Tags)>();
             var motorwayLinks = new Dictionary<Entity, bool>();
-            foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(district))
+            foreach (var (entity, prefab, kinds, curve) in OsmDistrictNetworks(district, mapBridges))
             {
                 Edge edge = EntityManager.GetComponentData<Edge>(entity);
                 var source = new CityOsmRoadSource
@@ -202,15 +206,16 @@ namespace CS2MCP
                     LotSize = lot,
                 });
             }
-            OsmDocument document = CityOsm.Export(roads, buildings);
+            OsmDocument document = CityOsm.Export(roads, buildings, assignDeckLayers: mapBridges == null);
             foreach (OsmNode node in points) document.Nodes.Add(node.Id, node);
             ReadOsmTransit(document, bounds);
             AddOsmAreas(document, bounds);
+            if (mapBridges != null) CityOsmBridgeMap.Apply(document, roads, mapBridges);
             CityOsmFile.AddBounds(document, bounds);
             return document;
         }
 
-        private IEnumerable<(Entity Entity, Entity Prefab, TypedNetworkKinds Kinds, Curve Curve)> OsmDistrictNetworks(Bounds2 district)
+        private IEnumerable<(Entity Entity, Entity Prefab, TypedNetworkKinds Kinds, Curve Curve)> OsmDistrictNetworks(Bounds2 district, Dictionary<int, EdgeGeometry> mapBridges = null)
         {
             var iterator = new OsmDistrictIterator { Bounds = district, Entities = new List<Entity>() };
             var netTree = World.GetOrCreateSystemManaged<Game.Net.SearchSystem>()
@@ -229,11 +234,20 @@ namespace CS2MCP
                     continue;
                 }
                 Curve curve = EntityManager.GetComponentData<Curve>(entity);
-                if (!CityOsmSpatial.Intersects(district, curve.m_Bezier.xz))
+                bool intersects = CityOsmSpatial.Intersects(district, curve.m_Bezier.xz);
+                if (mapBridges != null && (kinds == TypedNetworkKinds.Road || CityOsmTransportWays.IsTransport(kinds))
+                    && EntityManager.HasComponent<Composition>(entity)
+                    && ReadRoadGrade(EntityManager, EntityManager.GetComponentData<Composition>(entity).m_Edge) == MapGrade.Bridge
+                    && EntityManager.HasComponent<EdgeGeometry>(entity))
                 {
-                    continue;
+                    EdgeGeometry geometry = EntityManager.GetComponentData<EdgeGeometry>(entity);
+                    if (intersects || CityOsmBridgeMap.Intersects(district, geometry))
+                    {
+                        mapBridges[entity.Index] = geometry;
+                        intersects = true;
+                    }
                 }
-                yield return (entity, prefab, kinds, curve);
+                if (intersects) yield return (entity, prefab, kinds, curve);
             }
         }
 
