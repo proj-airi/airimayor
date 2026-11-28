@@ -159,11 +159,12 @@ namespace CS2MCP
                     foreach (Entity target in m_OsmEdit.Deletions) CreateDemolitionDefinition(target);
                     CreateOsmTransitDefinitions(m_OsmEdit.Routes);
                     foreach (var perimeter in m_OsmEdit.Areas.Perimeters) CreateOperationalAreaDefinition(perimeter);
+                    foreach (var boundary in m_OsmEdit.Areas.Boundaries) CreateOsmAdministrativeBoundary(boundary);
                     m_Stage = Stage.Apply;
                     return;
                 }
                 bool nativeDefinitions = m_OsmEdit.Roads.Count + m_OsmEdit.Buildings.Count + m_OsmEdit.Deletions.Count
-                    + m_OsmEdit.Routes.Count + m_OsmEdit.Areas.Perimeters.Count > 0;
+                    + m_OsmEdit.Routes.Count > 0 || m_OsmEdit.Areas.HasNativeEdits;
                 if (!m_ErrorQuery.IsEmptyIgnoreFilter || (nativeDefinitions && !GetAllowApply()))
                 {
                     throw new InvalidOperationException(DescribeValidationBlock());

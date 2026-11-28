@@ -29,6 +29,15 @@ namespace CS2MCP
             {
                 source.Relations.TryGetValue(id, out OsmRelation original);
                 target.Relations.TryGetValue(id, out OsmRelation edited);
+                if (CityOsmAdministrativeBoundaries.IsBoundary(original) || CityOsmAdministrativeBoundaries.IsBoundary(edited))
+                {
+                    if ((original != null && !CityOsmAdministrativeBoundaries.IsBoundary(original))
+                        || (edited != null && !CityOsmAdministrativeBoundaries.IsBoundary(edited)))
+                        throw new FormatException($"Relation {id} must retain its administrative boundary type.");
+                    if (CityOsmAdministrativeBoundaries.IsChanged(source, target, original, edited))
+                        items.Add(new CityOsmEditItem(original, edited));
+                    continue;
+                }
                 if (original == null || !original.SameContent(edited))
                 {
                     if (CityOsm.Tag(original ?? edited, "type") != "route")
@@ -79,10 +88,12 @@ namespace CS2MCP
             var originalRoads = before.Roads.ToDictionary(way => way.Id);
             var roadNodes = new HashSet<long>(after.Roads.SelectMany(road => target.Ways[road.Id].NodeIds));
             var lotNodes = new HashSet<long>(after.Buildings.SelectMany(building => target.Ways[building.Id].NodeIds));
+            var boundaryWays = new HashSet<long>(CityOsmAdministrativeBoundaries.OuterWays(source).Concat(CityOsmAdministrativeBoundaries.OuterWays(target)));
             foreach (long id in source.Ways.Keys.Union(target.Ways.Keys))
             {
                 source.Ways.TryGetValue(id, out OsmWay original);
                 target.Ways.TryGetValue(id, out OsmWay edited);
+                if (boundaryWays.Contains(id) && CityOsmAdministrativeBoundaries.IsOutline(original) && CityOsmAdministrativeBoundaries.IsOutline(edited)) continue;
                 if (original != null && original.SameContent(edited)
                     && !original.NodeIds.Any(changedNodes.Contains)
                     && !original.NodeIds.Skip(1).Take(original.NodeIds.Count - 2).Any(newJunctions.Contains))
@@ -116,10 +127,13 @@ namespace CS2MCP
             return items;
         }
 
+        internal static bool SameHorizontalPosition(OsmNode original, OsmNode edited) =>
+            Math.Round(original.Latitude, 7) == Math.Round(edited.Latitude, 7) &&
+            Math.Round(original.Longitude, 7) == Math.Round(edited.Longitude, 7);
+
         internal static bool SameNodePosition(OsmNode original, OsmNode edited)
         {
-            if (Math.Round(original.Latitude, 7) != Math.Round(edited.Latitude, 7)
-                || Math.Round(original.Longitude, 7) != Math.Round(edited.Longitude, 7)) return false;
+            if (!SameHorizontalPosition(original, edited)) return false;
             string oldHeight = CityOsm.Tag(original, "ele");
             string newHeight = CityOsm.Tag(edited, "ele");
             if (oldHeight == newHeight) return true;

@@ -28,11 +28,12 @@ namespace CS2MCP
             }
             request.Query.TryGetValue("kind", out string kind);
             bool buildings = kind == "building";
+            bool districts = kind == "district";
             TypedNetworkKinds filter = CityOsmTransportWays.Kind(kind);
-            if (!buildings && filter == TypedNetworkKinds.None && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, road, footway, rail, tram, subway, water, sewage or low_voltage.");
+            if (!buildings && !districts && filter == TypedNetworkKinds.None && !TypedNetworkMath.TryParseKind(kind, out filter, out _))
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose building, district, road, footway, rail, tram, subway, water, sewage or low_voltage.");
             string view = request.Query.TryGetValue("view", out string selectedView) ? selectedView : "features";
-            if (view != "features" && (view != "topology" || buildings || CityOsmTransportWays.IsTransport(filter)))
+            if (view != "features" && (view != "topology" || buildings || districts || CityOsmTransportWays.IsTransport(filter)))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose features, or topology for a street or utility network.");
             request.Query.TryGetValue("query", out string search);
             request.Query.TryGetValue("role", out string role);
@@ -44,9 +45,9 @@ namespace CS2MCP
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "The operational area filter selects buildings with any, storage or extractor areas.");
             if (view == "topology" && search != null)
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Name searches apply to features.");
-            if (sort != null && sort != "distance" && (buildings || view == "topology"))
+            if (sort != null && sort != "distance" && (buildings || districts || view == "topology"))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "These results are ranked by distance from the center of the search area.");
-            if (!buildings && !TypedNetworkMath.TryParseNetworkSort(sort, filter, out sort, out string sortError))
+            if (!buildings && !districts && !TypedNetworkMath.TryParseNetworkSort(sort, filter, out sort, out string sortError))
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, sortError);
             bool deadEnds = false;
             if (request.Query.ContainsKey("include_dead_ends") && (view != "topology" || filter != TypedNetworkKinds.Road
@@ -58,6 +59,7 @@ namespace CS2MCP
             var district = new Bounds2(bounds.xy, bounds.zw);
             IEnumerable<(float Rank, int Id, object Item)> matches;
             if (buildings) matches = OsmBuildingRows(district, search, role, area);
+            else if (districts) matches = OsmAdministrativeRows(bounds, search);
             else if (view == "topology") matches = OsmTopologyRows(district, filter, deadEnds);
             else matches = OsmNetworkRows(district, filter, search, sort);
             var rows = new List<(float Rank, int Id, object Item)>(limit);

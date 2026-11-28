@@ -41,8 +41,10 @@ namespace CS2MCP
     {
         internal readonly List<OsmZoneCell> Cells = new List<OsmZoneCell>();
         internal readonly List<OsmPerimeter> Perimeters = new List<OsmPerimeter>();
+        internal readonly List<OsmAdministrativeBoundary> Boundaries = new List<OsmAdministrativeBoundary>();
         internal readonly Dictionary<long, List<(Entity Block, int Index)>> ZoneSources = new Dictionary<long, List<(Entity, int)>>();
-        internal bool HasEdits => Cells.Count != 0 || Perimeters.Count != 0;
+        internal bool HasNativeEdits => Perimeters.Count != 0 || Boundaries.Count != 0;
+        internal bool HasEdits => Cells.Count != 0 || HasNativeEdits;
     }
 
     public sealed partial class BridgeToolSystem
@@ -50,6 +52,7 @@ namespace CS2MCP
         private void CheckOsmAreaPreview()
         {
             if (!ZoneCellsMatch(false)) throw new InvalidOperationException("The requested zone cells changed. Read the district again.");
+            CheckOsmAdministrativePreview();
             if (m_OsmEdit.Areas.Perimeters.Count == 0) return;
             var requested = new Dictionary<Entity, OsmPerimeter>();
             foreach (var perimeter in m_OsmEdit.Areas.Perimeters) requested.Add(perimeter.Area, perimeter);
@@ -70,7 +73,7 @@ namespace CS2MCP
 
         private bool AppliedOsmAreasMatch()
         {
-            if (!ZoneCellsMatch(true)) return false;
+            if (!ZoneCellsMatch(true) || !AppliedOsmAdministrativeBoundariesMatch()) return false;
             foreach (var perimeter in m_OsmEdit.Areas.Perimeters)
                 if (!AreaMatches(perimeter.Area, perimeter, false)) return false;
             return true;

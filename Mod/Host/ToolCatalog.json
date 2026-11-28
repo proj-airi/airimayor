@@ -181,7 +181,7 @@
     },
     {
       "name": "query_osm",
-      "description": "Find existing buildings, roads and utilities, read traffic and electricity load, or locate connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
+      "description": "Find existing buildings, administrative districts, roads, footways, tracks and utilities. Read traffic and electricity load or locate road and utility connectivity problems. Pass a complete rectangle in city meters or omit all four bounds to search citywide. Results identify mapped places and their bounds. Use read_osm at a result to obtain an editable district.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -205,6 +205,7 @@
             "type": "string",
             "enum": [
               "building",
+              "district",
               "road",
               "footway",
               "rail",
@@ -334,7 +335,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, boarding points, passenger lines, standalone trees and street lamps. Returns editable content and a revision. Use query_osm to locate places first.",
+      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. Returns editable content and a revision. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {

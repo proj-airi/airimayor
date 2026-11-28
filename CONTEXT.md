@@ -97,7 +97,7 @@ The game's inventory of assets the player can select for construction, with each
 _Avoid_: the set of places already built in a city
 
 **Local OSM map**:
-An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, paths, tracks, utility lines and building lots. Shared nodes connect ways, and platform nodes locate roadside stops.
+An editable OpenStreetMap document covering a rectangle in the loaded city's coordinate system. Ways describe streets, paths, tracks, utility lines and building lots. Relations describe administrative boundaries and passenger services. Point objects have their own nodes.
 _Avoid_: a public OpenStreetMap edit, a rendered city map, a saved game
 
 **Ground**:
@@ -127,6 +127,10 @@ _Avoid_: treating every degree-1 dead end as isolated
 **Road facts**:
 Native road identity in the construction catalog and on a built street: UI-group category, speed limit, car-lane count, highway-rules flag, zoning flag.
 _Avoid_: width as the highway test; a new traffic tool
+
+**Administrative district**:
+A named game area drawn to manage part of the city.
+_Avoid_: an OSM read rectangle, an operational area
 
 **Operational area**:
 An owner-linked lot polygon on a facility (storage or extractor). The current product expands only.

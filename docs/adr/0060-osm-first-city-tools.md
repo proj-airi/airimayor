@@ -29,6 +29,8 @@ Standalone footways use `highway=footway`. Standalone tracks use `railway=rail`,
 
 Standalone trees use [`natural=tree`](https://wiki.openstreetmap.org/wiki/Tag:natural=tree). Standalone street lamps use [`highway=street_lamp`](https://wiki.openstreetmap.org/wiki/Tag:highway=street_lamp). Give each point its own node. Lights and trees that belong to a street remain part of that street.
 
+An administrative district uses a [boundary relation](https://wiki.openstreetmap.org/wiki/Relation:boundary) with `boundary=administrative`. Its `outer` ways form one closed ring. The game stores the name and polygon. Use the district relation to create, rename, redraw or remove the area.
+
 Use established OSM semantics when they describe the feature precisely. Use `airimayor:*` for game-specific facts such as the legally assigned game zone and an operational area's owner. A route uses the [ordered members of an OSM route relation](https://wiki.openstreetmap.org/wiki/Relation:route). [Road sides](https://wiki.openstreetmap.org/wiki/Forward_%26_backward,_left_%26_right) follow the way's direction.
 
 Check the effects of the complete diff against player permissions before work starts. Withdrawing a transit service uses the existing construction permission. A mixed physical build and demolition requires both permissions. Keep partial cross-boundary relations read-only and return the bounds needed to read the complete editable object. When a combined edit requires several native stages, check dependencies before the first stage and report the realized objects and any outstanding work from a fresh read if application stops partway.

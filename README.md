@@ -67,6 +67,10 @@ The city resolves road categories to unlocked assets and reports their native cl
 
 An existing road way carries its native segment identity in `airimayor:entity`. Set `airimayor:upgrade:trees:right=yes` for trees on the right in way order. Paint frontage using a closed way with `airimayor:zone` set to an unlocked zone name. The returned map shows the assigned cells.
 
+Standalone footways use `highway=footway`. Track ways use `railway=rail`, `railway=tram`, or `railway=subway`. Use separate nodes for `natural=tree` and `highway=street_lamp`.
+
+Find a named administrative district with `query_osm` and `kind=district`. In a district read, its `type=boundary` relation carries `boundary=administrative`. Read the whole boundary and edit the closed ring formed by its `outer` ways.
+
 To expand a landfill, farm or forestry area, read the whole area. Edit its closed `airimayor:operational_area` way. Keep the first two corners at the facility edge and keep the existing area inside the new perimeter. The game checks the expansion and returns the resulting perimeter.
 
 Use `list_facility_upgrades` to find upgrade names for an existing building. Add a tag with key `airimayor:facility_upgrade:<exact upgrade name>` and value `yes` to the building way. Keep the same lot. The game places the upgrade, and the district map shows the installed tag.

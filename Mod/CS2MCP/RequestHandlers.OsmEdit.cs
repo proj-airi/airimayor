@@ -99,7 +99,11 @@ namespace CS2MCP
             {
                 if (change.Edited is OsmRelation || change.Original is OsmRelation)
                 {
-                    routes.Add(PlanOsmTransit(change.Original as OsmRelation, change.Edited as OsmRelation, before, after, bounds));
+                    var originalRelation = change.Original as OsmRelation;
+                    var editedRelation = change.Edited as OsmRelation;
+                    if (CityOsmAdministrativeBoundaries.IsBoundary(originalRelation) || CityOsmAdministrativeBoundaries.IsBoundary(editedRelation))
+                        areas.Boundaries.Add(PlanOsmAdministrativeBoundary(change, before, after, bounds));
+                    else routes.Add(PlanOsmTransit(originalRelation, editedRelation, before, after, bounds));
                     continue;
                 }
                 if (change.Edited is OsmNode || change.Original is OsmNode)

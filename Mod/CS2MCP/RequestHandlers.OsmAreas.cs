@@ -84,11 +84,9 @@ namespace CS2MCP
                 }
             }
 
-            var areas = new OsmAreaSearch { Bounds = new Bounds2(bounds.xy, bounds.zw), Areas = new HashSet<Entity>() };
-            var areaTree = World.GetOrCreateSystemManaged<Game.Areas.SearchSystem>().GetSearchTree(true, out var areaDependencies);
-            areaDependencies.Complete();
-            areaTree.Iterate(ref areas);
-            foreach (Entity area in areas.Areas)
+            var candidates = OsmAreaCandidates(bounds);
+            AddOsmAdministrativeBoundaries(document, bounds, candidates);
+            foreach (Entity area in candidates)
             {
                 if (!EntityManager.Exists(area) || EntityManager.HasComponent<Game.Tools.Temp>(area)
                     || EntityManager.HasComponent<Deleted>(area) || !EntityManager.HasComponent<Lot>(area)
@@ -127,6 +125,15 @@ namespace CS2MCP
                 relation.Attributes["version"] = "1";
                 document.Relations.Add(id, relation);
             }
+        }
+
+        private HashSet<Entity> OsmAreaCandidates(float4 bounds)
+        {
+            var areas = new OsmAreaSearch { Bounds = new Bounds2(bounds.xy, bounds.zw), Areas = new HashSet<Entity>() };
+            var areaTree = World.GetOrCreateSystemManaged<Game.Areas.SearchSystem>().GetSearchTree(true, out var dependencies);
+            dependencies.Complete();
+            areaTree.Iterate(ref areas);
+            return areas.Areas;
         }
 
         private static OsmWay AddOsmRing(OsmDocument document, long id, long firstNode, IReadOnlyList<float2> ring)

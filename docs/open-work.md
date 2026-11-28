@@ -7,6 +7,8 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 Code still missing.
 
 - AIRI plugin
+- Park boundaries. Map the native modular park area as `leisure=park` after the game exposes its drawing tool.
+- Standalone benches and other street furniture. Map each with its OSM tag when the corresponding native assets can be identified.
 
 ## Awaiting live acceptance
 
@@ -30,6 +32,7 @@ Code exists; a previous save is not the final gate. Close the game before DLL re
 - Operational areas: on a new city, expand a landfill, farm and forestry area with drawn perimeters. Compare the returned polygons and fixed facility edges with the game. Check storage capacity at the landfill and vehicles and production at the extractors.
 - Standalone paths and tracks. Draw a footway, a railway, a tram track, and a subway track. Read them in an overlapping district. Check tags, shared junctions, and grade. Check that road traffic rankings exclude them.
 - Standalone points. Plant, move, and remove a tree. Place, move, and remove a standalone street lamp when the city offers an unlocked asset. Read the points again and check their positions, assets, and the demolition permission.
+- Administrative districts. Draw, name, reshape, and remove one district. Check native geometry and matching OSM boundary relations across overlapping reads. Check that adjacent districts stay intact.
 - Facility upgrades: on a new city, install a building extension and a sub-building through the parent way. Compare the parent, placement and installed names in the game and a fresh district read. Check a blocked placement and construction permission. Take an installed upgrade out of service and return it to service.
  - Traffic governance as a product loop. The accepted-run intervention persisted, but traffic notifications stayed at 2 and the same-road congestion/volume aggregates worsened after one simulated hour.
   - Native road facts (`roadClass`/`speedKmh`/`carLanes`/`highwayRules`/`zonable` in the catalog and mapped road queries, `flowPercent` on `traffic`): live values observed (Small Road 33 vs wiki Two-Lane 30, highway 100 matches); still needs UI group names, ramp lane counts and the 70 flow target.

@@ -314,6 +314,8 @@ namespace CS2MCP
                 yield return (obj.Placement.Kind, obj.Placement.WayId,
                     owner == Entity.Null ? obj.Entity : owner);
             }
+            foreach (var boundary in m_OsmEdit.Areas.Boundaries)
+                if (!boundary.Remove) yield return (OsmKind.Relation, boundary.RelationId, boundary.Realized);
             foreach (var route in m_OsmEdit.Routes)
                 if (!route.Remove) yield return (OsmKind.Relation, route.RelationId, route.Realized);
         }
@@ -327,6 +329,8 @@ namespace CS2MCP
             {
                 if (item.Placement.Name != null) names.Add(item.Entity, item.Placement.Name);
             }
+            foreach (var boundary in m_OsmEdit.Areas.Boundaries)
+                if (!boundary.Remove && boundary.Name != null) names.Add(boundary.Realized, boundary.Name);
             foreach (OsmRoadWitness item in m_OsmEdit.Edges)
             {
                 if (item.Name == null) continue;
