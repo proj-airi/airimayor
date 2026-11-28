@@ -28,6 +28,8 @@ namespace CS2MCP
             var networks = new List<Network>();
             var bridgeOutlines = new List<(int Layer, SKPath Path)>();
             canvas.Clear(Land);
+            int saved = canvas.Save();
+            canvas.ClipRect(viewport.Frame);
             if (terrain.HasValue) DrawTerrain(canvas, viewport, terrain.Value);
             try
             {
@@ -85,6 +87,7 @@ namespace CS2MCP
                 DrawPoints(map, canvas, viewport, labels);
                 AddNetworkLabels(canvas, viewport, networks, labels);
                 DrawLabels(canvas, viewport, labels);
+                canvas.RestoreToCount(saved);
                 DrawScaleBar(canvas, viewport);
                 using var image = surface.Snapshot();
                 using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
@@ -344,8 +347,12 @@ namespace CS2MCP
                 double width = (double)bounds.z - bounds.x;
                 double height = (double)bounds.w - bounds.y;
                 Scale = Math.Min(1200d / width, 880d / height);
+                float mapWidth = (float)(width * Scale);
+                float mapHeight = (float)(height * Scale);
                 Width = Math.Max(256, (int)Math.Ceiling(width * Scale));
                 Height = Math.Max(200, (int)Math.Ceiling(height * Scale));
+                Frame = new SKRect((Width - mapWidth) * 0.5f, (Height - mapHeight) * 0.5f,
+                    (Width + mapWidth) * 0.5f, (Height + mapHeight) * 0.5f);
                 CenterX = ((double)bounds.x + bounds.z) * 0.5d;
                 CenterZ = ((double)bounds.y + bounds.w) * 0.5d;
                 Zoom = math.clamp((int)Math.Floor(Math.Log(156543.03392804097d * Scale, 2d)), 1, 20);
@@ -357,7 +364,7 @@ namespace CS2MCP
             internal int Width { get; }
             internal int Height { get; }
             internal int Zoom { get; }
-            internal SKRect Frame => new SKRect(0, 0, Width, Height);
+            internal SKRect Frame { get; }
             internal SKPoint Project(double x, double z) =>
                 new SKPoint((float)(Width * 0.5d + (x - CenterX) * Scale), (float)(Height * 0.5d - (z - CenterZ) * Scale));
             internal SKPoint Project(OsmNode node) => Project(node.Longitude * CityOsm.LongitudeMeters, node.Latitude * CityOsm.LatitudeMeters);

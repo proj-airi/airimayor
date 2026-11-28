@@ -71,6 +71,24 @@ namespace Airimayor.Tests
             Assert.Equal(SKColor.Parse("#f2efe9"), overview.GetPixel(overview.Width / 2, overview.Height / 2));
         }
 
+        [Fact]
+        public void A_narrow_read_never_draws_a_road_beyond_the_requested_edges()
+        {
+            var map = new OsmDocument();
+            AddNode(map, 1, 0, -80);
+            AddNode(map, 2, 0, 80);
+            var road = new OsmWay(1, new long[] { 1, 2 });
+            road.Tags["highway"] = "motorway";
+            map.Ways.Add(road.Id, road);
+
+            using var image = SKBitmap.Decode(CityOsmRaster.Render(map, new float4(-400f, -5f, 400f, 5f), null));
+            int x = image.Width / 2, y = image.Height / 2;
+
+            Assert.Equal(SKColor.Parse("#e892a2"), image.GetPixel(x, y));
+            Assert.Equal(SKColor.Parse("#f2efe9"), image.GetPixel(x, y - 20));
+            Assert.Equal(SKColor.Parse("#f2efe9"), image.GetPixel(x, y + 20));
+        }
+
         private static void AddNode(OsmDocument map, long id, double x, double z) =>
             map.Nodes.Add(id, new OsmNode(id, z / CityOsm.LatitudeMeters, x / CityOsm.LongitudeMeters));
     }
