@@ -521,7 +521,16 @@ public sealed class HarnessSessionTests
         await Prompt(session, "Keep the north riverbank clear while developing the city.");
         Assert.Equal(60, tools.Count);
         Assert.InRange(client.SummaryCalls, 1, 3);
-        Assert.Contains(client.SummaryInputs[0], message => message.Text.Contains("Keep the north riverbank clear"));
+        Assert.All(client.SummaryInputs, input =>
+        {
+            Assert.Equal(ChatRole.System, input[0].Role);
+            Assert.Equal(SummarizationCompactionStrategy.DefaultSummarizationPrompt, input[0].Text);
+            Assert.Equal(ChatRole.User, input[^1].Role);
+            Assert.Equal("Summarize the preceding conversation according to the system instructions. Do not continue the conversation.", input[^1].Text);
+        });
+        Assert.Contains(client.SummaryInputs[0].Skip(1).SkipLast(1), message =>
+            message.Role == ChatRole.User && message.Text.Contains("Keep the north riverbank clear"));
+        Assert.DoesNotContain(client.LastInput, message => message.Text == client.SummaryInputs[0][^1].Text);
         Assert.Contains(client.LastInput, message => message.Text.Contains("[Summary]\nKeep the north riverbank clear"));
         int stable = 0;
         for (int i = 1; i < requests.Count; i++)
@@ -611,8 +620,11 @@ public sealed class HarnessSessionTests
         await Stop(session);
         await Prompt(session, "Continue the same city work.");
         Assert.Equal(2, client.SummaryCalls);
-        Assert.Contains(client.SummaryInputs[1], message => message.Text.Contains("Keep the north riverbank clear while developing the city."));
-        Assert.Equal(Messages(client.SummaryInputs[0]), Messages(client.SummaryInputs[1]).Take(client.SummaryInputs[0].Count));
+        var stoppedRequest = client.SummaryInputs[0];
+        var retriedRequest = client.SummaryInputs[1];
+        Assert.Contains(retriedRequest, message => message.Text.Contains("Keep the north riverbank clear while developing the city."));
+        Assert.Equal(Messages(stoppedRequest.SkipLast(1)), Messages(retriedRequest.SkipLast(1)).Take(stoppedRequest.Count - 1));
+        Assert.Equal(stoppedRequest[^1].Text, retriedRequest[^1].Text);
         Assert.Contains(client.LastInput, message => message.Text.Contains("[Summary]\nKeep the north riverbank clear"));
         await session.CloseAsync();
         Assert.Contains(Recorded(session), line => (string)line["name"] == "compaction.finished" && (string)Data(session, line)["status"] == "cancelled");

@@ -70,6 +70,9 @@ namespace airimayor.Agent
             ILoggerFactory logger, IEnumerable<AIAgent> children, out InMemoryChatHistoryProvider history)
         {
             var summarizer = m_Client.AsBuilder()
+                .Use((messages, options, next, cancellationToken) => next(
+                    messages.Append(new ChatMessage(ChatRole.User, "Summarize the preceding conversation according to the system instructions. Do not continue the conversation.")),
+                    options, cancellationToken))
                 .ConfigureOptions(options => options.MaxOutputTokens = Math.Min(outputTokens, 4096))
                 .UseOpenTelemetry(sourceName: HarnessTrace.SourceName, configure: telemetry => telemetry.EnableSensitiveData = true)
                 .Build();

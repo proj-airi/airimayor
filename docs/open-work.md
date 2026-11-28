@@ -6,7 +6,6 @@ Current inventory. Vocabulary: [CONTEXT.md](../CONTEXT.md). Decisions: [adr/](./
 
 Code still missing.
 
-- Native-summary task separation on OpenCode Go DeepSeek: historical player requests must be summarized as source material instead of answered as the current task.
 - AIRI plugin
 
 ## Awaiting live acceptance
