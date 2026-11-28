@@ -88,21 +88,17 @@ namespace CS2MCP
                 case "/city/demand":
                     return GetDemand();
                 case "/city/budget":
-                    return GetBudget();
+                    return GetBudget(request);
                 case "/city/services":
                     return GetServices();
                 case "/city/labor":
                     return GetLabor();
                 case "/city/statistics":
                     return GetStatistics(request);
-                case "/city/taxes":
-                    return ListTaxes();
                 case "/city/policies":
                     return ListPolicies();
                 case "/city/policies/set":
                     return HandleSetPolicy(request);
-                case "/city/service-budgets":
-                    return ListServiceBudgets();
                 case "/city/budget/set":
                     return SetBudget(request);
                 case "/prefabs":
@@ -127,10 +123,6 @@ namespace CS2MCP
                     return ListTransitStops(request);
                 case "/city/transit/lines":
                     return ListTransitLines(request);
-                case "/city/loan":
-                    return GetLoan();
-                case "/city/fees":
-                    return ListFees();
                 case "/city/layer":
                     return ProbeLayer(request);
                 case "/city/zoning":
@@ -156,11 +148,7 @@ namespace CS2MCP
                 case "/screenshot":
                     return Screenshot(request);
                 default:
-                    return BridgeResponse.Error(BridgeErrorKind.NotFound,
-                        $"unknown endpoint: {request.Path}; available: /state /city/overview /city/demand " +
-                        "/city/budget /city/budget/set /city/services /city/labor /city/statistics /city/taxes " +
-                        "/city/policies /city/policies/set /city/service-budgets " +
-                        "/prefabs /city/osm/read /city/osm/edit /city/osm/query /sim/clock /sim/clock/set /screenshot");
+                    return BridgeResponse.Error(BridgeErrorKind.NotFound, $"Unknown city operation '{request.Path}'.");
             }
         }
 

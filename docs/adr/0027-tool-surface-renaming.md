@@ -2,6 +2,12 @@
 
 Status: accepted
 
+Read monthly income, expenses and balance with `get_budget`. Select
+`kind=tax|fee|service|loan` for the current values and limits in one
+part of the budget. Change a value with `set_budget` using the same
+kind. Budget reads stay available with treasury changes disabled.
+Returning one view per call keeps recurring monthly checks compact.
+
 Reads use `get_` for scalars and `list_` for collections; writes use one
 verb per domain. `zone_area` (circle) is deleted and `zone_rectangle`
 becomes `zone`: a lone zoning tool needs no shape suffix. `build_road`

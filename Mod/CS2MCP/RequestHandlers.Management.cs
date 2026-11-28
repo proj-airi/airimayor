@@ -35,12 +35,8 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse GetLoan()
+        private BridgeResponse ReadLoan()
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
             LoanSystem loans = World.GetOrCreateSystemManaged<LoanSystem>();
             LoanInfo current = loans.CurrentLoan;
             return BridgeResponse.Json(new
@@ -81,12 +77,8 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse ListFees()
+        private BridgeResponse ReadServiceFees(Entity city)
         {
-            if (!TryGetCity(out Entity city, out BridgeResponse error))
-            {
-                return error;
-            }
             if (!TryGetServiceFeeParameters(out ServiceFeeParameterData feeParameters, out BridgeResponse parameterError))
             {
                 return parameterError;

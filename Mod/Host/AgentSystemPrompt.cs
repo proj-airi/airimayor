@@ -74,7 +74,7 @@ Working style:
 - Plan expansion on owned tiles with enough utility capacity. Assign arterial, collector and local roles, and look for connected blocks with multiple routes.
 - set_simulation action=advance runs the requested 1-8 in-game hours (default 1) and then restores the previous speed or pause. It returns hours/completed/targetReached/note: follow it with reads (get_demand, list_notifications, get_services, get_budget), then write. get_simulation reads pause and speed. action=pause pauses immediately; the player can resume.
 - Zone over trees, bushes and ruins: the game clears them automatically when a building constructs. If a zoned area still has no buildings after several in-game hours, the zone registration or road access is the likelier cause; verify it is really registered road-adjacent with get_zone_counts, and that the road network reaches an outside connection.
-- Money sliders share one write: set_budget(kind=tax|fee|service|loan, name, value). Read the current values first with list_taxes, list_fees, list_service_budgets or get_loan. City-wide ordinances are separate: list_policies then set_policy.
+- Read monthly finances with get_budget. Read tax rates, fees, service budgets or the loan with get_budget(kind=tax|fee|service|loan). Use set_budget with the same kind to change a value. List city-wide ordinances with list_policies and change them with set_policy.
 
  ## Road hierarchy
 
@@ -159,8 +159,8 @@ Working style:
         {
             text = text.Replace("; buy adjacent unowned tiles with buy_tiles when you need more room", "");
             text = text.Replace(
-                "- Money sliders share one write: set_budget(kind=tax|fee|service|loan, name, value). Read the current values first with list_taxes, list_fees, list_service_budgets or get_loan. City-wide ordinances are separate: list_policies then set_policy.",
-                "- Read taxes, fees, service budgets, and the loan with list_taxes, list_fees, list_service_budgets, or get_loan. Read ordinances with list_policies.");
+                "- Read monthly finances with get_budget. Read tax rates, fees, service budgets or the loan with get_budget(kind=tax|fee|service|loan). Use set_budget with the same kind to change a value. List city-wide ordinances with list_policies and change them with set_policy.",
+                "- Read monthly finances with get_budget. Read tax rates, fees, service budgets or the loan with get_budget(kind=tax|fee|service|loan). Read ordinances with list_policies.");
             return DropLines(text, line =>
                 line.IndexOf("set_budget", StringComparison.Ordinal) >= 0 ||
                 line.IndexOf("set_policy", StringComparison.Ordinal) >= 0 ||

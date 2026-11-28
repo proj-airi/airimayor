@@ -486,14 +486,31 @@
     },
     {
       "name": "get_budget",
-      "description": "Detailed city budget: total income/expenses, balance, and a per-source breakdown (residential/commercial/industrial/office taxes, service fees, subsidies, service upkeep, loan interest, electricity/water import-export, map tile upkeep). Values are monthly rates; expenses are positive costs.",
+      "description": "Read the city budget. The default summary shows monthly income, expenses and balance, with a breakdown by source. Choose tax for current rates and ranges, fee for service charges and ranges, service for budget sliders, efficiency, upkeep and building counts, or loan for principal, daily interest, payment and creditworthiness.",
       "parameters": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "tax",
+              "fee",
+              "service",
+              "loan"
+            ],
+            "description": "Budget view to read. Defaults to summary."
+          }
+        },
         "required": []
       },
       "route": "/city/budget",
-      "query": [],
+      "query": [
+        {
+          "key": "kind",
+          "arg": "kind"
+        }
+      ],
       "response": "json"
     },
     {
@@ -565,20 +582,8 @@
       "response": "json"
     },
     {
-      "name": "list_taxes",
-      "description": "Current tax rate and allowed range for each tax area: Residential, Commercial, Industrial, Office.",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      },
-      "route": "/city/taxes",
-      "query": [],
-      "response": "json"
-    },
-    {
       "name": "set_budget",
-      "description": "Single finance write. kind selects the slider: tax (name=Residential|Commercial|Industrial|Office, value=percent, clamped to the allowed range), fee (name=resource from list_fees, value=fee within its slider range), service (name=service from list_service_budgets, value=percent 50-150), loan (value=new loan principal, 0 repays fully, clamped to creditworthiness). Higher taxes/fees raise income but lower demand, usage and happiness.",
+      "description": "Set a tax rate, fee, service budget or loan principal. Read current values, names and limits with get_budget using the same kind. Tax rates are percentages for Residential, Commercial, Industrial or Office, clamped to the allowed range. Fees must be within the displayed range. Service budgets are percentages from 50 to 150. Set the loan to the desired principal within creditworthiness, or 0 to repay it. Taxes and fees affect city income, demand, service usage and happiness.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -674,18 +679,6 @@
           "arg": "adjustment"
         }
       ],
-      "response": "json"
-    },
-    {
-      "name": "list_service_budgets",
-      "description": "Per-service budget sliders (50-150%, 100 = default) with current efficiency, estimated upkeep cost and building count for every city service (police, healthcare, education, transport, ...).",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      },
-      "route": "/city/service-budgets",
-      "query": [],
       "response": "json"
     },
     {
@@ -1330,30 +1323,6 @@
           "arg": "version"
         }
       ],
-      "response": "json"
-    },
-    {
-      "name": "get_loan",
-      "description": "Current loan principal, daily interest rate, daily payment and the city's creditworthiness (max borrowable).",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      },
-      "route": "/city/loan",
-      "query": [],
-      "response": "json"
-    },
-    {
-      "name": "list_fees",
-      "description": "Current price the city charges per service (electricity, water, healthcare, education levels, garbage, parking, public transport...) with slider ranges and estimated monthly income per fee.",
-      "parameters": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      },
-      "route": "/city/fees",
-      "query": [],
       "response": "json"
     },
     {

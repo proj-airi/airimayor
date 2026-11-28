@@ -9,11 +9,6 @@ using Unity.Mathematics;
 
 namespace CS2MCP
 {
-    /// <summary>
-    /// Economy endpoints: budget breakdown (read), tax rates (read/write),
-    /// per-service budget sliders (read/write). Write paths call the same
-    /// game APIs the vanilla UI triggers use.
-    /// </summary>
     public sealed partial class RequestHandlers
     {
         private EntityQuery m_ServicePrefabQuery;
@@ -43,13 +38,27 @@ namespace CS2MCP
             }
         }
 
-        private BridgeResponse GetBudget()
+        private BridgeResponse GetBudget(BridgeRequest request)
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
+            if (!TryGetCity(out Entity city, out BridgeResponse error))
             {
                 return error;
             }
 
+            string kind = request.Query.TryGetValue("kind", out string selected) ? selected?.ToLowerInvariant() : "summary";
+            return kind switch
+            {
+                "summary" => ReadBudgetSummary(),
+                "tax" => ReadTaxRates(),
+                "fee" => ReadServiceFees(city),
+                "service" => ReadServiceBudgets(),
+                "loan" => ReadLoan(),
+                _ => BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose summary, tax, fee, service or loan for the budget view."),
+            };
+        }
+
+        private BridgeResponse ReadBudgetSummary()
+        {
             CityServiceBudgetSystem budget = World.GetOrCreateSystemManaged<CityServiceBudgetSystem>();
 
             var income = new Dictionary<string, int>();
@@ -76,13 +85,8 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse ListTaxes()
+        private BridgeResponse ReadTaxRates()
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
-
             TaxSystem tax = World.GetOrCreateSystemManaged<TaxSystem>();
             int2 limits = tax.GetTaxParameterData().m_TotalTaxLimits;
             var areas = new Dictionary<string, object>();
@@ -104,13 +108,6 @@ namespace CS2MCP
             });
         }
 
-        /// <summary>
-        /// Single finance write: kind=tax|fee|service|loan selects the slider.
-        /// tax: name=Residential|Commercial|Industrial|Office, value=percent.
-        /// fee: name=resource from /city/fees, value=fee.
-        /// service: name=service from /city/service-budgets, value=percent 50-150.
-        /// loan: value=new principal (0 repays fully), name ignored.
-        /// </summary>
         private BridgeResponse SetBudget(BridgeRequest request)
         {
             if (!request.Query.TryGetValue("kind", out string kind) || string.IsNullOrEmpty(kind))
@@ -166,13 +163,8 @@ namespace CS2MCP
             });
         }
 
-        private BridgeResponse ListServiceBudgets()
+        private BridgeResponse ReadServiceBudgets()
         {
-            if (!TryGetCity(out _, out BridgeResponse error))
-            {
-                return error;
-            }
-
             CityServiceBudgetSystem budgetSystem = World.GetOrCreateSystemManaged<CityServiceBudgetSystem>();
             PrefabSystem prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
 
@@ -215,7 +207,7 @@ namespace CS2MCP
 
             if (!request.Query.TryGetValue("name", out string serviceName) || string.IsNullOrEmpty(serviceName))
             {
-                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "provide ?name=<service from /city/service-budgets>");
+                return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Use a service name from get_budget(kind=service).");
             }
             if (!request.TryGetFloat("value", out float valueFloat))
             {
@@ -247,7 +239,7 @@ namespace CS2MCP
                 }
             }
 
-            return BridgeResponse.Error(BridgeErrorKind.NotFound, $"unknown service '{serviceName}'; list names via /city/service-budgets");
+            return BridgeResponse.Error(BridgeErrorKind.NotFound, $"Unknown service '{serviceName}'. Read service names with get_budget(kind=service).");
         }
     }
 }

@@ -141,6 +141,29 @@ test('finance, services, demand and notifications preserve units, scope, zero va
   assert.equal(metric('notifications.total').latest?.frame, 20)
 })
 
+test('budget detail reads preserve the last observed monthly balance', async () => {
+  const trace = fixture()
+  const summary = trace.tool('get_budget', 10, { totalIncome: 100, totalExpenses: 150, balance: -50 })
+  trace.tool(
+    'get_budget',
+    20,
+    {
+      fees: {
+        Electricity: {
+          fee: 3,
+          estimatedMonthlyIncome: 20,
+          adjustable: true,
+          sliderRange: { min: 0, max: 8, defaultValue: 3 },
+        },
+      },
+    },
+    { arguments: JSON.stringify({ kind: 'fee' }) },
+  )
+  const { session, end } = await trace.open()
+  const budget = session.city(end, { metric: 'budget.balance' })
+  assert.deepEqual(budget.points.map((point) => [point.index, point.frame, point.value]), [[summary, 10, -50]])
+})
+
 test('road histories compare entity and version, never average a changing or truncated list', async () => {
   const trace = fixture()
   const road = (index: number, version: number, flowPercent: number) => ({
