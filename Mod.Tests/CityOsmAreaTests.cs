@@ -58,6 +58,9 @@ namespace CS2MCP
             CityOsmAreas.CheckExpansion(old, larger);
             var notch = larger.Take(3).Concat(new[] { new float2(8,20), new float2(8,8), new float2(4,8), new float2(4,20), larger[3] }).ToList();
             Assert.Throws<FormatException>(() => CityOsmAreas.CheckExpansion(old, notch));
+            notch[4] = new float2(8, 14);
+            notch[5] = new float2(4, 14);
+            CityOsmAreas.CheckExpansion(old, notch);
             larger[0] += new float2(-1, 0);
             Assert.Throws<FormatException>(() => CityOsmAreas.CheckExpansion(old, larger));
             Assert.Throws<FormatException>(() => CityOsmAreas.CheckExpansion(old, old));

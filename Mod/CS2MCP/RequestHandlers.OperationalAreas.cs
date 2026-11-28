@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Colossal.Collections;
 using Colossal.Mathematics;
@@ -30,7 +29,7 @@ namespace CS2MCP
                 || !request.TryGetInt("version", out int version))
             {
                 return BridgeResponse.Error(BridgeErrorKind.InvalidArguments,
-                    "provide ?index=&version= of a building from /city/buildings");
+                    "Choose a building from query_osm and supply its index and version.");
             }
 
             if (!TryResolveExistingEntity(index, version, out Entity building)
@@ -82,7 +81,7 @@ namespace CS2MCP
 
         private OsmPerimeter PlanOsmOperationalArea(OsmDocument before, OsmDocument after, OsmWay old, OsmWay next, float4 bounds)
         {
-            CityOsmEdit.CheckEditedTags(old, next, CityOsmAreas.TargetArea);
+            CityOsmEdit.CheckEditedTags(old, next);
             var current = CityOsmAreas.Ring(before, old, bounds);
             var desired = CityOsmAreas.Ring(after, next, bounds);
             for (int i = 0; i < desired.Count; i++)
@@ -96,135 +95,18 @@ namespace CS2MCP
                 throw new FormatException("The facility that owns this area changed.");
             if (!TryResolveExpandableOperationalArea(building, area, out Entity owner, out Entity prefabEntity,
                 out DynamicBuffer<Node> currentNodes, out ExtractorAreaData? extractorData, out string error)) throw new FormatException(error);
-            string requestedArea = CityOsm.Tag(next, CityOsmAreas.TargetArea);
-            Node[] expandedNodeArray;
-            if (requestedArea == null)
-            {
-                CityOsmAreas.CheckExpansion(current, desired);
-                TerrainHeightData heightData = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
-                expandedNodeArray = new Node[desired.Count];
-                expandedNodeArray[0] = currentNodes[0];
-                expandedNodeArray[1] = currentNodes[1];
-                for (int i = 2; i < desired.Count; i++)
-                    expandedNodeArray[i] = CreateOperationalAreaNode(FindNearestOperationalAreaNode(currentNodes, desired[i]), desired[i], ref heightData);
-                if (!IsOperationalAreaCandidateClear(building, expandedNodeArray, out string obstacle))
-                    throw new FormatException(obstacle);
-                if (extractorData.HasValue && !TryScoreOperationalAreaResource(expandedNodeArray, extractorData.Value, out _, out string resource))
-                    throw new FormatException(resource);
-            }
-            else
-            {
-                if (!current.SequenceEqual(desired) || !float.TryParse(requestedArea, NumberStyles.Float, CultureInfo.InvariantCulture, out float target)
-                    || !math.isfinite(target) || target < 64f || target > 250000f)
-                    throw new FormatException("Give either a new perimeter or a target area between 64 and 250000 square meters.");
-                expandedNodeArray = PlanOsmOperationalExpansion(building, currentNodes, extractorData, target, bounds);
-            }
-            return new OsmPerimeter { Building = building, Area = area, Owner = owner, Prefab = prefabEntity, Nodes = expandedNodeArray };
-        }
-
-        private Node[] PlanOsmOperationalExpansion(Entity building, DynamicBuffer<Node> currentNodes,
-            ExtractorAreaData? extractorData, float targetArea, float4 bounds)
-        {
-            Node[] expandedNodeArray = null;
-            float2 lockedStart = currentNodes[0].m_Position.xz;
-            float2 lockedEnd = currentNodes[1].m_Position.xz;
-            float2 lockedEdge = lockedEnd - lockedStart;
-            float lockedLength = math.length(lockedEdge);
-            if (lockedLength < 8f)
-            {
-                throw new FormatException("The building-side edge is too short to expand safely.");
-            }
-
-            float2 tangent = lockedEdge / lockedLength;
-            float2 normal = new float2(-tangent.y, tangent.x);
-            float2 lockedMid = (lockedStart + lockedEnd) * 0.5f;
-            float2 areaCenter = float2.zero;
-            for (int i = 2; i < currentNodes.Length; i++)
-            {
-                areaCenter += currentNodes[i].m_Position.xz;
-            }
-            areaCenter /= currentNodes.Length - 2;
-            float signedDepth = math.dot(areaCenter - lockedMid, normal);
-            if (math.abs(signedDepth) < 8f)
-            {
-                throw new FormatException("The operational area has no usable free side away from the building.");
-            }
-            if (signedDepth < 0f)
-            {
-                normal = -normal;
-            }
-
-            float previousPolygonArea = CalculatePolygonArea(currentNodes);
-            if (targetArea <= previousPolygonArea + 1f)
-            {
-                throw new FormatException($"The target area must exceed the current {previousPolygonArea:F1} square meters.");
-            }
-
-            List<OperationalAreaObstacle> obstacles = CollectOperationalAreaObstacles(building);
-            TerrainHeightData heightData = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
-            OperationalResourceScore selectedResourceScore = default;
-            string lastRejection = null;
-            foreach (float tangentShift in OperationalAreaPlanningMath.CenterShifts(lockedLength))
-            {
-                if (!TryPlanOperationalAreaExpansion(
-                        currentNodes,
-                        lockedStart,
-                        lockedEnd,
-                        tangent,
-                        normal,
-                        targetArea,
-                        tangentShift,
-                        obstacles,
-                        ref heightData,
-                        out Node[] candidateNodes,
-                        out string planError))
-                {
-                    lastRejection = planError;
-                    continue;
-                }
-                if (Array.Exists(candidateNodes, node => math.any(node.m_Position.xz < bounds.xy) || math.any(node.m_Position.xz > bounds.zw)))
-                {
-                    lastRejection = "the expansion extends outside the selected rectangle";
-                    continue;
-                }
-                if (!IsOperationalAreaCandidateClear(
-                        building,
-                        candidateNodes,
-                        out string obstacleReason))
-                {
-                    lastRejection = obstacleReason;
-                    continue;
-                }
-                if (extractorData.HasValue)
-                {
-                    if (!TryScoreOperationalAreaResource(
-                            candidateNodes,
-                            extractorData.Value,
-                            out OperationalResourceScore resourceScore,
-                            out string resourceError))
-                    {
-                        lastRejection = resourceError;
-                        continue;
-                    }
-                    if (expandedNodeArray == null
-                        || resourceScore.RemainingAmount > selectedResourceScore.RemainingAmount
-                        || (math.abs(resourceScore.RemainingAmount - selectedResourceScore.RemainingAmount) < 0.1f
-                            && resourceScore.Coverage > selectedResourceScore.Coverage))
-                    {
-                        expandedNodeArray = candidateNodes;
-                        selectedResourceScore = resourceScore;
-                    }
-                    continue;
-                }
-                expandedNodeArray = candidateNodes;
-                break;
-            }
-            if (expandedNodeArray == null)
-            {
-                throw new FormatException($"The facility cannot expand to {targetArea:F1} m2. {lastRejection}");
-            }
-
-            return expandedNodeArray;
+            CityOsmAreas.CheckExpansion(current, desired);
+            TerrainHeightData heights = World.GetOrCreateSystemManaged<TerrainSystem>().GetHeightData();
+            var nodes = new Node[desired.Count];
+            nodes[0] = currentNodes[0];
+            nodes[1] = currentNodes[1];
+            for (int i = 2; i < desired.Count; i++)
+                nodes[i] = CreateOperationalAreaNode(FindNearestOperationalAreaNode(currentNodes, desired[i]), desired[i], ref heights);
+            if (!IsOperationalAreaCandidateClear(building, nodes, out string obstacle))
+                throw new FormatException(obstacle);
+            if (extractorData.HasValue && !TryValidateOperationalAreaResource(nodes, extractorData.Value, out string resource))
+                throw new FormatException(resource);
+            return new OsmPerimeter { Building = building, Area = area, Owner = owner, Prefab = prefabEntity, Nodes = nodes };
         }
 
         private bool TryResolveExpandableOperationalArea(
@@ -253,120 +135,13 @@ namespace CS2MCP
                 && (EntityManager.GetComponentData<StorageAreaData>(prefabEntity).m_Resources & Game.Economy.Resource.Garbage) != 0;
             if (EntityManager.HasComponent<Extractor>(area) && EntityManager.HasComponent<ExtractorAreaData>(prefabEntity))
                 extractorData = EntityManager.GetComponentData<ExtractorAreaData>(prefabEntity);
-            if (!attached || (!isStorage && !extractorData.HasValue) || nodes.Length < OperationalAreaPlanningMath.MinNodeCount
-                || nodes.Length > OperationalAreaPlanningMath.MaxNodeCount)
+            if (!attached || (!isStorage && !extractorData.HasValue) || nodes.Length < CityOsmAreas.MinimumOperationalCorners
+                || nodes.Length > CityOsmAreas.MaximumOperationalCorners)
             {
                 error = "This perimeter is not an expandable landfill storage or extractor area.";
                 return false;
             }
             return true;
-        }
-
-        private static float CalculatePolygonArea(DynamicBuffer<Node> nodes)
-        {
-            float area = 0f;
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                float2 current = nodes[i].m_Position.xz;
-                float2 next = nodes[(i + 1) % nodes.Length].m_Position.xz;
-                area += current.x * next.y - next.x * current.y;
-            }
-            return math.abs(area) * 0.5f;
-        }
-
-        private static float CalculatePolygonArea(Node[] nodes)
-        {
-            float area = 0f;
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                float2 current = nodes[i].m_Position.xz;
-                float2 next = nodes[(i + 1) % nodes.Length].m_Position.xz;
-                area += current.x * next.y - next.x * current.y;
-            }
-            return math.abs(area) * 0.5f;
-        }
-
-        private bool TryPlanOperationalAreaExpansion(
-            DynamicBuffer<Node> nodes,
-            float2 lockedStart,
-            float2 lockedEnd,
-            float2 tangent,
-            float2 normal,
-            float targetArea,
-            float tangentShift,
-            IReadOnlyList<OperationalAreaObstacle> obstacles,
-            ref TerrainHeightData heightData,
-            out Node[] result,
-            out string error)
-        {
-            result = null;
-            error = null;
-            var existing = new List<float2>(nodes.Length);
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                existing.Add(nodes[i].m_Position.xz);
-            }
-
-            if (!OperationalAreaPlanningMath.TryPlanExpansion(
-                    existing,
-                    lockedStart,
-                    lockedEnd,
-                    tangent,
-                    normal,
-                    targetArea,
-                    tangentShift,
-                    obstacles,
-                    out List<float2> oriented,
-                    out _,
-                    out error))
-            {
-                return false;
-            }
-
-            result = new Node[oriented.Count];
-            for (int i = 0; i < oriented.Count; i++)
-            {
-                Node template = FindNearestOperationalAreaNode(nodes, oriented[i]);
-                result[i] = CreateOperationalAreaNode(template, oriented[i], ref heightData);
-            }
-            if (!HasMinimumOperationalAreaSpacing(
-                    result,
-                    OperationalAreaPlanningMath.MinNodeDistance))
-            {
-                error = "planned expansion places adjacent nodes closer than the native 4 m limit";
-                result = null;
-                return false;
-            }
-            if (CalculatePolygonArea(result) < targetArea - 1f)
-            {
-                error = "planned expansion fell below the requested area after terrain projection";
-                result = null;
-                return false;
-            }
-            return true;
-        }
-
-        private static bool HasMinimumOperationalAreaSpacing(Node[] nodes, float minimumSpacing)
-        {
-            float minimumSquared = minimumSpacing * minimumSpacing;
-            for (int i = 0; i < nodes.Length; i++)
-            {
-                float2 current = nodes[i].m_Position.xz;
-                float2 next = nodes[(i + 1) % nodes.Length].m_Position.xz;
-                if (math.distancesq(current, next) < minimumSquared)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private struct OperationalResourceScore
-        {
-            public float RemainingAmount;
-            public float Coverage;
-            public int SampleCount;
-            public float MaxConcentration;
         }
 
         private struct ForestResourceIterator
@@ -382,8 +157,6 @@ namespace CS2MCP
             public ComponentLookup<TreeData> TreePrefabs;
             public ComponentLookup<Decoration> Decorations;
             public float RemainingAmount;
-            public float MaxConcentration;
-            public int TreeCount;
 
             public bool Intersect(QuadTreeBoundsXZ bounds)
             {
@@ -431,8 +204,6 @@ namespace CS2MCP
                 }
 
                 RemainingAmount += amount;
-                MaxConcentration = math.max(MaxConcentration, amount / treeData.m_WoodAmount);
-                TreeCount++;
             }
 
             private bool ContainsPoint(float2 point)
@@ -456,29 +227,22 @@ namespace CS2MCP
             }
         }
 
-        private bool TryScoreOperationalAreaResource(
-            Node[] nodes,
-            ExtractorAreaData extractorData,
-            out OperationalResourceScore score,
-            out string error)
+        private bool TryValidateOperationalAreaResource(Node[] nodes, ExtractorAreaData extractorData, out string error)
         {
-            score = default;
             error = null;
             MapFeature feature = extractorData.m_MapFeature;
             if (feature == MapFeature.Forest)
             {
-                return TryScoreForestOperationalArea(
-                    nodes,
-                    extractorData.m_RequireNaturalResource,
-                    out score,
-                    out error);
+                return TryValidateForestOperationalArea(nodes, extractorData.m_RequireNaturalResource, out error);
             }
             if (feature != MapFeature.FertileLand
                 && feature != MapFeature.Ore
                 && feature != MapFeature.Oil
                 && feature != MapFeature.Fish)
             {
-                return !extractorData.m_RequireNaturalResource;
+                if (!extractorData.m_RequireNaturalResource) return true;
+                error = $"The city cannot check {feature} resources for this operational area.";
+                return false;
             }
 
             NaturalResourceSystem resources =
@@ -497,8 +261,7 @@ namespace CS2MCP
             float cellSize = (float)CellMapSystem<NaturalResourceCell>.kMapSize / textureSize;
             float halfTexture = textureSize * 0.5f;
             float cellArea = cellSize * cellSize;
-            float resourceBearingArea = 0f;
-            float polygonArea = CalculatePolygonArea(nodes);
+            float remainingAmount = 0f;
             float2 origin = nodes[0].m_Position.xz;
             for (int triangleIndex = 1; triangleIndex < nodes.Length - 1; triangleIndex++)
             {
@@ -531,16 +294,12 @@ namespace CS2MCP
                         };
                         if (MathUtils.Intersect(cellBounds, triangle, out float intersectionArea))
                         {
-                            score.RemainingAmount += remaining * intersectionArea / cellArea;
-                            resourceBearingArea += intersectionArea;
+                            remainingAmount += remaining * intersectionArea / cellArea;
                         }
                     }
                 }
             }
-            score.Coverage = polygonArea > 0.01f
-                ? math.saturate(resourceBearingArea / polygonArea)
-                : 0f;
-            if (extractorData.m_RequireNaturalResource && score.RemainingAmount <= 0.01f)
+            if (extractorData.m_RequireNaturalResource && remainingAmount <= 0.01f)
             {
                 error = $"planned {feature} extractor expansion has no remaining resource coverage";
                 return false;
@@ -548,14 +307,10 @@ namespace CS2MCP
             return true;
         }
 
-        private bool TryScoreForestOperationalArea(
-            Node[] nodes,
-            bool requireNaturalResource,
-            out OperationalResourceScore score,
-            out string error)
+        private bool TryValidateForestOperationalArea(Node[] nodes, bool requireNaturalResource, out string error)
         {
-            score = default;
             error = null;
+            float remainingAmount;
             var polygon = new NativeArray<float2>(nodes.Length, Allocator.Temp);
             try
             {
@@ -587,17 +342,14 @@ namespace CS2MCP
                     Decorations = m_System.GetComponentLookup<Decoration>(true),
                 };
                 searchTree.Iterate(ref iterator);
-                score.RemainingAmount = iterator.RemainingAmount;
-                score.MaxConcentration = math.saturate(iterator.MaxConcentration);
-                score.Coverage = score.MaxConcentration;
-                score.SampleCount = iterator.TreeCount;
+                remainingAmount = iterator.RemainingAmount;
             }
             finally
             {
                 polygon.Dispose();
             }
 
-            if (requireNaturalResource && score.RemainingAmount <= 0.01f)
+            if (requireNaturalResource && remainingAmount <= 0.01f)
             {
                 error = "planned Forest extractor expansion contains no productive tree resources";
                 return false;
@@ -622,46 +374,6 @@ namespace CS2MCP
                 default:
                     return default;
             }
-        }
-
-        private List<OperationalAreaObstacle> CollectOperationalAreaObstacles(Entity building)
-        {
-            var obstacles = new List<OperationalAreaObstacle>();
-            using (NativeArray<Entity> buildings = PlacedBuildingQuery.ToEntityArray(Allocator.Temp))
-            {
-                foreach (Entity other in buildings)
-                {
-                    if (other == building || IsAreaOwnedBy(other, building))
-                    {
-                        continue;
-                    }
-                    Transform transform = EntityManager.GetComponentData<Transform>(other);
-                    PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(other);
-                    float clearance = BuildingRadius(prefabRef.m_Prefab) + 2f;
-                    if (clearance > 2f)
-                    {
-                        obstacles.Add(new OperationalAreaObstacle(transform.m_Position.xz, clearance));
-                    }
-                }
-            }
-            using (NativeArray<Entity> roads = PlacedRoadQuery.ToEntityArray(Allocator.Temp))
-            {
-                foreach (Entity road in roads)
-                {
-                    PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(road);
-                    float clearance = EntityManager.HasComponent<NetGeometryData>(prefabRef.m_Prefab)
-                        ? EntityManager.GetComponentData<NetGeometryData>(prefabRef.m_Prefab).m_DefaultWidth * 0.5f + 2f
-                        : 2f;
-                    Game.Net.Curve curve = EntityManager.GetComponentData<Game.Net.Curve>(road);
-                    for (int i = 0; i <= 24; i++)
-                    {
-                        obstacles.Add(new OperationalAreaObstacle(
-                            BezierPoint(curve.m_Bezier, i / 24f).xz,
-                            clearance));
-                    }
-                }
-            }
-            return obstacles;
         }
 
         private bool IsOperationalAreaCandidateClear(
@@ -691,7 +403,7 @@ namespace CS2MCP
                     PrefabRef prefabRef = EntityManager.GetComponentData<PrefabRef>(other);
                     float clearance = BuildingRadius(prefabRef.m_Prefab) + 2f;
                     if (clearance > 2f
-                        && OperationalAreaPlanningMath.DistanceToPolygon(transform.m_Position.xz, polygon) < clearance)
+                        && CityOsmAreas.DistanceToPolygon(transform.m_Position.xz, polygon) < clearance)
                     {
                         reason = "planned expansion intersects an existing building";
                         return false;
@@ -710,7 +422,7 @@ namespace CS2MCP
                     for (int i = 0; i <= 24; i++)
                     {
                         float2 point = BezierPoint(curve.m_Bezier, i / 24f).xz;
-                        if (OperationalAreaPlanningMath.DistanceToPolygon(point, polygon) < clearance)
+                        if (CityOsmAreas.DistanceToPolygon(point, polygon) < clearance)
                         {
                             reason = "planned expansion intersects an existing road";
                             return false;

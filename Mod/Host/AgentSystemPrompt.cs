@@ -91,10 +91,11 @@ Working style:
  - Aim for flowPercent of 70 or above. Use query_osm with kind=road and sort=congestion or traffic_volume to find the busiest streets. Use view=topology for near misses, unnoded crossings, close junctions and disconnected components. A dead end alone can be intentional. Check the district after an intervention and a time advance.
  - Use edit_osm on an existing road way for upgrades. Set airimayor:upgrade:trees:right=yes to plant on the right in way node order. Grass, trees, wide_sidewalk, sound_barrier and parking have left and right keys. Lighting, median_grass and median_trees apply to the entire way. Remove an upgrade tag to clear it.
 
-## Specialized industry
+## Operational areas
 
-- Find a hub with query_osm using kind=building, role=specialized-industry and operational_area=extractor. Read its district and use edit_osm on the facility-owned perimeter to expand it toward available resources.
-- Then set_simulation advance and verify production with inspect_operational_area (extractedAmount, workAmount and resource coverage).
+- Find a hub with query_osm using kind=building, role=specialized-industry and operational_area=extractor. Find a landfill with role=garbage and operational_area=storage.
+- Read the entire operational perimeter with read_osm. Expand its closed way with edit_osm. Keep the first two corners at the facility edge. Cover the existing area and choose new land with room or resources for the facility.
+- After expanding a landfill, use inspect_operational_area to read storage capacity. For extractors, advance city time and read production and resource coverage.
 
 ## Phases (adapt to the city)
 

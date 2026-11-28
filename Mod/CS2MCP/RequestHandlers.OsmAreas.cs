@@ -200,7 +200,7 @@ namespace CS2MCP
                     for (int i = 0; i < brushes.Count; i++)
                     {
                         var brush = brushes[i];
-                        if ((brush.Block != null && brush.Block != identity) || OperationalAreaPlanningMath.DistanceToPolygon(center.xz, brush.Ring) > 0.001f) continue;
+                        if ((brush.Block != null && brush.Block != identity) || CityOsmAreas.DistanceToPolygon(center.xz, brush.Ring) > 0.001f) continue;
                         covered[i] = true;
                         if (brush.ClearOld) cleared = true;
                         else if (painted.HasValue && !painted.Value.Equals(brush.Zone)) throw new FormatException("Overlapping zoning polygons give one cell different zones.");

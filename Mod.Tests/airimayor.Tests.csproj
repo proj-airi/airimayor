@@ -25,7 +25,6 @@
     <Compile Include="..\Mod\CS2MCP\OsmRoadUpgrades.cs" Link="Production\OsmRoadUpgrades.cs" />
     <None Include="..\docs\research\examples\2026-11-21-osm\*.osm;..\docs\research\examples\2026-11-21-osm\*.osc" Link="OsmFixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\Mod\CS2MCP\NetworkCourseMath.cs" Link="Production\NetworkCourseMath.cs" />
-    <Compile Include="..\Mod\CS2MCP\OperationalAreaPlanningMath.cs" Link="Production\OperationalAreaPlanningMath.cs" />
     <Compile Include="..\Mod\CS2MCP\PrefabOperationalAreaGraph.cs" Link="Production\PrefabOperationalAreaGraph.cs" />
     <Compile Include="..\Mod\CS2MCP\RoadFactsMath.cs" Link="Production\RoadFactsMath.cs" />
     <Compile Include="..\Mod\CS2MCP\TypedNetworkMath.cs" Link="Production\TypedNetworkMath.cs" />

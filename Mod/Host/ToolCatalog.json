@@ -744,7 +744,7 @@
     },
     {
       "name": "inspect_operational_area",
-      "description": "Inspect building-owned operational polygons such as landfill storage or specialized-industry extraction areas. Returns polygon nodes, surface area, current storage/extraction state and capacity/resource requirements. Use index+version from query_osm.",
+      "description": "Inspect landfill storage or specialized-industry extraction. Returns the facility's perimeter, surface area, capacity and resource requirements. Use index+version from query_osm. To expand the area, read its district with read_osm and draw its expanded perimeter with edit_osm.",
       "parameters": {
         "type": "object",
         "properties": {
