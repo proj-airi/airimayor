@@ -45,8 +45,8 @@ namespace CS2MCP
                 foreach (Entity edge in edges) CheckOsmDeletion(edge, allowedRemovals, deleted);
                 foreach (Entity obj in objects)
                 {
-                    if (EntityManager.HasComponent<Game.Buildings.Building>(obj) ||
-                        EntityManager.HasComponent<Game.Routes.TransportStop>(obj))
+                    if (EntityManager.HasComponent<Game.Buildings.Building>(obj) || EntityManager.HasComponent<Game.Routes.TransportStop>(obj)
+                        || allowedRemovals.Contains(EntityManager.GetComponentData<Temp>(obj).m_Original))
                         CheckOsmDeletion(obj, allowedRemovals, deleted);
                 }
                 foreach (Entity target in m_OsmEdit.Deletions)
@@ -311,7 +311,7 @@ namespace CS2MCP
             foreach (var obj in m_OsmEdit.Objects)
             {
                 Entity owner = obj.Placement.UpgradeOwner;
-                yield return (obj.Placement.AttachParent == Entity.Null ? OsmKind.Way : OsmKind.Node, obj.Placement.WayId,
+                yield return (obj.Placement.Kind, obj.Placement.WayId,
                     owner == Entity.Null ? obj.Entity : owner);
             }
             foreach (var route in m_OsmEdit.Routes)

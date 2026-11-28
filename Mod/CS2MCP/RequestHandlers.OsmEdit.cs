@@ -28,7 +28,7 @@ namespace CS2MCP
 
             var roads = new List<OsmRoadPlacement>();
             var buildings = new List<OsmBuildingPlacement>();
-            var facilityUpgrades = new List<OsmBuildingPlacement>();
+            var additionalPlacements = new List<OsmBuildingPlacement>();
             var deletions = new List<Entity>();
             var routes = new List<OsmTransitEdit>();
             var changedRoadAssets = new Dictionary<long, (Entity Prefab, bool Reverse)>();
@@ -104,9 +104,10 @@ namespace CS2MCP
                 }
                 if (change.Edited is OsmNode || change.Original is OsmNode)
                 {
+                    if (TryPlanOsmStandalonePoint(change.Original as OsmNode, change.Edited as OsmNode, ref terrain, additionalPlacements, deletions)) continue;
                     if (!TryPlanOsmStop(change.Original, change.Edited, current, target, buildings, deletions))
                     {
-                        throw new FormatException($"Node {(change.Edited ?? change.Original).Id} needs a road, a building outline or a supported roadside object.");
+                        throw new FormatException($"Node {(change.Edited ?? change.Original).Id} does not describe a supported point feature.");
                     }
                     continue;
                 }
@@ -143,7 +144,7 @@ namespace CS2MCP
                     if (upgrades.Count > 0)
                     {
                         foreach (string upgrade in upgrades)
-                            facilityUpgrades.Add(PlanOsmFacilityUpgrade(original, editedWay.Id, upgrade, bounds));
+                            additionalPlacements.Add(PlanOsmFacilityUpgrade(original, editedWay.Id, upgrade, bounds));
                         continue;
                     }
                     CityOsmEdit.CheckEditedTags(originalWay, editedWay, "building", "amenity", "airimayor:prefab", "name");
@@ -162,7 +163,7 @@ namespace CS2MCP
                 }
             }
             CheckOsmMovedJunctions(current, target, affected);
-            buildings.AddRange(facilityUpgrades);
+            buildings.AddRange(additionalPlacements);
             CheckOsmTransitBatch(routes, buildings, deletions);
             CheckOsmAreaDependencies(areas, roads, buildings, deletions);
             bool needsConstruction = roads.Count + buildings.Count + routes.Count > 0 || areas.HasEdits;

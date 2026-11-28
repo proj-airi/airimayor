@@ -53,12 +53,12 @@ namespace CS2MCP
                 if (original != null) RequireInside(original.Id, before.Positions[id], bounds);
                 if (edited != null) RequireInside(edited.Id, after.Positions[id], bounds);
                 changedNodes.Add(id);
-                bool platform = (original != null && CityOsm.IsPlatform(original)) || (edited != null && CityOsm.IsPlatform(edited));
-                if (platform && shapeNodes.Contains(id))
+                bool point = CityOsmStandalonePoints.IsPoint(original) || CityOsmStandalonePoints.IsPoint(edited);
+                if (point && shapeNodes.Contains(id))
                 {
-                    throw new FormatException($"Place stop {id} at the curb using its own node.");
+                    throw new FormatException($"Use a separate node for point feature {id}.");
                 }
-                if (!shapeNodes.Contains(id) || platform)
+                if (!shapeNodes.Contains(id) || point)
                 {
                     items.Add(new CityOsmEditItem(original, edited));
                     continue;
@@ -105,9 +105,9 @@ namespace CS2MCP
                     RequireInside(edited, after, bounds);
                     foreach (long node in edited.NodeIds)
                     {
-                        if ((roadNodes.Contains(node) && lotNodes.Contains(node)) || CityOsm.IsPlatform(target.Nodes[node]))
+                        if ((roadNodes.Contains(node) && lotNodes.Contains(node)) || CityOsmStandalonePoints.IsPoint(target.Nodes[node]))
                         {
-                            throw new FormatException($"Way {edited.Id} needs a separate point at node {node} for each lot, curb stop and road junction.");
+                            throw new FormatException($"Way {edited.Id} needs a separate point at node {node} for each lot, point object and road junction.");
                         }
                     }
                 }

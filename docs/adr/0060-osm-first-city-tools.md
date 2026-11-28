@@ -27,6 +27,8 @@ The catalog and road editor use the same road class and default car-lane count. 
 
 Standalone footways use `highway=footway`. Standalone tracks use `railway=rail`, `railway=tram`, or `railway=subway`. Resolve their assets from the native path or track type. Keep road traffic and road-side upgrades on streets.
 
+Standalone trees use [`natural=tree`](https://wiki.openstreetmap.org/wiki/Tag:natural=tree). Standalone street lamps use [`highway=street_lamp`](https://wiki.openstreetmap.org/wiki/Tag:highway=street_lamp). Give each point its own node. Lights and trees that belong to a street remain part of that street.
+
 Use established OSM semantics when they describe the feature precisely. Use `airimayor:*` for game-specific facts such as the legally assigned game zone and an operational area's owner. A route uses the [ordered members of an OSM route relation](https://wiki.openstreetmap.org/wiki/Relation:route). [Road sides](https://wiki.openstreetmap.org/wiki/Forward_%26_backward,_left_%26_right) follow the way's direction.
 
 Check the effects of the complete diff against player permissions before work starts. Withdrawing a transit service uses the existing construction permission. A mixed physical build and demolition requires both permissions. Keep partial cross-boundary relations read-only and return the bounds needed to read the complete editable object. When a combined edit requires several native stages, check dependencies before the first stage and report the realized objects and any outstanding work from a fresh read if application stops partway.

@@ -214,7 +214,7 @@ namespace CS2MCP
                 throw new FormatException($"Facility upgrade '{asset}' is locked.");
             ResolveUpgradePose(building, upgrade, out float3 position, out quaternion rotation);
             CityOsmEdit.RequireInside(wayId, position, bounds);
-            return new OsmBuildingPlacement { WayId = wayId, Prefab = upgrade, UpgradeOwner = building, Position = position, Rotation = rotation };
+            return new OsmBuildingPlacement { Kind = OsmKind.Way, WayId = wayId, Prefab = upgrade, UpgradeOwner = building, Position = position, Rotation = rotation };
         }
 
         private bool TryResolveUpgradeTarget(

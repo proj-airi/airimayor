@@ -208,7 +208,7 @@ namespace CS2MCP
             }
             return new OsmBuildingPlacement
             {
-                WayId = way.Id, Original = existing, Prefab = prefab,
+                Kind = OsmKind.Way, WayId = way.Id, Original = existing, Prefab = prefab,
                 Position = position, Rotation = rotation, Name = OsmRequestedName(original, way),
             };
         }

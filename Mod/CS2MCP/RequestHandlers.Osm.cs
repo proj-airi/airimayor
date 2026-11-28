@@ -157,7 +157,7 @@ namespace CS2MCP
                 roads.Add(source);
             }
             var buildings = new List<CityOsmBuildingSource>();
-            var stops = new List<OsmNode>();
+            var points = new List<OsmNode>();
             EntityQuery lots = PlacedBuildingQuery;
             foreach (Entity entity in OsmDistrictObjects(district))
             {
@@ -167,7 +167,12 @@ namespace CS2MCP
                     if (TransitStopQuery.MatchesIgnoreFilter(entity))
                     {
                         OsmNode stop = ReadOsmStationStop(entity, district, prefabs, names) ?? ReadOsmStop(entity, district, prefabs, names);
-                        if (stop != null) stops.Add(stop);
+                        if (stop != null) points.Add(stop);
+                    }
+                    else
+                    {
+                        OsmNode point = ReadOsmStandalonePoint(entity, district, prefabs);
+                        if (point != null) points.Add(point);
                     }
                     continue;
                 }
@@ -186,7 +191,7 @@ namespace CS2MCP
                 });
             }
             OsmDocument document = CityOsm.Export(roads, buildings);
-            foreach (OsmNode node in stops) document.Nodes.Add(node.Id, node);
+            foreach (OsmNode node in points) document.Nodes.Add(node.Id, node);
             ReadOsmTransit(document, bounds);
             AddOsmAreas(document, bounds);
             CityOsmFile.AddBounds(document, bounds);

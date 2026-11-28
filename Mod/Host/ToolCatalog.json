@@ -334,7 +334,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, boarding points and passenger lines. Returns editable content and a revision. Use query_osm to locate places first.",
+      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, boarding points, passenger lines, standalone trees and street lamps. Returns editable content and a revision. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -668,7 +668,7 @@
               "tree",
               "object"
             ],
-            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths; 'object' = roadside objects such as stops, mailboxes, and bicycle racks"
+            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths; 'object' = items such as stops, mailboxes, bicycle racks and standalone street lamps"
           },
           "query": {
             "type": "string",

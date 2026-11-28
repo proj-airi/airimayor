@@ -109,7 +109,7 @@ namespace CS2MCP
                 asset => IsMenuCurbObject(asset) && EntityManager.HasComponent<TransportStopData>(asset) && StopMode(asset) == mode);
             float3 point = after.Positions[node.Id];
             if (node.Tags.ContainsKey("ele") && !math.isfinite(point.y)) throw new FormatException($"Stop {node.Id} needs a numeric elevation.");
-            var placement = new OsmBuildingPlacement { WayId = node.Id, Original = existing, Prefab = prefab };
+            var placement = new OsmBuildingPlacement { Kind = OsmKind.Node, WayId = node.Id, Original = existing, Prefab = prefab };
             placement.Name = OsmRequestedName(previous, node);
             if (previous != null && CityOsmEdit.SameNodePosition(previous, node) && EntityManager.HasComponent<Game.Objects.Attached>(existing))
             {

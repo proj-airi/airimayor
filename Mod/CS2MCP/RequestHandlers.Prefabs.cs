@@ -139,7 +139,7 @@ namespace CS2MCP
                     matchesCategory = asset => EntityManager.HasComponent<TreeData>(asset) && EntityManager.HasComponent<PlaceableObjectData>(asset);
                     break;
                 case "object":
-                    matchesCategory = IsMenuCurbObject;
+                    matchesCategory = asset => IsMenuCurbObject(asset) || OsmStandalonePointPrefab(asset) == OsmStandalonePoint.StreetLamp;
                     break;
                 default:
                     return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "category must be 'building', 'road', 'net' (all networks incl. pipes/power/tracks/paths), 'tree', or 'object' (roadside objects)");

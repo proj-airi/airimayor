@@ -31,6 +31,7 @@ namespace CS2MCP
 
     internal struct OsmBuildingPlacement
     {
+        public OsmKind Kind;
         public long WayId;
         public Entity Original, Prefab, AttachParent, UpgradeOwner;
         public float3 Position;
