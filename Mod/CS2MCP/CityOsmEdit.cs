@@ -161,7 +161,7 @@ namespace CS2MCP
             }
         }
 
-        private static void RequireInside(long id, float3 position, float4 bounds)
+        internal static void RequireInside(long id, float3 position, float4 bounds)
         {
             if (math.any(position.xz < bounds.xy) || math.any(position.xz > bounds.zw))
             {

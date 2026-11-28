@@ -13,28 +13,23 @@ namespace CS2MCP
     {
         private void CreateOsmObject(OsmBuildingPlacement item)
         {
-            CreateObjectDefinition(item.Prefab, item.Position, item.Rotation, Entity.Null, item.Original, item.AttachParent);
-        }
-
-        private void CreateObjectDefinition(Entity prefab, float3 position, quaternion rotation, Entity owner, Entity original, Entity attachParent)
-        {
             var controlPoints = new NativeList<ControlPoint>(1, Allocator.TempJob);
             try
             {
                 controlPoints.Add(new ControlPoint
                 {
-                    m_Position = position,
-                    m_HitPosition = position,
-                    m_Rotation = rotation,
-                    m_OriginalEntity = attachParent,
+                    m_Position = item.Position,
+                    m_HitPosition = item.Position,
+                    m_Rotation = item.Rotation,
+                    m_OriginalEntity = item.AttachParent,
                 });
                 NativeReference<AttachmentData> attachmentPrefab = default;
                 JobHandle handle = base.CreateDefinitions(
-                    prefab,
+                    item.Prefab,
                     Entity.Null,
                     Entity.Null,
-                    owner,
-                    original,
+                    item.UpgradeOwner,
+                    item.Original,
                     Entity.Null,
                     m_CityConfigurationSystem.defaultTheme,
                     controlPoints,

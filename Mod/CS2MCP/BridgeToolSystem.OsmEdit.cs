@@ -32,7 +32,7 @@ namespace CS2MCP
     internal struct OsmBuildingPlacement
     {
         public long WayId;
-        public Entity Original, Prefab, AttachParent;
+        public Entity Original, Prefab, AttachParent, UpgradeOwner;
         public float3 Position;
         public quaternion Rotation;
         public string Name;
@@ -43,6 +43,7 @@ namespace CS2MCP
         private sealed class OsmEdit
         {
             public Guid CityLoad;
+            public float4 Bounds;
             public IReadOnlyList<OsmRoadPlacement> Roads;
             public IReadOnlyList<OsmBuildingPlacement> Buildings;
             public IReadOnlyList<Entity> Deletions;
@@ -70,7 +71,7 @@ namespace CS2MCP
                 ComponentType.ReadOnly<PrefabRef>(), ComponentType.Exclude<Deleted>());
         }
 
-        internal bool TryQueueOsmEdit(BridgeRequest request, IReadOnlyList<OsmRoadPlacement> roads,
+        internal bool TryQueueOsmEdit(BridgeRequest request, float4 bounds, IReadOnlyList<OsmRoadPlacement> roads,
             IReadOnlyList<OsmBuildingPlacement> buildings, IReadOnlyList<Entity> deletions,
             IReadOnlyList<OsmTransitEdit> routes, OsmAreaPlan areas, Func<BridgeResponse> checkCurrent,
             Func<IEnumerable<(OsmKind Kind, long Source, Entity Entity)>, BridgeResponse> readback,
@@ -80,6 +81,7 @@ namespace CS2MCP
             m_OsmEdit = new OsmEdit
             {
                 CityLoad = BridgeSystem.Instance.CityLoadId,
+                Bounds = bounds,
                 Roads = roads, Buildings = buildings, Deletions = deletions, Routes = routes, Areas = areas,
                 CheckCurrent = checkCurrent, Readback = readback, ReadFailure = readFailure
             };
@@ -118,6 +120,7 @@ namespace CS2MCP
                     if (m_OsmEdit.CityLoad != BridgeSystem.Instance.CityLoadId)
                         throw new InvalidOperationException("Another city was loaded before the district could be checked.");
                     VerifyAppliedOsmEdit();
+                    if (!AppliedOsmFacilityUpgradesMatch()) return;
                     if (!AppliedOsmAreasMatch()) return;
                     if (!VerifyOsmTransitResult(m_OsmEdit.Routes)) return;
                     if (!CheckOsmNames(preview: false)) return;

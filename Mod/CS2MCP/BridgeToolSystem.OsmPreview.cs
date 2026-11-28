@@ -9,6 +9,7 @@ using Game.Tools;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using InstalledUpgrade = Game.Buildings.InstalledUpgrade;
 using Transform = Game.Objects.Transform;
 
 namespace CS2MCP
@@ -214,6 +215,8 @@ namespace CS2MCP
         private bool MatchesOsmObject(OsmBuildingPlacement obj, Entity entity)
         {
             if (EntityManager.GetComponentData<PrefabRef>(entity).m_Prefab != obj.Prefab) return false;
+            if (obj.UpgradeOwner != Entity.Null)
+                return MatchesOsmFacilityUpgrade(obj, entity);
             Transform transform = EntityManager.GetComponentData<Transform>(entity);
             if (math.distance(obj.Position.xz, transform.m_Position.xz) > 0.5f ||
                 (math.isfinite(obj.Position.y) && math.abs(obj.Position.y - transform.m_Position.y) > 1f) ||
@@ -221,6 +224,24 @@ namespace CS2MCP
             if (obj.AttachParent == Entity.Null) return true;
             return EntityManager.HasComponent<Game.Objects.Attached>(entity) &&
                 OsmAppliedIdentity(EntityManager.GetComponentData<Game.Objects.Attached>(entity).m_Parent) == obj.AttachParent;
+        }
+
+        private bool MatchesOsmFacilityUpgrade(OsmBuildingPlacement placement, Entity entity)
+        {
+            if (!EntityManager.HasComponent<Owner>(entity) ||
+                OsmAppliedIdentity(EntityManager.GetComponentData<Owner>(entity).m_Owner) != placement.UpgradeOwner)
+                return false;
+            Transform pose = EntityManager.GetComponentData<Transform>(entity);
+            if (math.distance(placement.Position.xz, pose.m_Position.xz) > 0.5f) return false;
+            CityOsmEdit.RequireInside(placement.WayId, pose.m_Position, m_OsmEdit.Bounds);
+            if (EntityManager.HasComponent<BuildingData>(placement.Prefab))
+            {
+                var building = EntityManager.GetComponentData<BuildingData>(placement.Prefab);
+                float2 lot = (float2)building.m_LotSize * Game.Zones.ZoneUtils.CELL_SIZE;
+                foreach (float3 corner in CityOsm.Corners(pose.m_Position, pose.m_Rotation, lot))
+                    CityOsmEdit.RequireInside(placement.WayId, corner, m_OsmEdit.Bounds);
+            }
+            return true;
         }
 
         private bool MatchesOsmGrade(Entity entity, MapGrade grade)
@@ -266,6 +287,20 @@ namespace CS2MCP
             !EntityManager.HasComponent<Deleted>(entity) && !EntityManager.HasComponent<Temp>(entity) &&
             EntityManager.HasComponent<PrefabRef>(entity);
 
+        private bool AppliedOsmFacilityUpgradesMatch()
+        {
+            foreach (var (placement, entity) in m_OsmEdit.Objects)
+            {
+                if (placement.UpgradeOwner == Entity.Null) continue;
+                var installed = EntityManager.GetBuffer<InstalledUpgrade>(placement.UpgradeOwner, true);
+                bool found = false;
+                foreach (InstalledUpgrade upgrade in installed)
+                    if (upgrade.m_Upgrade == entity) found = true;
+                if (!found) return false;
+            }
+            return true;
+        }
+
         private CompositionFlags RoadUpgrades(Entity entity) => EntityManager.HasComponent<Upgraded>(entity)
             ? EntityManager.GetComponentData<Upgraded>(entity).m_Flags : default;
 
@@ -274,7 +309,11 @@ namespace CS2MCP
             foreach (var junction in m_OsmEdit.Junctions) yield return (OsmKind.Node, junction.Value.Id, junction.Key);
             foreach (OsmRoadWitness road in m_OsmEdit.Edges) yield return (OsmKind.Way, road.WayId, road.Entity);
             foreach (var obj in m_OsmEdit.Objects)
-                yield return (obj.Placement.AttachParent == Entity.Null ? OsmKind.Way : OsmKind.Node, obj.Placement.WayId, obj.Entity);
+            {
+                Entity owner = obj.Placement.UpgradeOwner;
+                yield return (obj.Placement.AttachParent == Entity.Null ? OsmKind.Way : OsmKind.Node, obj.Placement.WayId,
+                    owner == Entity.Null ? obj.Entity : owner);
+            }
             foreach (var route in m_OsmEdit.Routes)
                 if (!route.Remove) yield return (OsmKind.Relation, route.RelationId, route.Realized);
         }

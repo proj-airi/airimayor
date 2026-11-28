@@ -28,6 +28,7 @@ namespace CS2MCP
 
             var roads = new List<OsmRoadPlacement>();
             var buildings = new List<OsmBuildingPlacement>();
+            var facilityUpgrades = new List<OsmBuildingPlacement>();
             var deletions = new List<Entity>();
             var routes = new List<OsmTransitEdit>();
             var changedRoadAssets = new Dictionary<long, (Entity Prefab, bool Reverse)>();
@@ -137,6 +138,13 @@ namespace CS2MCP
                 }
                 else if (targetBuildings.TryGetValue(editedWay.Id, out CityOsmBuilding building) && !wasRoad)
                 {
+                    var upgrades = CityOsmFacilityUpgrades.Additions(before, after, originalWay, editedWay);
+                    if (upgrades.Count > 0)
+                    {
+                        foreach (string upgrade in upgrades)
+                            facilityUpgrades.Add(PlanOsmFacilityUpgrade(original, editedWay.Id, upgrade, bounds));
+                        continue;
+                    }
                     CityOsmEdit.CheckEditedTags(originalWay, editedWay, "building", "amenity", "airimayor:prefab", "name");
                     buildings.Add(ResolveOsmBuilding(originalWay, editedWay, original, building, ref terrain));
                 }
@@ -153,6 +161,7 @@ namespace CS2MCP
                 }
             }
             CheckOsmMovedJunctions(current, target, affected);
+            buildings.AddRange(facilityUpgrades);
             CheckOsmTransitBatch(routes, buildings, deletions);
             CheckOsmAreaDependencies(areas, roads, buildings, deletions);
             bool needsConstruction = roads.Count + buildings.Count + routes.Count > 0 || areas.HasEdits;
@@ -177,7 +186,7 @@ namespace CS2MCP
                 var features = district.Elements.Where(element => element.Tags.ContainsKey("airimayor:entity"))
                     .ToLookup(element => (element.Kind, CityOsm.Tag(element, "airimayor:entity")));
                 var matches = new Dictionary<string, List<string>>();
-                foreach (var result in realized)
+                foreach (var result in realized.Distinct())
                 {
                     OsmElement mapped = features[(result.Kind, OsmEntityIdentity(result.Entity))].FirstOrDefault();
                     if (mapped == null) return null;
@@ -206,7 +215,7 @@ namespace CS2MCP
                 response.Files = new Dictionary<string, byte[]> { ["district.osm"] = System.Text.Encoding.UTF8.GetBytes(content) };
                 return response;
             }
-            return tool.TryQueueOsmEdit(request, roads, buildings, deletions, routes, areas, CheckCurrent, Readback, ReadFailure)
+            return tool.TryQueueOsmEdit(request, bounds, roads, buildings, deletions, routes, areas, CheckCurrent, Readback, ReadFailure)
                 ? null : BridgeResponse.Error(BridgeErrorKind.Conflict, "Another city operation is in progress.");
         }
 

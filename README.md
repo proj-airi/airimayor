@@ -69,6 +69,8 @@ An existing road way carries its native segment identity in `airimayor:entity`. 
 
 To expand a landfill, farm or forestry area, read the whole area. Edit its closed `airimayor:operational_area` way. Keep the first two corners at the facility edge and keep the existing area inside the new perimeter. The game checks the expansion and returns the resulting perimeter.
 
+Use `list_facility_upgrades` to find upgrade names for an existing building. Add a tag with key `airimayor:facility_upgrade:<exact upgrade name>` and value `yes` to the building way. Keep the same lot. The game places the upgrade, and the district map shows the installed tag.
+
 Define a passenger line with a `type=route` relation, its passenger mode such as `route=bus`, and platform node members in travel order. A cross-boundary line supplies the bounds needed to edit it.
 
 A successful edit returns the current file and revision, including the city's assigned IDs. For roads, junctions, buildings, stops and passenger lines the `realized` field maps submitted references to the resulting features. Physical demolition requires demolition permission. Withdrawing a passenger service or clearing zoning uses construction permission. On a revision conflict, reread the district and reapply the intended change to the new file. Each successful read or edit keeps a `district.osm` attachment in the city recording.

@@ -1,6 +1,6 @@
 # Use the local OSM map as the editing interface for city places
 
-An agent can design a whole block when it can read, change and compare the same objects. Extend the coordinate-addressed [local OSM map](./0059-coordinate-addressed-osm-editing.md) with the editable state of those objects. Keep the game authoritative for the result. Nine legacy tools move their spatial capabilities into the local OSM workflow. The construction asset catalog remains an independent read.
+An agent can design a whole block when it can read, change and compare the same objects. Extend the coordinate-addressed [local OSM map](./0059-coordinate-addressed-osm-editing.md) with the editable state of those objects. Keep the game authoritative for the result. The construction asset catalog remains an independent read.
 
 ## What the agent reads
 
@@ -21,6 +21,7 @@ The catalog and road editor use the same road class and default car-lane count. 
 | `zone` | Draw or edit a closed area carrying the assigned game zone. Resolve the theme and unlocked zone, apply it to eligible frontage cells and read back the cells actually assigned. Clearing a zone and demolishing a building are separate effects. |
 | `add_transit_line`, `remove_transit_line` | Edit a route relation with ordered boarding points. Expose station boarding points as well as roadside platforms. The game validates the passenger mode, resolves the path and closes the loop. Deleting the relation withdraws the service while retaining its stops. |
 | `expand_operational_area` | Link the facility to its area polygon. Expand the closed way and keep the building-side edge fixed. Check land ownership, obstacles and productive resources. Return the perimeter that the game built. |
+| Install a facility upgrade | Add the selected upgrade as a tag on the existing facility way. The parent lot determines the attachment and native placement. Check the preview and read the installed upgrade from the facility. The service-state tool controls installed upgrades. |
 | `list_buildings`, `list_networks` | Search placed features by geography, kind, service role and capability. Rank traffic or electrical load on request and return OSM references and bounds for the next edit. |
 | `inspect_network_topology` | Return findings at the implicated ways and nodes. Compute reachability against the city graph before filtering by the requested bounds. A road that reaches an outside connection through another district is connected. |
 

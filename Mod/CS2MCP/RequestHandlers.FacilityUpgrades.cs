@@ -12,12 +12,6 @@ using Transform = Game.Objects.Transform;
 
 namespace CS2MCP
 {
-    /// <summary>
-    /// Facility-upgrade endpoints. Listing reads BuildingUpgradeElement and
-    /// InstalledUpgrade. Writes install through ObjectToolBaseSystem.CreateDefinitions
-    /// (owner = parent building, CreationFlags.Upgrade) and toggle Out of Service
-    /// through PoliciesUISystem — the same paths the info panel uses.
-    /// </summary>
     public sealed partial class RequestHandlers
     {
         private const string OutOfServicePolicyName = "Out of Service";
@@ -97,7 +91,7 @@ namespace CS2MCP
                 upgrades,
                 note = upgrades.Count == 0
                     ? "this building has no facility upgrades"
-                    : "read-only snapshot; set_facility_upgrade installs a missing upgrade or toggles Out of Service on an installed one",
+                    : "Install an upgrade in edit_osm. Use set_facility_upgrade to change an installed upgrade's service state.",
             });
         }
 
@@ -192,31 +186,35 @@ namespace CS2MCP
                     note = "upgrade is not installed",
                 });
             }
-            if (!EntityManager.HasBuffer<InstalledUpgrade>(building))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "this building has no InstalledUpgrade buffer, so the native object-upgrade path cannot attach an upgrade");
-            }
-            if (IsLocked(upgradePrefab))
-            {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    $"upgrade '{upgradeBase.name}' is locked (milestone not reached)");
-            }
-            ResolveUpgradePose(building, upgradePrefab, out float3 position, out quaternion rotation);
+            return BridgeResponse.Error(BridgeErrorKind.Conflict, "Install this upgrade in edit_osm before putting it into service.");
+        }
 
-            BridgeToolSystem tool = World.GetOrCreateSystemManaged<BridgeToolSystem>();
-            if (!tool.TryQueueFacilityUpgrade(
-                    building,
-                    upgradePrefab,
-                    upgradeBase,
-                    position,
-                    rotation,
-                    request))
+        private List<string> ReadOsmFacilityUpgrades(Entity building, PrefabSystem prefabs)
+        {
+            if (!EntityManager.HasBuffer<InstalledUpgrade>(building)) return null;
+            var names = new List<string>();
+            foreach (Entity upgrade in ReadInstalledUpgrades(building).Keys)
             {
-                return BridgeResponse.Error(BridgeErrorKind.Conflict,
-                    "another build operation is in progress, retry shortly");
+                if (IsFacilityObjectUpgrade(upgrade) && prefabs.GetPrefab<PrefabBase>(upgrade) is PrefabBase asset)
+                    names.Add(asset.name);
             }
-            return null;
+            return names;
+        }
+
+        private OsmBuildingPlacement PlanOsmFacilityUpgrade(Entity building, long wayId, string asset, float4 bounds)
+        {
+            if (building == Entity.Null || !EntityManager.HasBuffer<InstalledUpgrade>(building))
+                throw new FormatException($"Building way {wayId} cannot accept facility upgrades.");
+            Entity buildingPrefab = EntityManager.GetComponentData<PrefabRef>(building).m_Prefab;
+            if (!TryFindPrefabByName(ServiceUpgradePrefabQuery, asset, out Entity upgrade, out PrefabBase prefab)
+                || !string.Equals(prefab.name, asset, StringComparison.Ordinal) || !IsListedFacilityUpgrade(upgrade)
+                || !UpgradeBelongsToBuilding(buildingPrefab, upgrade))
+                throw new FormatException($"Choose an upgrade for building way {wayId} from list_facility_upgrades.");
+            if (IsLocked(upgrade))
+                throw new FormatException($"Facility upgrade '{asset}' is locked.");
+            ResolveUpgradePose(building, upgrade, out float3 position, out quaternion rotation);
+            CityOsmEdit.RequireInside(wayId, position, bounds);
+            return new OsmBuildingPlacement { WayId = wayId, Prefab = upgrade, UpgradeOwner = building, Position = position, Rotation = rotation };
         }
 
         private bool TryResolveUpgradeTarget(

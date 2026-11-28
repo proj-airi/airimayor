@@ -46,6 +46,7 @@ namespace CS2MCP
         public string Prefab;
         public string Name;
         public string Building;
+        public IReadOnlyList<string> FacilityUpgrades;
         public float3 Position;
         public quaternion Rotation;
         public float2 LotSize;
@@ -225,6 +226,9 @@ namespace CS2MCP
                 var way = new OsmWay(NativeId(building.Index));
                 AddNativeWay(document, way, building.Entity, building.Prefab, building.Name);
                 way.Tags["building"] = building.Building;
+                if (building.FacilityUpgrades != null)
+                    foreach (string upgrade in building.FacilityUpgrades)
+                        way.Tags[CityOsmFacilityUpgrades.Tag(upgrade)] = "yes";
                 if (building.Building == "school")
                 {
                     way.Tags["amenity"] = "school";

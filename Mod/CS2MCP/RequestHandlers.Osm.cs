@@ -170,6 +170,7 @@ namespace CS2MCP
                     Prefab = PrefabDisplayName(prefabs, prefab),
                     Name = names.TryGetCustomName(entity, out string buildingName) ? buildingName : null,
                     Building = OsmBuildingKind(prefab),
+                    FacilityUpgrades = ReadOsmFacilityUpgrades(entity, prefabs),
                     Position = transform.m_Position,
                     Rotation = transform.m_Rotation,
                     LotSize = lot,

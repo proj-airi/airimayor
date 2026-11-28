@@ -330,7 +330,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters, including roads, utilities, building lots, zoning, operational areas, boarding points and passenger lines. Returns editable content and a revision. Use query_osm to locate places first.",
+      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, boarding points and passenger lines. Returns editable content and a revision. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -777,7 +777,7 @@
     },
     {
       "name": "list_facility_upgrades",
-      "description": "List installable and already-installed facility upgrades for one building from query_osm. Returns prefab names plus installed, enabled and locked state. Read-only; use set_facility_upgrade to install a missing upgrade or toggle Out of Service.",
+      "description": "List the upgrades for a building from query_osm, including their exact names, availability, installation and service state. To install an upgrade, add airimayor:facility_upgrade:<exact name>=yes to the existing building way in edit_osm.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -810,7 +810,7 @@
     },
     {
       "name": "set_facility_upgrade",
-      "description": "Install a missing facility upgrade or toggle Out of Service on an installed one. upgrade is a prefab name from list_facility_upgrades. enabled=true installs or returns the upgrade to service; enabled=false sets Out of Service.",
+      "description": "Put an installed facility upgrade into service or take it out of service. Use an exact upgrade name from list_facility_upgrades.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -828,7 +828,7 @@
           },
           "enabled": {
             "type": "boolean",
-            "description": "true installs or returns to service; false sets Out of Service"
+            "description": "true returns the installed upgrade to service. false sets Out of Service."
           }
         },
         "required": [

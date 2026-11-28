@@ -258,7 +258,8 @@ namespace CS2MCP
         {
             if (!plan.HasEdits) return;
             foreach (var perimeter in plan.Perimeters)
-                if (deletions.Contains(perimeter.Building) || buildings.Any(item => item.Original == perimeter.Building))
+                if (deletions.Contains(perimeter.Building)
+                    || buildings.Any(item => item.Original == perimeter.Building || item.UpgradeOwner == perimeter.Building))
                     throw new FormatException("Complete the edit to the facility before expanding its owned perimeter.");
             if (plan.Cells.Count == 0) return;
             var zoneFrontage = new HashSet<Entity>();

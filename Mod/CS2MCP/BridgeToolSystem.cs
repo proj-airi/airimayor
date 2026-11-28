@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using airimayor.Host;
 using Colossal.Mathematics;
 using Game;
 using Game.City;
@@ -35,12 +34,6 @@ namespace CS2MCP
         }
 
         private Stage m_Stage = Stage.Idle;
-        private Entity m_PendingPrefabEntity;
-        private Entity m_PendingTarget;
-        private PrefabBase m_PendingPrefab;
-        private string m_PendingLabel;
-        private float3 m_PendingPosition;
-        private quaternion m_PendingRotation;
         private BridgeRequest m_PendingRequest;
         private ToolBaseSystem m_PreviousTool;
         private EntityQuery m_TempRouteQuery;
@@ -82,43 +75,12 @@ namespace CS2MCP
                 ComponentType.Exclude<Deleted>());
         }
 
-        public override PrefabBase GetPrefab()
-        {
-            return m_PendingPrefab;
-        }
+        public override PrefabBase GetPrefab() => null;
 
         public override bool TrySetPrefab(PrefabBase prefab)
         {
             // Never let the game UI select this tool via asset selection.
             return false;
-        }
-
-        /// <summary>
-        /// Must be called on the simulation thread. Installs a facility upgrade
-        /// through ObjectToolBaseSystem.CreateDefinitions with the parent as
-        /// owner — the same job ObjectToolSystem uses for Mode.Upgrade.
-        /// </summary>
-        public bool TryQueueFacilityUpgrade(
-            Entity parent,
-            Entity upgradePrefabEntity,
-            PrefabBase upgradePrefab,
-            float3 position,
-            quaternion rotation,
-            BridgeRequest request)
-        {
-            if (m_Stage != Stage.Idle)
-            {
-                return false;
-            }
-            m_PendingTarget = parent;
-            m_PendingPrefabEntity = upgradePrefabEntity;
-            m_PendingPrefab = upgradePrefab;
-            m_PendingLabel = upgradePrefab != null ? upgradePrefab.name : null;
-            m_PendingPosition = position;
-            m_PendingRotation = rotation;
-            m_PendingRequest = request;
-            Activate();
-            return true;
         }
 
         private void Activate()
@@ -135,72 +97,9 @@ namespace CS2MCP
         [Preserve]
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
-            try
-            {
-                if (m_OsmEdit != null)
-                {
-                    UpdateOsmEdit();
-                    return inputDeps;
-                }
-                switch (m_Stage)
-                {
-                    case Stage.CreateDefinitions:
-                        applyMode = ApplyMode.Clear;
-                        CreateObjectDefinition(m_PendingPrefabEntity, m_PendingPosition, m_PendingRotation, m_PendingTarget, Entity.Null, Entity.Null);
-                        m_Stage = Stage.Apply;
-                        break;
-
-                    case Stage.Apply:
-                        if (GetAllowApply())
-                        {
-                            applyMode = ApplyMode.Apply;
-                            CompletePending(FacilityUpgradeResponse());
-                        }
-                        else
-                        {
-                            applyMode = ApplyMode.Clear;
-                            CompletePending(BridgeResponse.Error(BridgeErrorKind.Conflict, DescribeValidationBlock()));
-                        }
-                        m_Stage = Stage.Finish;
-                        break;
-
-                    case Stage.Finish:
-                        applyMode = ApplyMode.None;
-                        Deactivate();
-                        break;
-
-                    default:
-                        applyMode = ApplyMode.None;
-                        break;
-                }
-            }
-            catch (Exception e)
-            {
-                AgentTimeline.Warn("tool", $"BridgeToolSystem error in stage {m_Stage}: {e}");
-                CompletePending(BridgeResponse.Error(BridgeErrorKind.Internal, $"tool operation failed: {e.GetType().Name}: {e.Message}"));
-                applyMode = ApplyMode.None;
-                Deactivate();
-            }
+            if (m_OsmEdit == null) applyMode = ApplyMode.None;
+            else UpdateOsmEdit();
             return inputDeps;
-        }
-
-        private BridgeResponse FacilityUpgradeResponse()
-        {
-            return BridgeResponse.Json(new
-            {
-                applied = true,
-                upgrade = m_PendingLabel,
-                enabled = true,
-                installed = true,
-                entity = new { index = m_PendingTarget.Index, version = m_PendingTarget.Version },
-                position = new
-                {
-                    x = m_PendingPosition.x,
-                    y = m_PendingPosition.y,
-                    z = m_PendingPosition.z,
-                },
-                note = "upgrade installed on the parent building",
-            });
         }
 
         private void CompletePending(BridgeResponse response)
@@ -335,8 +234,6 @@ namespace CS2MCP
             m_Stage = Stage.Idle;
             m_OsmEdit = null;
             m_PendingRequest = null;
-            m_PendingPrefab = null;
-            m_PendingPrefabEntity = Entity.Null;
             if (m_ToolSystem.activeTool == this)
             {
                 m_ToolSystem.activeTool = m_PreviousTool != null ? m_PreviousTool : m_DefaultToolSystem;
