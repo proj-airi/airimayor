@@ -19,7 +19,7 @@ namespace CS2MCP
         {
             if ((document.Attributes.TryGetValue("generator", out string generator) && generator == MapGenerator)
                 || document.Elements.Any(element => element.Id >= FirstMapFeatureId))
-                throw new FormatException("Read the editable district before proposing construction. The map view is read-only.");
+                throw new FormatException("Read the editable district before proposing construction. The rendered city map is read-only.");
         }
 
         public static bool ValidBounds(float4 bounds) => math.all(math.isfinite(bounds))

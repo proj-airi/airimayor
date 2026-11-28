@@ -174,7 +174,11 @@ const panels = computed(() =>
 )
 const cityFileKey = (item: CityMedia) => item.index + '/' + item.name
 const cityFileLabel = (item: CityMedia) => {
-  if (item.image) return item.tool === 'screenshot' ? 'Screenshot' : item.name
+  if (item.image) {
+    if (item.tool === 'screenshot') return 'Screenshot'
+    if (item.tool === 'render_city_map') return 'City street map'
+    return item.name
+  }
   if (item.name === 'map.osm') return 'City map'
   if (item.name === 'terrain.json') return 'Terrain elevations'
   return 'District map'

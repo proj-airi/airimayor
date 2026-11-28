@@ -3,6 +3,7 @@
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
 		<NoWarn>$(NoWarn);OPENAI001</NoWarn>
+		<ShouldIncludeNativeSkiaSharp>False</ShouldIncludeNativeSkiaSharp>
 	
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
@@ -96,6 +97,8 @@
 
 	<ItemGroup>
 		<PackageReference Include="dotacp.client" Version="2026.7.19" />
+		<PackageReference Include="SkiaSharp" Version="4.158.0" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.158.0" GeneratePathProperty="true" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -104,6 +107,10 @@
 
 	<ItemGroup>
 		<EmbeddedResource Include="Host\ToolCatalog.json" />
+		<None Include="$(PkgSkiaSharp_NativeAssets_Win32)\runtimes\win-x64\native\libSkiaSharp.dll"
+		      Link="x64\libSkiaSharp.dll" CopyToOutputDirectory="PreserveNewest" />
+		<None Include="$(PkgSkiaSharp_NativeAssets_Win32)\LICENSE.txt;$(PkgSkiaSharp_NativeAssets_Win32)\THIRD-PARTY-NOTICES.txt"
+		      Link="licenses\SkiaSharp\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 		<!-- The nested hot-reload payload has its own SDK project and obj tree;
 		     do not let this project's default Compile glob ingest its generated
 		     assembly-attribute sources. -->

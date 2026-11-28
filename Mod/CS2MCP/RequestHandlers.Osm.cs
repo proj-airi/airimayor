@@ -23,10 +23,7 @@ namespace CS2MCP
             {
                 return error;
             }
-            if (!request.Query.TryGetValue("view", out string view) || view == "district")
-                return OsmFileResponse(bounds, ReadOsmDocument(bounds));
-            if (view == "map") return ReadOsmMap(bounds);
-            return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "Choose district or map.");
+            return OsmFileResponse(bounds, ReadOsmDocument(bounds));
         }
 
         private BridgeResponse EditOsm(BridgeRequest request)

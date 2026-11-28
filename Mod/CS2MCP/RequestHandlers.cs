@@ -107,6 +107,8 @@ namespace CS2MCP
                     return QueryOsm(request);
                 case "/city/osm/read":
                     return ReadOsm(request);
+                case "/city/map":
+                    return RenderCityMap(request);
                 case "/city/osm/edit":
                     return EditOsm(request);
                 case "/zones":

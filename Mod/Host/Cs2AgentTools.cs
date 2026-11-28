@@ -22,7 +22,7 @@ namespace airimayor.Host
         private static readonly HashSet<string> s_VisionTools =
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "screenshot", "get_camera", "set_camera",
+                "screenshot", "render_city_map", "get_camera", "set_camera",
             };
 
         public IReadOnlyList<AgentToolDeclaration> List(bool visionAvailable)
@@ -75,7 +75,7 @@ namespace airimayor.Host
                 Success = invoked.Success,
                 Text = invoked.Text,
                 ImagePng = image,
-                ImageCaption = image != null ? "City screenshot." : null,
+                ImageCaption = image == null ? null : name == "render_city_map" ? "City street map." : "City screenshot.",
                 PreviewJpeg = invoked.PreviewBytes,
                 Applied = invoked.Applied,
                 QueuedMs = invoked.QueuedMs,

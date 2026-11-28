@@ -322,18 +322,23 @@ test('a recorded city map exposes both files and only the matching terrain', asy
   const mapAsset = { $asset: 'assets/map.osm', mediaType: 'application/xml', bytes: map.size }
   const terrainAsset = { $asset: 'assets/terrain.json', mediaType: 'application/json', bytes: elevations.size }
   trace.assets.push({ path: 'city/assets/map.osm', file: map }, { path: 'city/assets/terrain.json', file: elevations })
-  const first = trace.tool('read_osm', 10, { view: 'map', content: xml }, { files: [
-    { name: 'map.osm', asset: mapAsset }, { name: 'terrain.json', asset: terrainAsset },
+  const image = new Blob([new Uint8Array([137, 80, 78, 71])])
+  const imageAsset = { $asset: 'assets/map.png', mediaType: 'image/png', bytes: image.size }
+  trace.assets.push({ path: 'city/assets/map.png', file: image })
+  const first = trace.tool('render_city_map', 10, {}, { files: [
+    { name: 'image.png', asset: imageAsset }, { name: 'map.osm', asset: mapAsset }, { name: 'terrain.json', asset: terrainAsset },
   ] })
-  const second = trace.tool('read_osm', 20, { view: 'map', content: xml }, { files: [{ name: 'map.osm', asset: mapAsset }] })
+  const second = trace.tool('render_city_map', 20, {}, { files: [
+    { name: 'image.png', asset: imageAsset }, { name: 'map.osm', asset: mapAsset },
+  ] })
   const { session } = await trace.open()
 
   assert.deepEqual(session.city(first).media.map((item) => [item.index, item.name]), [
-    [first, 'map.osm'], [first, 'terrain.json'],
+    [first, 'image.png'], [first, 'map.osm'], [first, 'terrain.json'],
   ])
   assert.equal(await (await session.cityFile(first, 'map.osm'))!.blob.text(), xml)
   assert.equal(await (await session.cityFile(first, 'terrain.json'))!.blob.text(), terrain)
-  assert.deepEqual(session.city(second).media.map((item) => [item.index, item.name]), [[second, 'map.osm']])
+  assert.deepEqual(session.city(second).media.map((item) => [item.index, item.name]), [[second, 'image.png'], [second, 'map.osm']])
 })
 
 test('long city series keep all readings in bounded pages while chart points and action markers remain bounded', async () => {

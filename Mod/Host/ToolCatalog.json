@@ -180,6 +180,57 @@
       "response": "png"
     },
     {
+      "name": "render_city_map",
+      "description": "Draw a north-up street map of a rectangle in city meters. Shows road classes, bridges, tunnels, rail, buildings, water and shaded terrain at the scale of the selected area. Returns the map image.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "xMin": {
+            "type": "number",
+            "description": "West edge in city meters"
+          },
+          "zMin": {
+            "type": "number",
+            "description": "South edge in city meters"
+          },
+          "xMax": {
+            "type": "number",
+            "description": "East edge in city meters"
+          },
+          "zMax": {
+            "type": "number",
+            "description": "North edge in city meters"
+          }
+        },
+        "required": [
+          "xMin",
+          "zMin",
+          "xMax",
+          "zMax"
+        ]
+      },
+      "route": "/city/map",
+      "query": [
+        {
+          "key": "xMin",
+          "arg": "xMin"
+        },
+        {
+          "key": "zMin",
+          "arg": "zMin"
+        },
+        {
+          "key": "xMax",
+          "arg": "xMax"
+        },
+        {
+          "key": "zMax",
+          "arg": "zMax"
+        }
+      ],
+      "response": "png"
+    },
+    {
       "name": "query_osm",
       "description": "Find existing buildings, administrative districts, roads, footways, tracks, utilities, stops and routes. Choose a network kind, road class, building use, service role or transport type. Read traffic, electricity load, road and utility connectivity, or route vehicles and usage. Pass a rectangle in city meters or omit all four bounds to search citywide. Results give bounds and OSM references when available. Use read_osm to obtain an editable district.",
       "parameters": {
@@ -371,7 +422,7 @@
     },
     {
       "name": "read_osm",
-      "description": "Read the complete local OSM file for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, standalone trees and street lamps. The district view returns editable content and its revision. The map view returns a read-only map with bridge outlines, crossing order and water areas, with a recorded terrain file where available. Use query_osm to locate places first.",
+      "description": "Read the complete editable OSM district for a rectangle in city meters. It includes roads, utilities, building lots, facility upgrades, zoning, operational areas, administrative boundaries, boarding points, passenger lines, trees and street furniture. Returns the OSM file and its revision. Use query_osm to locate places first.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -390,14 +441,6 @@
           "zMax": {
             "type": "number",
             "description": "Maximum district Z in city meters"
-          },
-          "view": {
-            "type": "string",
-            "enum": [
-              "district",
-              "map"
-            ],
-            "description": "Choose the editable district by default or the read-only map for drawing."
           }
         },
         "required": [
@@ -424,10 +467,6 @@
         {
           "key": "zMax",
           "arg": "zMax"
-        },
-        {
-          "key": "view",
-          "arg": "view"
         }
       ],
       "response": "json"
