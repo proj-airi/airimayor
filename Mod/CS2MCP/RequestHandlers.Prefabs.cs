@@ -139,10 +139,11 @@ namespace CS2MCP
                     matchesCategory = asset => EntityManager.HasComponent<TreeData>(asset) && EntityManager.HasComponent<PlaceableObjectData>(asset);
                     break;
                 case "object":
-                    matchesCategory = asset => IsMenuCurbObject(asset) || OsmStandalonePointPrefab(asset) == OsmStandalonePoint.StreetLamp;
+                    matchesCategory = asset => IsMenuCurbObject(asset) ||
+                        OsmStandalonePointPrefab(asset) is OsmStandalonePoint.StreetLamp or OsmStandalonePoint.Bench or OsmStandalonePoint.WasteBasket;
                     break;
                 default:
-                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "category must be 'building', 'road', 'net' (all networks incl. pipes/power/tracks/paths), 'tree', or 'object' (roadside objects)");
+                    return BridgeResponse.Error(BridgeErrorKind.InvalidArguments, "category must be 'building', 'road', 'net' (all networks incl. pipes/power/tracks/paths), 'tree', or 'object' (roadside objects and street furniture)");
             }
             string availability = request.Query.TryGetValue("availability", out string scope) ? scope : "available";
             if (availability != "available" && availability != "locked" && availability != "all")

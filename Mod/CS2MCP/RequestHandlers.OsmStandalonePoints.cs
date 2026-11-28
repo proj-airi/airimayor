@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Colossal.IO.AssetDatabase;
 using Colossal.Mathematics;
 using Game.Common;
 using Game.Prefabs;
@@ -13,12 +14,25 @@ namespace CS2MCP
 {
     public sealed partial class RequestHandlers
     {
+        private EntityQuery? m_FurniturePrefabQuery;
+
+        private EntityQuery FurniturePrefabQuery => m_FurniturePrefabQuery ??= EntityManager.CreateEntityQuery(
+            ComponentType.ReadOnly<PrefabData>(), ComponentType.ReadOnly<StaticObjectData>(), ComponentType.ReadOnly<UIObjectData>());
+
         private OsmStandalonePoint OsmStandalonePointPrefab(Entity prefab)
         {
-            if (!EntityManager.HasComponent<PlaceableObjectData>(prefab)) return OsmStandalonePoint.None;
-            if (EntityManager.HasComponent<TreeData>(prefab)) return OsmStandalonePoint.Tree;
-            if (EntityManager.HasComponent<StreetLightData>(prefab)) return OsmStandalonePoint.StreetLamp;
-            return OsmStandalonePoint.None;
+            if (EntityManager.HasComponent<PlaceableObjectData>(prefab))
+            {
+                if (EntityManager.HasComponent<TreeData>(prefab)) return OsmStandalonePoint.Tree;
+                if (EntityManager.HasComponent<StreetLightData>(prefab)) return OsmStandalonePoint.StreetLamp;
+            }
+            if (!EntityManager.HasComponent<StaticObjectData>(prefab) || !EntityManager.HasComponent<UIObjectData>(prefab))
+                return OsmStandalonePoint.None;
+            var prefabs = World.GetOrCreateSystemManaged<PrefabSystem>();
+            return prefabs.TryGetPrefab<StaticObjectPrefab>(prefab, out var asset)
+                && AssetDatabase.global.resources.prefabsMap.TryGetGuid(asset, out string prefabId)
+                ? CityOsmStandalonePoints.NativeFurniture(prefabId)
+                : OsmStandalonePoint.None;
         }
 
         private OsmNode ReadOsmStandalonePoint(Entity entity, Bounds2 district, PrefabSystem prefabs)
@@ -53,9 +67,11 @@ namespace CS2MCP
             }
             if (original != null && previousKind != nextKind)
                 throw new FormatException($"Point {edited.Id} must retain its city object type.");
-            string key = nextKind == OsmStandalonePoint.Tree ? "natural" : "highway";
-            CityOsmEdit.CheckEditedTags(original, edited, key, "ele", "airimayor:prefab");
-            Entity prefab = FindOsmInfrastructureAsset(CurbObjectPrefabQuery, CityOsm.Tag(edited, "airimayor:prefab"), existing,
+            CityOsmEdit.CheckEditedTags(original, edited, CityOsmStandalonePoints.Tag(nextKind).Key, "ele", "airimayor:prefab");
+            EntityQuery assets = nextKind is OsmStandalonePoint.Bench or OsmStandalonePoint.WasteBasket
+                ? FurniturePrefabQuery
+                : CurbObjectPrefabQuery;
+            Entity prefab = FindOsmInfrastructureAsset(assets, CityOsm.Tag(edited, "airimayor:prefab"), existing,
                 asset => OsmStandalonePointPrefab(asset) == nextKind);
             quaternion rotation = quaternion.identity;
             if (existing != Entity.Null)

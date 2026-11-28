@@ -29,7 +29,7 @@ A player can review an edit with the same bounds, revision and content. The game
 
 Standalone footways use `highway=footway`. Standalone tracks use `railway=rail`, `railway=tram`, or `railway=subway`. Resolve their assets from the native path or track type. Keep road traffic and road-side upgrades on streets.
 
-Standalone trees use [`natural=tree`](https://wiki.openstreetmap.org/wiki/Tag:natural=tree). Standalone street lamps use [`highway=street_lamp`](https://wiki.openstreetmap.org/wiki/Tag:highway=street_lamp). Give each point its own node. Lights and trees that belong to a street remain part of that street.
+Standalone trees use [`natural=tree`](https://wiki.openstreetmap.org/wiki/Tag:natural=tree). Standalone street lamps use [`highway=street_lamp`](https://wiki.openstreetmap.org/wiki/Tag:highway=street_lamp). Standalone benches and waste baskets use [`amenity=bench`](https://wiki.openstreetmap.org/wiki/Tag:amenity=bench) and [`amenity=waste_basket`](https://wiki.openstreetmap.org/wiki/Tag:amenity=waste_basket). Identify supported furniture by its built-in prefab ID in the game's resource map. Check the construction menu and unlock state before placement. Give each standalone point its own node. Objects that belong to streets or lots remain with their owners.
 
 An administrative district uses a [boundary relation](https://wiki.openstreetmap.org/wiki/Relation:boundary) with `boundary=administrative`. Its `outer` ways form one closed ring. The game stores the name and polygon. Use the district relation to create, rename, redraw or remove the area.
 

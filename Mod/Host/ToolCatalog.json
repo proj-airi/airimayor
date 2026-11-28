@@ -386,7 +386,7 @@
     },
     {
       "name": "edit_osm",
-      "description": "Edit a district using the bounds and revision from read_osm, with full OSM XML or an OsmChange patch. Roads share junction nodes. Use airimayor:prefab to request a named asset. Set directional road upgrades, edit zoning or operational boundaries, or order platform members in a passenger route. Physical removal requires demolition permission. A successful edit returns the district, its revision and the observed OsmChange from the game.",
+      "description": "Edit a district using the bounds and revision from read_osm, with full OSM XML or an OsmChange patch. Roads share junction nodes. Use airimayor:prefab to request a named asset. Standalone benches and waste baskets use amenity=bench or amenity=waste_basket nodes. Set directional road upgrades, edit zoning or operational boundaries, or order platform members in a passenger route. Physical removal requires demolition permission. A successful edit returns the district, its revision and the observed OsmChange from the game.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -677,7 +677,7 @@
               "tree",
               "object"
             ],
-            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths; 'object' = items such as stops, mailboxes, bicycle racks and standalone street lamps"
+            "description": "Prefab category (default building); 'net' = all networks incl. train tracks, pipes, power lines, pedestrian paths; 'object' = items such as stops, mailboxes, bicycle racks, standalone street lamps, benches and waste baskets"
           },
           "query": {
             "type": "string",

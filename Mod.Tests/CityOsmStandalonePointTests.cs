@@ -8,6 +8,8 @@ namespace CS2MCP
         [Theory]
         [InlineData("natural", "tree")]
         [InlineData("highway", "street_lamp")]
+        [InlineData("amenity", "bench")]
+        [InlineData("amenity", "waste_basket")]
         public void Standalone_points_survive_xml_and_the_district_diff(string tag, string value)
         {
             var before = new OsmDocument();
@@ -24,6 +26,19 @@ namespace CS2MCP
             CityOsmStandalonePoints.WriteTags(readback, CityOsmStandalonePoints.Kind(mapped));
             Assert.Equal(value, readback.Tags[tag]);
             Assert.Equal(new float3(10, 2, 14), CityOsm.Position(readback));
+        }
+
+        [Theory]
+        [InlineData("d4731877cfc14ec48b59d763dce54732", "bench")]
+        [InlineData("c17428ca1eb6ed24cb2934cc2d1db7eb", "bench")]
+        [InlineData("26d7f7c0799717e4bbba4b9b34dce12a", "waste_basket")]
+        [InlineData("00000000000000000000000000000000", null)]
+        [InlineData("d4731877cfc14ec48b59d763dce5473", null)]
+        [InlineData("GardenBench01", null)]
+        public void Furniture_mapping_matches_native_prefab_ids(string prefabId, string value)
+        {
+            var kind = CityOsmStandalonePoints.NativeFurniture(prefabId);
+            Assert.Equal(value, kind == OsmStandalonePoint.None ? null : CityOsmStandalonePoints.Tag(kind).Value);
         }
 
         [Fact]
